@@ -1,0 +1,17 @@
+# Keep the image build context small. Everything the build needs is source plus lockfile.
+.git
+.github
+.turbo
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+*.log
+.env
+.env.*
+!.env.example
+deploy
+docs
+docker-compose.yml
+AGENTS.md
+README.md
