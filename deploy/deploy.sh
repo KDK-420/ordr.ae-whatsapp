@@ -51,6 +51,10 @@ docker compose build --pull api dashboard
 echo "==> Starting services"
 docker compose up -d --remove-orphans
 
+# The Caddyfile is bind-mounted, but a running Caddy only re-reads it when told to.
+echo "==> Reloading Caddy configuration"
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || echo "Caddy reload failed; check: docker compose logs caddy" >&2
+
 echo "==> Waiting for the API to report healthy"
 api_id="$(docker compose ps -q api)"
 for _ in $(seq 1 40); do

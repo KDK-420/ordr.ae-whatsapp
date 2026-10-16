@@ -217,13 +217,15 @@ jobs:
       - name: Verify over HTTPS
         run: |
           for i in $(seq 1 20); do
-            if out="$(curl -fsS --max-time 10 "https://$DOMAIN/health" 2>/dev/null)"; then
+            out="$(curl -fsS --max-time 10 "https://$DOMAIN/health" 2>/dev/null || true)"
+            dash="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/login" || true)"
+            if [ -n "$out" ] && [ "$dash" = "200" ]; then
               echo "https://$DOMAIN/health -> $out"
-              dash="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/login" || true)"
               echo "https://$DOMAIN/login -> HTTP $dash"
-              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login (HTTP $dash)"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
+              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 6
           done
-          echo "::warning::API is up on the server but https://$DOMAIN/health did not answer yet (certificate issuance or DNS). On the server: cd /opt/ordr/deploy && docker compose logs caddy"
+          echo "::error::Not reachable as expected: health='${out:-no answer}', /login HTTP ${dash:-none}. On the server: cd /opt/ordr/deploy && docker compose ps && docker compose logs caddy dashboard"
+          exit 1
