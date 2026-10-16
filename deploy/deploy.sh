@@ -77,7 +77,7 @@ cat <<DONE
 Deployed. Webhook settings for the Meta app dashboard (WhatsApp > Configuration):
 
   Callback URL:  https://$DOMAIN/webhooks/whatsapp
-  Verify token:  $META_VERIFY_TOKEN
+  Verify token:  META_VERIFY_TOKEN in $DIR/.env (not printed; this output may land in CI logs)
 
 Health:  https://$DOMAIN/health
 Logs:    cd $DIR && docker compose logs -f api
