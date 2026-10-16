@@ -126,6 +126,73 @@ export interface MessageView {
   createdAt: string;
 }
 
+export type LocalizedText = Record<string, string>;
+
+export interface Category {
+  id: string;
+  name: LocalizedText;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ModifierOption {
+  id?: string;
+  name: LocalizedText;
+  priceDeltaMinor: number;
+  sortOrder?: number;
+  isActive: boolean;
+}
+
+export interface ModifierGroup {
+  id?: string;
+  name: LocalizedText;
+  minSelect: number;
+  maxSelect: number;
+  sortOrder?: number;
+  options: ModifierOption[];
+}
+
+export interface Offering {
+  id: string;
+  categoryId?: string | null;
+  type: "product" | "service";
+  name: LocalizedText;
+  description?: LocalizedText | null;
+  priceMinor: number;
+  currency: string;
+  sortOrder: number;
+  isActive: boolean;
+  modifierGroups: ModifierGroup[];
+}
+
+export type OfferingInput = Omit<Offering, "id" | "currency" | "type" | "sortOrder" | "modifierGroups"> & Partial<Pick<Offering, "currency" | "type" | "sortOrder" | "modifierGroups">>;
+
+export const getCatalog = () => call<{ categories: Category[]; offerings: Offering[] }>("/merchant/catalog");
+export const createCategory = (input: { name: LocalizedText; sortOrder?: number; isActive?: boolean }) =>
+  call<Category>("/merchant/catalog/categories", { method: "POST", body: JSON.stringify(input) });
+export const updateCategory = (id: string, patch: Partial<{ name: LocalizedText; sortOrder: number; isActive: boolean }>) =>
+  call<Category>(`/merchant/catalog/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const createOffering = (input: OfferingInput) => call<Offering>("/merchant/catalog/offerings", { method: "POST", body: JSON.stringify(input) });
+export const updateOffering = (id: string, patch: Partial<OfferingInput>) =>
+  call<Offering>(`/merchant/catalog/offerings/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export interface StaffUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "owner" | "staff";
+  isActive: boolean;
+}
+
+export const listUsers = () => call<{ users: StaffUser[] }>("/merchant/users");
+export const createUser = (input: { email: string; name: string; role: "owner" | "staff" }) =>
+  call<{ user: StaffUser; temporaryPassword: string }>("/merchant/users", { method: "POST", body: JSON.stringify(input) });
+export const updateUser = (id: string, patch: Partial<Pick<StaffUser, "name" | "role" | "isActive">>) =>
+  call<StaffUser>(`/merchant/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const resetUserPassword = (id: string) => call<{ temporaryPassword: string }>(`/merchant/users/${encodeURIComponent(id)}/reset-password`, { method: "POST" });
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  call<void>("/merchant/me/password", { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+
 export const listTemplates = () => call<TemplateList>("/merchant/templates");
 export const submitTemplates = () => call<{ templates: MessageTemplate[] }>("/merchant/templates/submit", { method: "POST" });
 export const syncTemplates = () => call<{ templates: MessageTemplate[] }>("/merchant/templates/sync", { method: "POST" });

@@ -1,4 +1,5 @@
 import type { Category, Channel, Customer, DomainEvent, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus, DeliveryLocation, Tenant } from "@ordr/domain";
+import type { LocalizedText } from "@ordr/domain";
 import type { Blueprint, SessionState } from "@ordr/flow-schema";
 
 export interface TenantContext {
@@ -39,6 +40,8 @@ export interface UserRepository {
   findById(id: string): Promise<UserRecord | null>;
   create(input: CreateUserInput): Promise<UserRecord>;
   touchLogin(id: string, at: Date): Promise<void>;
+  listByTenant(tenantId: string): Promise<UserRecord[]>;
+  update(id: string, patch: Partial<Pick<UserRecord, "name" | "role" | "isActive" | "passwordHash">>): Promise<UserRecord | null>;
 }
 
 export type ConversationStatus = "bot" | "human" | "closed";
@@ -106,12 +109,55 @@ export interface BlueprintRegistry {
   get(id: string): Blueprint | undefined;
 }
 
+export interface CategoryInput {
+  name: LocalizedText;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface ModifierOptionInput {
+  name: LocalizedText;
+  priceDeltaMinor: number;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface ModifierGroupInput {
+  name: LocalizedText;
+  minSelect: number;
+  maxSelect: number;
+  sortOrder?: number;
+  options: ModifierOptionInput[];
+}
+
+export interface OfferingInput {
+  categoryId?: string | null;
+  type?: "product" | "service";
+  name: LocalizedText;
+  description?: LocalizedText | null;
+  priceMinor: number;
+  currency?: string;
+  durationMinutes?: number | null;
+  imageUrl?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+  /** When present, replaces every modifier group of the offering. */
+  modifierGroups?: ModifierGroupInput[];
+}
+
 export interface CatalogRepository {
   /** Active categories in display order. */
   listCategories(tenantId: string): Promise<Category[]>;
   /** Active offerings of a category in display order, with modifier groups. */
   listOfferings(tenantId: string, categoryId: string): Promise<Offering[]>;
   getOffering(tenantId: string, offeringId: string): Promise<Offering | null>;
+  /** Everything, inactive included, for the dashboard. */
+  listAllCategories(tenantId: string): Promise<Category[]>;
+  listAllOfferings(tenantId: string): Promise<Offering[]>;
+  createCategory(tenantId: string, input: CategoryInput): Promise<Category>;
+  updateCategory(tenantId: string, categoryId: string, patch: Partial<CategoryInput>): Promise<Category | null>;
+  createOffering(tenantId: string, input: OfferingInput): Promise<Offering>;
+  updateOffering(tenantId: string, offeringId: string, patch: Partial<OfferingInput>): Promise<Offering | null>;
 }
 
 export interface CreateOrderInput {

@@ -72,6 +72,17 @@ export class InMemoryUserRepository implements UserRepository {
   async touchLogin(id: string, at: Date): Promise<void> {
     this.logins.set(id, at);
   }
+
+  async listByTenant(tenantId: string): Promise<UserRecord[]> {
+    return this.users.filter((u) => u.tenantId === tenantId).map((u) => ({ ...u }));
+  }
+
+  async update(id: string, patch: Partial<Pick<UserRecord, "name" | "role" | "isActive" | "passwordHash">>): Promise<UserRecord | null> {
+    const u = this.users.find((x) => x.id === id);
+    if (!u) return null;
+    Object.assign(u, patch);
+    return { ...u };
+  }
 }
 
 export class InMemoryConversationRepository implements ConversationRepository {

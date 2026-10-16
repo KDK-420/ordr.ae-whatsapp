@@ -1,5 +1,31 @@
-import type { Category, DomainEvent, Offering, Order } from "@ordr/domain";
-import type { CatalogRepository, CreateOrderInput, EventBus, EventHandler, OrderRepository, OutboxFactory, OutboxRecord, OutboxStore } from "../ports";
+import type { Category, DomainEvent, ModifierGroup, Offering, Order } from "@ordr/domain";
+import type {
+  CatalogRepository,
+  CategoryInput,
+  CreateOrderInput,
+  EventBus,
+  EventHandler,
+  ModifierGroupInput,
+  OfferingInput,
+  OrderRepository,
+  OutboxFactory,
+  OutboxRecord,
+  OutboxStore,
+} from "../ports";
+
+let catalogSeq = 0;
+const catalogId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${++catalogSeq}`;
+
+function buildGroups(groups: ModifierGroupInput[]): ModifierGroup[] {
+  return groups.map((g, gi) => ({
+    id: catalogId("grp"),
+    name: { ...g.name },
+    minSelect: g.minSelect,
+    maxSelect: g.maxSelect,
+    sortOrder: g.sortOrder ?? gi,
+    options: g.options.map((o, oi) => ({ id: catalogId("opt"), name: { ...o.name }, priceDeltaMinor: o.priceDeltaMinor, sortOrder: o.sortOrder ?? oi, isActive: o.isActive ?? true })),
+  }));
+}
 
 export class InMemoryCatalogRepository implements CatalogRepository {
   constructor(
@@ -19,6 +45,66 @@ export class InMemoryCatalogRepository implements CatalogRepository {
 
   async getOffering(tenantId: string, offeringId: string): Promise<Offering | null> {
     return this.offerings.find((o) => o.tenantId === tenantId && o.id === offeringId) ?? null;
+  }
+
+  async listAllCategories(tenantId: string): Promise<Category[]> {
+    return this.categories.filter((c) => c.tenantId === tenantId).sort((a, b) => a.sortOrder - b.sortOrder).map((c) => structuredClone(c));
+  }
+
+  async listAllOfferings(tenantId: string): Promise<Offering[]> {
+    return this.offerings.filter((o) => o.tenantId === tenantId).sort((a, b) => a.sortOrder - b.sortOrder).map((o) => structuredClone(o));
+  }
+
+  async createCategory(tenantId: string, input: CategoryInput): Promise<Category> {
+    const category: Category = { id: catalogId("cat"), tenantId, name: { ...input.name }, sortOrder: input.sortOrder ?? this.categories.length, isActive: input.isActive ?? true };
+    this.categories.push(category);
+    return structuredClone(category);
+  }
+
+  async updateCategory(tenantId: string, categoryId: string, patch: Partial<CategoryInput>): Promise<Category | null> {
+    const c = this.categories.find((x) => x.tenantId === tenantId && x.id === categoryId);
+    if (!c) return null;
+    if (patch.name) c.name = { ...patch.name };
+    if (patch.sortOrder !== undefined) c.sortOrder = patch.sortOrder;
+    if (patch.isActive !== undefined) c.isActive = patch.isActive;
+    return structuredClone(c);
+  }
+
+  async createOffering(tenantId: string, input: OfferingInput): Promise<Offering> {
+    const offering: Offering = {
+      id: catalogId("it"),
+      tenantId,
+      categoryId: input.categoryId ?? undefined,
+      type: input.type ?? "product",
+      name: { ...input.name },
+      description: input.description ? { ...input.description } : undefined,
+      priceMinor: input.priceMinor,
+      currency: input.currency ?? "AED",
+      durationMinutes: input.durationMinutes ?? undefined,
+      imageUrl: input.imageUrl ?? undefined,
+      sortOrder: input.sortOrder ?? this.offerings.length,
+      isActive: input.isActive ?? true,
+      modifierGroups: buildGroups(input.modifierGroups ?? []),
+    };
+    this.offerings.push(offering);
+    return structuredClone(offering);
+  }
+
+  async updateOffering(tenantId: string, offeringId: string, patch: Partial<OfferingInput>): Promise<Offering | null> {
+    const o = this.offerings.find((x) => x.tenantId === tenantId && x.id === offeringId);
+    if (!o) return null;
+    if (patch.categoryId !== undefined) o.categoryId = patch.categoryId ?? undefined;
+    if (patch.type) o.type = patch.type;
+    if (patch.name) o.name = { ...patch.name };
+    if (patch.description !== undefined) o.description = patch.description ? { ...patch.description } : undefined;
+    if (patch.priceMinor !== undefined) o.priceMinor = patch.priceMinor;
+    if (patch.currency) o.currency = patch.currency;
+    if (patch.durationMinutes !== undefined) o.durationMinutes = patch.durationMinutes ?? undefined;
+    if (patch.imageUrl !== undefined) o.imageUrl = patch.imageUrl ?? undefined;
+    if (patch.sortOrder !== undefined) o.sortOrder = patch.sortOrder;
+    if (patch.isActive !== undefined) o.isActive = patch.isActive;
+    if (patch.modifierGroups) o.modifierGroups = buildGroups(patch.modifierGroups);
+    return structuredClone(o);
   }
 }
 

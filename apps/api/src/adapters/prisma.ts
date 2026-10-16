@@ -239,6 +239,17 @@ export class PrismaUserRepository implements UserRepository {
   async touchLogin(id: string, at: Date): Promise<void> {
     await this.prisma.user.update({ where: { id }, data: { lastLoginAt: at } });
   }
+
+  async listByTenant(tenantId: string): Promise<UserRecord[]> {
+    const rows = await this.prisma.user.findMany({ where: { tenantId }, orderBy: { createdAt: "asc" } });
+    return rows.map(toUser);
+  }
+
+  async update(id: string, patch: Partial<Pick<UserRecord, "name" | "role" | "isActive" | "passwordHash">>): Promise<UserRecord | null> {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) return null;
+    return toUser(await this.prisma.user.update({ where: { id }, data: patch }));
+  }
 }
 
 const toUser = (u: { id: string; tenantId: string; email: string; name: string; role: string; passwordHash: string; isActive: boolean }): UserRecord => ({

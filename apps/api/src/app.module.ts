@@ -28,7 +28,9 @@ import { InboundQueue } from "./conversation/inbound-queue";
 import { OutboxRelay } from "./events/outbox-relay";
 import { HealthController } from "./health.controller";
 import { InboxService } from "./inbox/inbox.service";
+import { MerchantCatalogController } from "./merchant/catalog.controller";
 import { MerchantConversationsController } from "./merchant/conversations.controller";
+import { MerchantUsersController } from "./merchant/users.controller";
 import { MerchantOrdersService } from "./merchant/merchant-orders.service";
 import { MerchantOrdersController } from "./merchant/orders.controller";
 import { MerchantTemplatesController } from "./merchant/templates.controller";
@@ -225,7 +227,17 @@ export class AppModule {
       module: AppModule,
       controllers:
         role === "api"
-          ? [RootController, HealthController, WebhookController, AuthController, MerchantOrdersController, MerchantTemplatesController, MerchantConversationsController]
+          ? [
+              RootController,
+              HealthController,
+              WebhookController,
+              AuthController,
+              MerchantOrdersController,
+              MerchantTemplatesController,
+              MerchantConversationsController,
+              MerchantCatalogController,
+              MerchantUsersController,
+            ]
           : [],
       providers,
       exports: [ConversationService, InboundQueue, OrderService],

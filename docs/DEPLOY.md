@@ -1,6 +1,8 @@
 # Deploying to a single VPS
 
-One server runs everything: Postgres, Redis, the API, the merchant dashboard, and Caddy for TLS.
+One server runs everything: Postgres, Redis, the API, the worker, the merchant dashboard, and
+Caddy for TLS. The worker is the API image started with `node dist/worker.js`; it relays
+outbox events (customer notifications) with retries.
 Everything lives in `deploy/`. Suits a pilot with a handful of merchants; see "Growing out of it"
 at the end.
 
@@ -102,7 +104,8 @@ All commands from `/opt/ordr/deploy`.
 | Task | Command |
 |------|---------|
 | Ship a new version | `./deploy.sh` (pulls main, rebuilds, restarts, migrates) |
-| Tail logs | `docker compose logs -f api dashboard` |
+| Tail logs | `docker compose logs -f api worker dashboard` |
+| Stuck notifications | `docker compose exec postgres psql -U ordr ordr -c "select status, count(*) from \"OutboxEvent\" group by 1"` |
 | Service status | `docker compose ps` |
 | Restart the API only | `docker compose restart api` |
 | Change configuration | edit `.env`, then `docker compose up -d` |
@@ -131,6 +134,10 @@ Test the key login in a second terminal before closing the first one.
 - `apps/api/Dockerfile` builds the whole monorepo with pnpm and keeps `node_modules` in the runtime
   image so `prisma migrate deploy` and the seed script work inside the container.
 - `apps/api/docker-entrypoint.sh` runs migrations, then starts `node dist/main.js`.
+- The same API image runs twice: once as the API (migrations, HTTP) and once as the worker
+  (`SKIP_MIGRATIONS=1`, no HTTP). Events the API writes to the `OutboxEvent` table are picked
+  up by the worker within a second; a failed WhatsApp send is retried with backoff up to 12
+  times and then parked as `failed`.
 - `apps/dashboard/Dockerfile` builds the Next.js dashboard as a standalone server on port 3001.
 - `deploy/compose.yml` wires the services. Postgres and Redis are reachable only on the Docker
   network. `DATABASE_URL` and `REDIS_URL` are set there, not in `.env`.
