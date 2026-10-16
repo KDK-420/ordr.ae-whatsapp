@@ -1,28 +1,48 @@
 # Set up or redeploy the VPS over SSH from a GitHub-hosted runner. Run from the Actions tab.
 #
-# Required secret: VPS_PASSWORD (root password). It is only passed to sshpass through the
-# environment and is masked in logs.
-# Optional secrets written into deploy/.env on the server when present:
+# Authentication to the server, in order of preference:
+#   secrets.VPS_SSH_KEY   private key (ed25519 recommended). Its public half is authorized on
+#                         the server during the first run that still uses the password.
+#   secrets.VPS_PASSWORD  root password, used when no key secret exists or the key is not yet
+#                         authorized. Only passed to sshpass through the environment; masked.
+#
+# Every run authorizes public keys on the server for root: the keys published on the GitHub
+# accounts of the actor and the repository owner (github.com/<user>.keys), vars.SSH_PUBLIC_KEYS
+# (one per line) and the ssh_public_key input.
+#
+# Optional secrets written into deploy/.env on the server when present (setup mode):
 #   META_APP_SECRET, META_VERIFY_TOKEN, SEED_PHONE_NUMBER_ID, SEED_WABA_ID, SEED_DISPLAY_PHONE,
 #   SEED_ACCESS_TOKEN, SEED_TENANT_NAME
 name: VPS
 
 on:
+  # Temporary: a push that changes this file on the setup branch runs setup with the defaults,
+  # because workflow_dispatch is only offered for workflows that exist on the default branch.
+  push:
+    branches: [claude/status-5leuh8]
+    paths: [.github/workflows/vps.yml]
   workflow_dispatch:
     inputs:
       host:
-        description: Server IP or hostname
+        description: Server IP or hostname for SSH
         default: 200.141.6.31
         required: true
       domain:
         description: Public hostname for TLS (its A record must point at the server)
-        default: 200-141-6-31.sslip.io
+        default: app.ordr.ae
         required: true
       mode:
         description: setup = bootstrap + config + deploy --seed; deploy = build and restart only
         type: choice
         options: [setup, deploy]
         default: setup
+      ssh_public_key:
+        description: Extra public key to authorize for root (optional)
+        default: ""
+      disable_password_auth:
+        description: Turn off SSH password login (only allowed when this run connected with a key)
+        type: boolean
+        default: false
 
 concurrency:
   group: vps-${{ inputs.host || '200.141.6.31' }}
@@ -34,22 +54,99 @@ jobs:
     timeout-minutes: 30
     env:
       HOST: ${{ inputs.host || '200.141.6.31' }}
-      DOMAIN: ${{ inputs.domain || '200-141-6-31.sslip.io' }}
+      DOMAIN: ${{ inputs.domain || 'app.ordr.ae' }}
       MODE: ${{ inputs.mode || 'setup' }}
+      DISABLE_PASSWORD_AUTH: ${{ inputs.disable_password_auth || 'false' }}
       BRANCH: ${{ github.ref_name }}
       SSHPASS: ${{ secrets.VPS_PASSWORD }}
-      SSH: sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
+      SSH_OPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install sshpass
+      - name: Prepare SSH client
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          [ -n "$SSHPASS" ] || { echo "::error::Repository secret VPS_PASSWORD is not set"; exit 1; }
-          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass >/dev/null
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          auth=""
+          if [ -n "$VPS_SSH_KEY" ]; then
+            printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_key && chmod 600 ~/.ssh/vps_key
+            ssh-keygen -y -f ~/.ssh/vps_key > ~/.ssh/vps_key.pub
+            echo "VPS_SSH_KEY secret present: $(ssh-keygen -l -f ~/.ssh/vps_key.pub)"
+            key_ssh="ssh -i $HOME/.ssh/vps_key -o IdentitiesOnly=yes -o BatchMode=yes $SSH_OPTS"
+            if $key_ssh "root@$HOST" true 2>/dev/null; then
+              auth=key
+              echo "SSH=$key_ssh" >> "$GITHUB_ENV"
+            else
+              echo "::notice::The VPS_SSH_KEY key is not authorized on the server yet; this run uses the password and authorizes it."
+            fi
+          fi
+          if [ -z "$auth" ]; then
+            if [ -z "$SSHPASS" ]; then
+              echo "::error::No usable credentials: add secret VPS_SSH_KEY (private key) or VPS_PASSWORD (root password)."
+              exit 1
+            fi
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass >/dev/null
+            auth=password
+            echo "SSH=sshpass -e ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no $SSH_OPTS" >> "$GITHUB_ENV"
+          fi
+          echo "AUTH=$auth" >> "$GITHUB_ENV"
+          echo "Connecting with: $auth"
 
-      - name: Check SSH access
+      - name: Check SSH access and DNS
         run: |
+          set -euo pipefail
           $SSH "root@$HOST" 'echo "connected to $(hostname) as $(whoami) on $(. /etc/os-release && echo "$PRETTY_NAME")"'
+          resolved="$(getent ahostsv4 "$DOMAIN" | awk '{print $1}' | sort -u | tr '\n' ' ')"
+          echo "$DOMAIN resolves to: ${resolved:-nothing}"
+          server_ip="$(getent ahostsv4 "$HOST" | awk '{print $1}' | head -1)"
+          if [ -z "$resolved" ]; then
+            echo "::error::$DOMAIN does not resolve. Create an A record pointing at $server_ip, then rerun."
+            exit 1
+          fi
+          case " $resolved " in
+            *" $server_ip "*) echo "DNS OK: $DOMAIN -> $server_ip" ;;
+            *) echo "::error::$DOMAIN resolves to $resolved but the server is $server_ip. Fix the A record (and disable any proxying) then rerun."; exit 1 ;;
+          esac
+
+      - name: Authorize SSH keys for root
+        env:
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          INPUT_KEY: ${{ inputs.ssh_public_key }}
+          VAR_KEYS: ${{ vars.SSH_PUBLIC_KEYS }}
+        run: |
+          set -euo pipefail
+          keys="$(mktemp)"
+          for u in "$ACTOR" "$OWNER"; do
+            got="$(curl -fsS --max-time 15 "https://github.com/$u.keys" || true)"
+            if [ -n "$got" ]; then printf '%s\n' "$got" | sed "s|\$| github:$u|" >> "$keys"; echo "github.com/$u: $(printf '%s\n' "$got" | grep -c .) key(s)"; else echo "github.com/$u: no public keys"; fi
+          done
+          [ -n "$INPUT_KEY" ] && printf '%s\n' "$INPUT_KEY" >> "$keys"
+          [ -n "$VAR_KEYS" ] && printf '%s\n' "$VAR_KEYS" >> "$keys"
+          [ -f ~/.ssh/vps_key.pub ] && sed 's|$| github-actions-vps|' ~/.ssh/vps_key.pub >> "$keys"
+          valid="$(mktemp)"
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            if printf '%s\n' "$line" > "$valid.one" && ssh-keygen -l -f "$valid.one" >/dev/null 2>&1; then
+              printf '%s\n' "$line" >> "$valid"
+            else
+              echo "::warning::Skipping an invalid public key line"
+            fi
+          done < "$keys"
+          sort -u "$valid" -o "$valid"
+          if [ ! -s "$valid" ]; then
+            echo "::notice::No public keys to authorize. Add keys to your GitHub account, the SSH_PUBLIC_KEYS variable, or the ssh_public_key input."
+            exit 0
+          fi
+          echo "Authorizing $(grep -c . "$valid") key(s):"; ssh-keygen -l -f "$valid"
+          $SSH "root@$HOST" 'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys
+            added=0; while IFS= read -r line; do
+              kf="$(printf "%s" "$line" | awk "{print \$1\" \"\$2}")"
+              grep -qF -- "$kf" ~/.ssh/authorized_keys || { printf "%s\n" "$line" >> ~/.ssh/authorized_keys; added=$((added+1)); }
+            done
+            echo "authorized_keys: $added added, $(grep -c . ~/.ssh/authorized_keys) total"' < "$valid"
 
       - name: Bootstrap server
         if: env.MODE == 'setup'
@@ -99,12 +196,29 @@ jobs:
           [ "$MODE" = "setup" ] && flags="--no-pull --seed"
           $SSH "root@$HOST" "cd /opt/ordr && git fetch --quiet origin '$BRANCH' && git checkout --quiet '$BRANCH' && git reset --quiet --hard 'origin/$BRANCH' && chmod +x deploy/*.sh && ./deploy/deploy.sh $flags"
 
+      - name: Disable SSH password login
+        if: env.DISABLE_PASSWORD_AUTH == 'true'
+        run: |
+          set -euo pipefail
+          if [ "$AUTH" != "key" ]; then
+            echo "::error::Refusing to disable password login: this run connected with the password. Add VPS_SSH_KEY, rerun once so the key is authorized and used, then rerun with disable_password_auth."
+            exit 1
+          fi
+          $SSH "root@$HOST" 'set -e
+            [ -s ~/.ssh/authorized_keys ] || { echo "no authorized keys for root, refusing"; exit 1; }
+            mkdir -p /etc/ssh/sshd_config.d
+            printf "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPubkeyAuthentication yes\n" > /etc/ssh/sshd_config.d/00-ordr.conf
+            sshd -t
+            systemctl restart ssh 2>/dev/null || systemctl restart sshd
+            echo "password login disabled"'
+          $SSH "root@$HOST" 'echo "key login still works after restart"'
+
       - name: Verify over HTTPS
         run: |
           for i in $(seq 1 20); do
             if out="$(curl -fsS --max-time 10 "https://$DOMAIN/health" 2>/dev/null)"; then
               echo "https://$DOMAIN/health -> $out"
-              { echo "### VPS ready"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; } >> "$GITHUB_STEP_SUMMARY"
+              { echo "### VPS ready"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 6

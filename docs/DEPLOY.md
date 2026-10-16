@@ -4,19 +4,39 @@ One server runs everything: Postgres, Redis, the API, and Caddy for TLS. Everyth
 `deploy/`. Suits a pilot with a handful of merchants; see "Growing out of it" at the end.
 
 Requirements: a VPS with Ubuntu 22.04/24.04 or Debian 12, 2 GB RAM or more, root access, and a
-hostname whose DNS A record points at the server (for example `wa.ordr.ae`). For UAE data
+hostname whose DNS A record points at the server (`app.ordr.ae`). For UAE data
 residency (PLAN.md, ADR-007) pick a provider with a UAE location.
 
 ## Option A: from GitHub Actions (no local SSH needed)
 
 The `VPS` workflow (`.github/workflows/vps.yml`) does steps 1 to 3 below over SSH from a
-GitHub-hosted runner. It needs the repository secret `VPS_PASSWORD` (root password). Optional
-secrets `META_APP_SECRET`, `META_VERIFY_TOKEN` and the `SEED_*` values are written into
-`deploy/.env` on the server when present; otherwise fill them in by hand on the server.
+GitHub-hosted runner. Optional secrets `META_APP_SECRET`, `META_VERIFY_TOKEN` and the `SEED_*`
+values are written into `deploy/.env` on the server when present; otherwise fill them in by hand
+on the server.
 
-Actions tab > VPS > Run workflow. Inputs: `host`, `domain` (defaults to a sslip.io name derived
-from the IP, which resolves without DNS setup), `mode` (`setup` the first time, `deploy` for
-updates). The run summary prints the health and webhook URLs.
+Actions tab > VPS > Run workflow. Inputs: `host`, `domain` (default `app.ordr.ae`; the run fails
+early if its A record does not point at the server), `mode` (`setup` the first time, `deploy` for
+updates), `ssh_public_key`, `disable_password_auth`. The run summary prints the health and
+webhook URLs.
+
+**Credentials.** The runner logs in with the `VPS_SSH_KEY` secret (a private key) when it is
+set and authorized, otherwise with the `VPS_PASSWORD` secret (root password). To move to keys:
+
+```
+ssh-keygen -t ed25519 -N "" -f vps_actions -C github-actions-vps
+```
+
+Add the contents of `vps_actions` as the repository secret `VPS_SSH_KEY`. The next run still
+logs in with the password, authorizes that key on the server, and later runs use the key.
+
+**SSH access for people.** Every run authorizes, for root, the public keys published on the
+GitHub accounts of the person who ran it and of the repository owner (`github.com/<user>.keys`),
+plus any keys in the `SSH_PUBLIC_KEYS` repository variable (one per line) and the
+`ssh_public_key` input. After a run, `ssh root@<server-ip>` works with your usual key.
+
+**Turning off password login.** Once a run has connected with `VPS_SSH_KEY` (the log says
+`Connecting with: key`), run the workflow again with `disable_password_auth` ticked. It refuses
+to do this from a password-authenticated run, so it cannot lock you out.
 
 ## Option B: by hand
 
