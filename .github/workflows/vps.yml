@@ -16,6 +16,11 @@
 name: VPS
 
 on:
+  # Temporary: a push that changes this file on the setup branch runs setup with the defaults,
+  # because workflow_dispatch is only offered for workflows that exist on the default branch.
+  push:
+    branches: [claude/status-5leuh8]
+    paths: [.github/workflows/vps.yml]
   workflow_dispatch:
     inputs:
       host:
