@@ -16,11 +16,6 @@
 name: VPS
 
 on:
-  # Temporary: a push that changes this file on the setup branch runs setup with the defaults,
-  # because workflow_dispatch is only offered for workflows that exist on the default branch.
-  push:
-    branches: [claude/status-5leuh8]
-    paths: [.github/workflows/vps.yml]
   workflow_dispatch:
     inputs:
       host:
@@ -55,9 +50,8 @@ jobs:
     env:
       HOST: ${{ inputs.host || '200.141.6.31' }}
       DOMAIN: ${{ inputs.domain || 'app.ordr.ae' }}
-      MODE: ${{ inputs.mode || 'deploy' }}
-      # Temporary: the push-triggered run performs the password lockdown.
-      DISABLE_PASSWORD_AUTH: ${{ github.event_name == 'push' || inputs.disable_password_auth || 'false' }}
+      MODE: ${{ inputs.mode || 'setup' }}
+      DISABLE_PASSWORD_AUTH: ${{ inputs.disable_password_auth || 'false' }}
       BRANCH: ${{ github.ref_name }}
       SSHPASS: ${{ secrets.VPS_PASSWORD }}
       SSH_OPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
