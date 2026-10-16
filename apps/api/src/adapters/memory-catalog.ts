@@ -64,6 +64,17 @@ export class InMemoryOrderRepository implements OrderRepository {
       .slice(0, limit)
       .map((o) => structuredClone(o));
   }
+
+  async listRecent(tenantId: string, opts: { statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+    const limit = opts.limit ?? 100;
+    return this.orders
+      .filter((x) => x.tenantId === tenantId)
+      .filter((x) => !opts.statuses || opts.statuses.includes(x.status))
+      .filter((x) => !opts.since || new Date(x.updatedAt) >= opts.since)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.number - a.number)
+      .slice(0, limit)
+      .map((o) => structuredClone(o));
+  }
 }
 
 export class InMemoryEventBus implements EventBus {

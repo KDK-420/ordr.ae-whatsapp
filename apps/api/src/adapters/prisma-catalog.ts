@@ -169,4 +169,18 @@ export class PrismaOrderRepository implements OrderRepository {
     const rows = await this.prisma.order.findMany({ where: { tenantId, status: { in: statuses } }, orderBy: { createdAt: "asc" }, take: limit, include: { items: true } });
     return rows.map(toOrder);
   }
+
+  async listRecent(tenantId: string, opts: { statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+    const rows = await this.prisma.order.findMany({
+      where: {
+        tenantId,
+        ...(opts.statuses ? { status: { in: opts.statuses } } : {}),
+        ...(opts.since ? { updatedAt: { gte: opts.since } } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { number: "desc" }],
+      take: opts.limit ?? 100,
+      include: { items: true },
+    });
+    return rows.map(toOrder);
+  }
 }

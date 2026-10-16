@@ -4,7 +4,7 @@ import type { ActionRegistry } from "@ordr/flow-schema";
 import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsapp";
 import { demoCatalog } from "./actions/demo-catalog";
 import { createActionRegistry } from "./actions";
-import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository } from "./adapters/memory";
+import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository } from "./adapters/memory-catalog";
 import { PrismaCatalogRepository, PrismaOrderRepository } from "./adapters/prisma-catalog";
 import {
@@ -13,12 +13,20 @@ import {
   PrismaService,
   PrismaSessionStore,
   PrismaTenantRepository,
+  PrismaUserRepository,
 } from "./adapters/prisma";
 import { createRedis, RedisDedupeStore, RedisSessionStore } from "./adapters/redis";
+import { AuthController } from "./auth/auth.controller";
+import { AuthGuard } from "./auth/auth.guard";
+import { AuthService } from "./auth/auth.service";
+import { hashPassword } from "./auth/password";
 import type { AppConfig } from "./config";
 import { ConversationService } from "./conversation/conversation.service";
 import { InboundQueue } from "./conversation/inbound-queue";
 import { HealthController } from "./health.controller";
+import { MerchantOrdersService } from "./merchant/merchant-orders.service";
+import { MerchantOrdersController } from "./merchant/orders.controller";
+import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
 import type {
   BlueprintRegistry,
@@ -30,7 +38,9 @@ import type {
   SessionStore,
   TenantContext,
   TenantRepository,
+  UserRepository,
 } from "./ports";
+import { RootController } from "./root.controller";
 import { TOKENS } from "./tokens";
 import { WebhookController } from "./webhook/webhook.controller";
 
@@ -48,7 +58,16 @@ export interface AppOptions {
     catalog: CatalogRepository;
     orders: OrderRepository;
     eventBus: EventBus;
+    users: UserRepository;
   }>;
+}
+
+/** Dashboard owner for the seed tenant when SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are set. */
+function seedUsersFromConfig(config: AppConfig, tenantId: string): InMemoryUserRepository {
+  if (!config.SEED_ADMIN_EMAIL || !config.SEED_ADMIN_PASSWORD) return new InMemoryUserRepository();
+  return new InMemoryUserRepository([
+    { tenantId, email: config.SEED_ADMIN_EMAIL, name: config.SEED_ADMIN_NAME, role: "owner", passwordHash: hashPassword(config.SEED_ADMIN_PASSWORD) },
+  ]);
 }
 
 /** Tenant used when running on in-memory storage, built from SEED_* settings. */
@@ -100,6 +119,10 @@ export class AppModule {
       },
       InboundQueue,
       ConversationService,
+      AuthService,
+      AuthGuard,
+      MerchantOrdersService,
+      OrderNotifier,
     ];
 
     if (config.storage === "memory") {
@@ -113,10 +136,14 @@ export class AppModule {
         { provide: TOKENS.ConversationRepository, useValue: overrides.conversations ?? new InMemoryConversationRepository() },
         { provide: TOKENS.SessionStore, useValue: overrides.sessions ?? new InMemorySessionStore() },
         { provide: TOKENS.DedupeStore, useValue: overrides.dedupe ?? new InMemoryDedupeStore() },
+        { provide: TOKENS.UserRepository, useValue: overrides.users ?? seedUsersFromConfig(config, seed.tenant.id) },
       );
     } else {
       providers.push(PrismaService);
       providers.push(
+        overrides.users
+          ? { provide: TOKENS.UserRepository, useValue: overrides.users }
+          : { provide: TOKENS.UserRepository, useFactory: (p: PrismaService) => new PrismaUserRepository(p), inject: [PrismaService] },
         overrides.catalog
           ? { provide: TOKENS.CatalogRepository, useValue: overrides.catalog }
           : { provide: TOKENS.CatalogRepository, useFactory: (p: PrismaService) => new PrismaCatalogRepository(p), inject: [PrismaService] },
@@ -152,7 +179,7 @@ export class AppModule {
 
     return {
       module: AppModule,
-      controllers: [WebhookController, HealthController],
+      controllers: [RootController, HealthController, WebhookController, AuthController, MerchantOrdersController],
       providers,
       exports: [ConversationService, InboundQueue, OrderService],
     };

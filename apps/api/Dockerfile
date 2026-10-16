@@ -18,7 +18,8 @@ RUN pnpm fetch
 
 COPY . .
 RUN pnpm install --frozen-lockfile --offline
-RUN pnpm build
+# The API and the workspace packages it depends on; the dashboard has its own image.
+RUN pnpm exec turbo run build --filter=@ordr/api...
 
 # Runtime image. Carries node_modules unpruned so `prisma migrate deploy` (entrypoint)
 # and `tsx prisma/seed.ts` (deploy.sh --seed) work without extra tooling.

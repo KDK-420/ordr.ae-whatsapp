@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { demoCatalog } from "../src/actions/demo-catalog";
+import { hashPassword } from "../src/auth/password";
 
 const prisma = new PrismaClient();
 
@@ -25,6 +26,20 @@ async function main() {
       accessToken: env.SEED_ACCESS_TOKEN ?? "replace-me",
     },
   });
+  // Dashboard owner. The password is only (re)set when SEED_ADMIN_PASSWORD is present.
+  const adminEmail = env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const adminPassword = env.SEED_ADMIN_PASSWORD;
+  if (adminEmail && adminPassword) {
+    const passwordHash = hashPassword(adminPassword);
+    await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: { passwordHash, tenantId: tenant.id, role: "owner", isActive: true },
+      create: { tenantId: tenant.id, email: adminEmail, name: env.SEED_ADMIN_NAME ?? "Owner", role: "owner", passwordHash },
+    });
+    console.log(`Dashboard owner ${adminEmail} is ready`);
+  } else {
+    console.log("SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set: no dashboard user created");
+  }
   const demo = demoCatalog(tenant.id);
   for (const c of demo.categories) {
     await prisma.category.upsert({

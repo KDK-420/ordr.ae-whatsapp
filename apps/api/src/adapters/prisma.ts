@@ -6,12 +6,50 @@ import type {
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
+  CreateUserInput,
   DedupeStore,
   MessageRecord,
   SessionStore,
   TenantContext,
   TenantRepository,
+  UserRecord,
+  UserRepository,
+  UserRole,
 } from "../ports";
+
+type ChannelRow = Prisma.ChannelGetPayload<{ include: { tenant: true } }>;
+
+function toContext(channel: ChannelRow): TenantContext {
+  return {
+    tenant: {
+      id: channel.tenant.id,
+      name: channel.tenant.name,
+      slug: channel.tenant.slug,
+      blueprintId: channel.tenant.blueprintId,
+      defaultLanguage: channel.tenant.defaultLanguage,
+      timezone: channel.tenant.timezone,
+      settings: (channel.tenant.settings as Record<string, unknown>) ?? {},
+    },
+    channel: {
+      id: channel.id,
+      tenantId: channel.tenantId,
+      provider: "meta_cloud",
+      phoneNumberId: channel.phoneNumberId,
+      wabaId: channel.wabaId,
+      displayPhone: channel.displayPhone,
+      accessToken: channel.accessToken,
+      status: "active",
+    },
+  };
+}
+
+const toCustomer = (c: { id: string; tenantId: string; waId: string; name: string | null; language: string | null }): Customer => ({
+  id: c.id,
+  tenantId: c.tenantId,
+  waId: c.waId,
+  name: c.name ?? undefined,
+  language: c.language ?? undefined,
+});
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -35,32 +73,14 @@ export class PrismaTenantRepository implements TenantRepository {
     const hit = this.cache.get(phoneNumberId);
     if (hit && hit.until > Date.now()) return hit.ctx;
     const channel = await this.prisma.channel.findUnique({ where: { phoneNumberId }, include: { tenant: true } });
-    const ctx: TenantContext | null =
-      channel && channel.status === "active"
-        ? {
-            tenant: {
-              id: channel.tenant.id,
-              name: channel.tenant.name,
-              slug: channel.tenant.slug,
-              blueprintId: channel.tenant.blueprintId,
-              defaultLanguage: channel.tenant.defaultLanguage,
-              timezone: channel.tenant.timezone,
-              settings: (channel.tenant.settings as Record<string, unknown>) ?? {},
-            },
-            channel: {
-              id: channel.id,
-              tenantId: channel.tenantId,
-              provider: "meta_cloud",
-              phoneNumberId: channel.phoneNumberId,
-              wabaId: channel.wabaId,
-              displayPhone: channel.displayPhone,
-              accessToken: channel.accessToken,
-              status: "active",
-            },
-          }
-        : null;
+    const ctx: TenantContext | null = channel && channel.status === "active" ? toContext(channel) : null;
     this.cache.set(phoneNumberId, { ctx, until: Date.now() + this.cacheTtlMs });
     return ctx;
+  }
+
+  async findContextById(tenantId: string): Promise<TenantContext | null> {
+    const channel = await this.prisma.channel.findFirst({ where: { tenantId, status: "active" }, orderBy: { createdAt: "asc" }, include: { tenant: true } });
+    return channel ? toContext(channel) : null;
   }
 
   async findById(tenantId: string): Promise<Tenant | null> {
@@ -92,6 +112,30 @@ export class PrismaConversationRepository implements ConversationRepository {
 
   async setCustomerLanguage(customerId: string, language: string): Promise<void> {
     await this.prisma.customer.update({ where: { id: customerId }, data: { language } });
+  }
+
+  async findCustomerById(customerId: string): Promise<Customer | null> {
+    const c = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    return c ? toCustomer(c) : null;
+  }
+
+  async findCustomersByIds(customerIds: string[]): Promise<Customer[]> {
+    if (customerIds.length === 0) return [];
+    const rows = await this.prisma.customer.findMany({ where: { id: { in: customerIds } } });
+    return rows.map(toCustomer);
+  }
+
+  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null> {
+    const row = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!row) return null;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      customerId: row.customerId,
+      channelId: row.channelId,
+      status: row.status as ConversationStatus,
+      lastInboundAt: row.lastInboundAt ?? undefined,
+    };
   }
 
   async getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord> {
@@ -129,6 +173,39 @@ export class PrismaConversationRepository implements ConversationRepository {
     await this.prisma.message.updateMany({ where: { providerMessageId }, data: { status } });
   }
 }
+
+export class PrismaUserRepository implements UserRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const u = await this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    return u ? toUser(u) : null;
+  }
+
+  async findById(id: string): Promise<UserRecord | null> {
+    const u = await this.prisma.user.findUnique({ where: { id } });
+    return u ? toUser(u) : null;
+  }
+
+  async create(input: CreateUserInput): Promise<UserRecord> {
+    const u = await this.prisma.user.create({ data: { ...input, email: input.email.trim().toLowerCase() } });
+    return toUser(u);
+  }
+
+  async touchLogin(id: string, at: Date): Promise<void> {
+    await this.prisma.user.update({ where: { id }, data: { lastLoginAt: at } });
+  }
+}
+
+const toUser = (u: { id: string; tenantId: string; email: string; name: string; role: string; passwordHash: string; isActive: boolean }): UserRecord => ({
+  id: u.id,
+  tenantId: u.tenantId,
+  email: u.email,
+  name: u.name,
+  role: u.role === "owner" ? "owner" : ("staff" satisfies UserRole),
+  passwordHash: u.passwordHash,
+  isActive: u.isActive,
+});
 
 export class PrismaSessionStore implements SessionStore {
   constructor(private readonly prisma: PrismaClient) {}

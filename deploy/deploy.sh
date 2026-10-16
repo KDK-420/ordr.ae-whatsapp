@@ -45,8 +45,8 @@ if [ "$PULL" -eq 1 ]; then
   git -C "$DIR/.." pull --ff-only
 fi
 
-echo "==> Building API image"
-docker compose build --pull api
+echo "==> Building API and dashboard images"
+docker compose build --pull api dashboard
 
 echo "==> Starting services"
 docker compose up -d --remove-orphans
@@ -79,6 +79,7 @@ Deployed. Webhook settings for the Meta app dashboard (WhatsApp > Configuration)
   Callback URL:  https://$DOMAIN/webhooks/whatsapp
   Verify token:  META_VERIFY_TOKEN in $DIR/.env (not printed; this output may land in CI logs)
 
-Health:  https://$DOMAIN/health
-Logs:    cd $DIR && docker compose logs -f api
+Dashboard:  https://$DOMAIN/login  (sign in with SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD from $DIR/.env)
+Health:     https://$DOMAIN/health
+Logs:       cd $DIR && docker compose logs -f api dashboard
 DONE

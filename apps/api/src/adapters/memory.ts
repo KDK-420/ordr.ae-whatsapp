@@ -4,11 +4,14 @@ import type {
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
+  CreateUserInput,
   DedupeStore,
   MessageRecord,
   SessionStore,
   TenantContext,
   TenantRepository,
+  UserRecord,
+  UserRepository,
 } from "../ports";
 
 let idSeq = 0;
@@ -33,6 +36,39 @@ export class InMemoryTenantRepository implements TenantRepository {
     for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId) return ctx.tenant;
     return null;
   }
+
+  async findContextById(tenantId: string): Promise<TenantContext | null> {
+    for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active") return ctx;
+    return null;
+  }
+}
+
+export class InMemoryUserRepository implements UserRepository {
+  readonly users: UserRecord[] = [];
+  readonly logins = new Map<string, Date>();
+
+  constructor(seed: Array<Omit<UserRecord, "id" | "isActive"> & Partial<Pick<UserRecord, "id" | "isActive">>> = []) {
+    for (const u of seed) this.users.push({ id: u.id ?? nextId("usr"), isActive: u.isActive ?? true, ...u });
+  }
+
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const key = email.trim().toLowerCase();
+    return this.users.find((u) => u.email.toLowerCase() === key) ?? null;
+  }
+
+  async findById(id: string): Promise<UserRecord | null> {
+    return this.users.find((u) => u.id === id) ?? null;
+  }
+
+  async create(input: CreateUserInput): Promise<UserRecord> {
+    const user: UserRecord = { id: nextId("usr"), isActive: true, ...input, email: input.email.trim().toLowerCase() };
+    this.users.push(user);
+    return user;
+  }
+
+  async touchLogin(id: string, at: Date): Promise<void> {
+    this.logins.set(id, at);
+  }
 }
 
 export class InMemoryConversationRepository implements ConversationRepository {
@@ -55,6 +91,20 @@ export class InMemoryConversationRepository implements ConversationRepository {
 
   async setCustomerLanguage(customerId: string, language: string): Promise<void> {
     for (const c of this.customers.values()) if (c.id === customerId) c.language = language;
+  }
+
+  async findCustomerById(customerId: string): Promise<Customer | null> {
+    for (const c of this.customers.values()) if (c.id === customerId) return c;
+    return null;
+  }
+
+  async findCustomersByIds(customerIds: string[]): Promise<Customer[]> {
+    const wanted = new Set(customerIds);
+    return [...this.customers.values()].filter((c) => wanted.has(c.id));
+  }
+
+  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null> {
+    return this.conversations.get(conversationId) ?? null;
   }
 
   async getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord> {

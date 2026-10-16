@@ -24,6 +24,26 @@ model Tenant {
   customers     Customer[]
   conversations Conversation[]
   messages      Message[]
+  users         User[]
+}
+
+/// Merchant staff who sign in to the dashboard. Emails are unique across tenants.
+model User {
+  id           String    @id @default(cuid())
+  tenantId     String
+  email        String    @unique
+  name         String
+  passwordHash String
+  /// owner or staff
+  role         String    @default("staff")
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Channel {

@@ -18,6 +18,13 @@ const EnvSchema = z.object({
   SEED_WABA_ID: z.string().default("000000000000000"),
   SEED_DISPLAY_PHONE: z.string().default("+971500000000"),
   SEED_ACCESS_TOKEN: z.string().default("replace-me"),
+  /** Signs dashboard session tokens. Falls back to META_APP_SECRET when unset. */
+  AUTH_SECRET: z.string().min(16).optional(),
+  AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(7 * 24 * 60 * 60),
+  /** First dashboard login for the seed tenant; created by `pnpm db:seed` and in memory mode. */
+  SEED_ADMIN_EMAIL: z.string().email().optional(),
+  SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
+  SEED_ADMIN_NAME: z.string().default("Owner"),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema> & { storage: "memory" | "prisma" };

@@ -9,6 +9,36 @@ export interface TenantContext {
 export interface TenantRepository {
   findByPhoneNumberId(phoneNumberId: string): Promise<TenantContext | null>;
   findById(tenantId: string): Promise<Tenant | null>;
+  /** Tenant with its active channel, for outbound messages that start on our side. */
+  findContextById(tenantId: string): Promise<TenantContext | null>;
+}
+
+export type UserRole = "owner" | "staff";
+
+export interface UserRecord {
+  id: string;
+  tenantId: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  passwordHash: string;
+  isActive: boolean;
+}
+
+export interface CreateUserInput {
+  tenantId: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  passwordHash: string;
+}
+
+/** Merchant staff accounts for the dashboard. Emails are unique across tenants. */
+export interface UserRepository {
+  findByEmail(email: string): Promise<UserRecord | null>;
+  findById(id: string): Promise<UserRecord | null>;
+  create(input: CreateUserInput): Promise<UserRecord>;
+  touchLogin(id: string, at: Date): Promise<void>;
 }
 
 export type ConversationStatus = "bot" | "human" | "closed";
@@ -33,6 +63,9 @@ export interface MessageRecord {
 
 export interface ConversationRepository {
   upsertCustomer(tenantId: string, waId: string, name?: string): Promise<Customer>;
+  findCustomerById(customerId: string): Promise<Customer | null>;
+  findCustomersByIds(customerIds: string[]): Promise<Customer[]>;
+  findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null>;
   setCustomerLanguage(customerId: string, language: string): Promise<void>;
   getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord>;
   setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void>;
@@ -91,6 +124,8 @@ export interface OrderRepository {
   latestForCustomer(tenantId: string, customerId: string): Promise<Order | null>;
   updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }): Promise<Order>;
   listByStatus(tenantId: string, statuses: string[], limit?: number): Promise<Order[]>;
+  /** Newest first, optionally restricted to statuses and to orders updated after `since`. */
+  listRecent(tenantId: string, opts?: { statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
 }
 
 export type EventHandler = (event: DomainEvent) => Promise<void> | void;

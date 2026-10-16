@@ -77,6 +77,17 @@ if [ ! -f "$ENV_FILE" ]; then
 else
   log "Keeping existing $ENV_FILE"
 fi
+# Keys added after the file was first created get a generated value when still empty.
+fill_if_empty() {
+  if ! grep -q "^$1=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+  elif grep -q "^$1=\"\?\"\?$" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  fi
+}
+fill_if_empty AUTH_SECRET "$(openssl rand -hex 32)"
+fill_if_empty SEED_ADMIN_EMAIL "owner@example.com"
+fill_if_empty SEED_ADMIN_PASSWORD "$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"
 
 log "Scheduling nightly Postgres backup at 03:00 server time"
 mkdir -p "$APP_DIR/backups"

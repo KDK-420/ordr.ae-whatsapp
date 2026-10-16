@@ -158,6 +158,9 @@ jobs:
           SEED_WABA_ID: ${{ secrets.SEED_WABA_ID }}
           SEED_DISPLAY_PHONE: ${{ secrets.SEED_DISPLAY_PHONE }}
           SEED_ACCESS_TOKEN: ${{ secrets.SEED_ACCESS_TOKEN }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: |
           set -euo pipefail
           # Build a script for the server. setkv replaces or appends KEY="value" in deploy/.env,
@@ -177,6 +180,9 @@ jobs:
           add SEED_WABA_ID "$SEED_WABA_ID"
           add SEED_DISPLAY_PHONE "$SEED_DISPLAY_PHONE"
           add SEED_ACCESS_TOKEN "$SEED_ACCESS_TOKEN"
+          add SEED_ADMIN_EMAIL "$SEED_ADMIN_EMAIL"
+          add SEED_ADMIN_PASSWORD "$SEED_ADMIN_PASSWORD"
+          add AUTH_SECRET "$AUTH_SECRET"
           if [ -z "$META_APP_SECRET" ]; then
             # Placeholder so the stack can start; webhook signatures will not verify until replaced.
             script+='grep -q "^META_APP_SECRET=\"\?replace-me" .env && setkv META_APP_SECRET "not-configured-$(openssl rand -hex 8)" || true'$'\n'
@@ -213,7 +219,9 @@ jobs:
           for i in $(seq 1 20); do
             if out="$(curl -fsS --max-time 10 "https://$DOMAIN/health" 2>/dev/null)"; then
               echo "https://$DOMAIN/health -> $out"
-              { echo "### VPS ready"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
+              dash="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/login" || true)"
+              echo "https://$DOMAIN/login -> HTTP $dash"
+              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login (HTTP $dash)"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 6
