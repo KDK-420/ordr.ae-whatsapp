@@ -7,7 +7,20 @@ Requirements: a VPS with Ubuntu 22.04/24.04 or Debian 12, 2 GB RAM or more, root
 hostname whose DNS A record points at the server (for example `wa.ordr.ae`). For UAE data
 residency (PLAN.md, ADR-007) pick a provider with a UAE location.
 
-## 1. Prepare the server (once)
+## Option A: from GitHub Actions (no local SSH needed)
+
+The `VPS` workflow (`.github/workflows/vps.yml`) does steps 1 to 3 below over SSH from a
+GitHub-hosted runner. It needs the repository secret `VPS_PASSWORD` (root password). Optional
+secrets `META_APP_SECRET`, `META_VERIFY_TOKEN` and the `SEED_*` values are written into
+`deploy/.env` on the server when present; otherwise fill them in by hand on the server.
+
+Actions tab > VPS > Run workflow. Inputs: `host`, `domain` (defaults to a sslip.io name derived
+from the IP, which resolves without DNS setup), `mode` (`setup` the first time, `deploy` for
+updates). The run summary prints the health and webhook URLs.
+
+## Option B: by hand
+
+### 1. Prepare the server (once)
 
 ```
 ssh root@<server-ip>
@@ -19,7 +32,7 @@ unattended security updates, clones the repository to `/opt/ordr`, creates `/opt
 with a generated Postgres password and webhook verify token, and schedules a nightly backup.
 Running it again is safe.
 
-## 2. Fill in the configuration
+### 2. Fill in the configuration
 
 ```
 nano /opt/ordr/deploy/.env
@@ -28,7 +41,7 @@ nano /opt/ordr/deploy/.env
 Set `DOMAIN`, `META_APP_SECRET`, and the `SEED_*` values (phone number ID, WABA ID, display
 number, permanent access token) from the Meta app dashboard. Leave the generated values alone.
 
-## 3. Deploy
+### 3. Deploy
 
 ```
 /opt/ordr/deploy/deploy.sh --seed
@@ -41,7 +54,7 @@ printing the webhook callback URL and verify token.
 Caddy obtains the TLS certificate on first request, so `https://<DOMAIN>/health` may take a few
 seconds the first time.
 
-## 4. Register the webhook with Meta
+## Register the webhook with Meta
 
 In the Meta app dashboard, WhatsApp > Configuration > Webhook: paste the callback URL
 `https://<DOMAIN>/webhooks/whatsapp` and the verify token from `deploy/.env`, click Verify and

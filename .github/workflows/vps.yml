@@ -1,0 +1,112 @@
+# Set up or redeploy the VPS over SSH from a GitHub-hosted runner. Run from the Actions tab.
+#
+# Required secret: VPS_PASSWORD (root password). It is only passed to sshpass through the
+# environment and is masked in logs.
+# Optional secrets written into deploy/.env on the server when present:
+#   META_APP_SECRET, META_VERIFY_TOKEN, SEED_PHONE_NUMBER_ID, SEED_WABA_ID, SEED_DISPLAY_PHONE,
+#   SEED_ACCESS_TOKEN, SEED_TENANT_NAME
+name: VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: Server IP or hostname
+        default: 200.141.6.31
+        required: true
+      domain:
+        description: Public hostname for TLS (its A record must point at the server)
+        default: 200-141-6-31.sslip.io
+        required: true
+      mode:
+        description: setup = bootstrap + config + deploy --seed; deploy = build and restart only
+        type: choice
+        options: [setup, deploy]
+        default: setup
+
+concurrency:
+  group: vps-${{ inputs.host }}
+  cancel-in-progress: false
+
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HOST: ${{ inputs.host }}
+      DOMAIN: ${{ inputs.domain }}
+      MODE: ${{ inputs.mode }}
+      BRANCH: ${{ github.ref_name }}
+      SSHPASS: ${{ secrets.VPS_PASSWORD }}
+      SSH: sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: |
+          [ -n "$SSHPASS" ] || { echo "::error::Repository secret VPS_PASSWORD is not set"; exit 1; }
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass >/dev/null
+
+      - name: Check SSH access
+        run: |
+          $SSH "root@$HOST" 'echo "connected to $(hostname) as $(whoami) on $(. /etc/os-release && echo "$PRETTY_NAME")"'
+
+      - name: Bootstrap server
+        if: inputs.mode == 'setup'
+        run: |
+          $SSH "root@$HOST" "BRANCH='$BRANCH' bash -s" < deploy/bootstrap.sh
+
+      - name: Write deploy/.env on the server
+        if: inputs.mode == 'setup'
+        env:
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          META_VERIFY_TOKEN: ${{ secrets.META_VERIFY_TOKEN }}
+          SEED_TENANT_NAME: ${{ secrets.SEED_TENANT_NAME }}
+          SEED_PHONE_NUMBER_ID: ${{ secrets.SEED_PHONE_NUMBER_ID }}
+          SEED_WABA_ID: ${{ secrets.SEED_WABA_ID }}
+          SEED_DISPLAY_PHONE: ${{ secrets.SEED_DISPLAY_PHONE }}
+          SEED_ACCESS_TOKEN: ${{ secrets.SEED_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Build a script for the server. setkv replaces or appends KEY="value" in deploy/.env,
+          # escaping backslashes and double quotes for the file. Values travel bash-quoted (printf %q).
+          script='set -euo pipefail; cd /opt/ordr/deploy
+          setkv() { { grep -v "^$1=" .env || true; } > .env.tmp; printf "%s=\"%s\"\n" "$1" "$(printf "%s" "$2" | sed "s/[\\\\\"]/\\\\&/g")" >> .env.tmp; mv .env.tmp .env; chmod 600 .env; }
+          '
+          add() {  # $1 key, $2 value; skipped when empty
+            [ -n "$2" ] || return 0
+            script+="setkv $1 $(printf %q "$2")"$'\n'
+          }
+          add DOMAIN "$DOMAIN"
+          add META_APP_SECRET "$META_APP_SECRET"
+          add META_VERIFY_TOKEN "$META_VERIFY_TOKEN"
+          add SEED_TENANT_NAME "$SEED_TENANT_NAME"
+          add SEED_PHONE_NUMBER_ID "$SEED_PHONE_NUMBER_ID"
+          add SEED_WABA_ID "$SEED_WABA_ID"
+          add SEED_DISPLAY_PHONE "$SEED_DISPLAY_PHONE"
+          add SEED_ACCESS_TOKEN "$SEED_ACCESS_TOKEN"
+          if [ -z "$META_APP_SECRET" ]; then
+            # Placeholder so the stack can start; webhook signatures will not verify until replaced.
+            script+='grep -q "^META_APP_SECRET=\"\?replace-me" .env && setkv META_APP_SECRET "not-configured-$(openssl rand -hex 8)" || true'$'\n'
+            echo "::warning::META_APP_SECRET secret not set; a placeholder was written. Put the real value in /opt/ordr/deploy/.env or add the secret and rerun."
+          fi
+          script+='echo "deploy/.env keys: $(grep -v "^#" .env | cut -d= -f1 | grep . | sort | tr "\n" " ")"'$'\n'
+          $SSH "root@$HOST" 'bash -s' <<< "$script"
+
+      - name: Deploy
+        run: |
+          flags="--no-pull"
+          [ "$MODE" = "setup" ] && flags="--no-pull --seed"
+          $SSH "root@$HOST" "cd /opt/ordr && git fetch --quiet origin '$BRANCH' && git checkout --quiet '$BRANCH' && git reset --quiet --hard 'origin/$BRANCH' && chmod +x deploy/*.sh && ./deploy/deploy.sh $flags"
+
+      - name: Verify over HTTPS
+        run: |
+          for i in $(seq 1 20); do
+            if out="$(curl -fsS --max-time 10 "https://$DOMAIN/health" 2>/dev/null)"; then
+              echo "https://$DOMAIN/health -> $out"
+              { echo "### VPS ready"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::warning::API is up on the server but https://$DOMAIN/health did not answer yet (certificate issuance or DNS). On the server: cd /opt/ordr/deploy && docker compose logs caddy"
