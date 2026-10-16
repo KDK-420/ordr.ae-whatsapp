@@ -53,4 +53,12 @@ describe("OrderService", () => {
     expect(bus.published.map((e) => e.type)).toEqual(["order.placed", "order.placed", "order.status_changed", "order.status_changed"]);
     expect(bus.published[2]?.payload).toMatchObject({ from: "placed", to: "accepted", actor: "staff:1" });
   });
+
+  it("hands the repository the same event it publishes, for the transactional outbox", async () => {
+    const { service, orders, bus, cart, tenantId } = setup();
+    const order = await service.place({ tenantId, customerId: "c1", cart, fulfillmentType: "pickup" });
+    await service.transition(tenantId, order.id, "accept");
+    expect(orders.outbox.map((e) => e.id)).toEqual(bus.published.map((e) => e.id));
+    expect(orders.outbox[1]).toMatchObject({ type: "order.status_changed", subject: { kind: "order", id: order.id }, payload: { orderNumber: 1, to: "accepted" } });
+  });
 });

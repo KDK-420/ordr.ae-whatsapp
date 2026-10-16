@@ -2,14 +2,17 @@ import { Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/com
 import type { Customer, Tenant } from "@ordr/domain";
 import type { SessionState } from "@ordr/flow-schema";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { previewOf } from "../conversation/preview";
 import type {
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
+  ConversationSummary,
   CreateUserInput,
   DedupeStore,
   MessageRecord,
   SessionStore,
+  StoredMessage,
   TenantContext,
   TenantRepository,
   UserRecord,
@@ -171,6 +174,47 @@ export class PrismaConversationRepository implements ConversationRepository {
 
   async updateMessageStatus(providerMessageId: string, status: string): Promise<void> {
     await this.prisma.message.updateMany({ where: { providerMessageId }, data: { status } });
+  }
+
+  async listConversations(tenantId: string, opts: { status?: ConversationStatus; limit?: number } = {}): Promise<ConversationSummary[]> {
+    const limit = opts.limit ?? 100;
+    const rows = await this.prisma.conversation.findMany({
+      where: { tenantId, ...(opts.status ? { status: opts.status } : {}) },
+      orderBy: { updatedAt: "desc" },
+      take: limit * 2,
+      include: { customer: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
+    const summaries = rows.map((row): ConversationSummary => {
+      const last = row.messages[0];
+      return {
+        id: row.id,
+        tenantId: row.tenantId,
+        customerId: row.customerId,
+        channelId: row.channelId,
+        status: row.status as ConversationStatus,
+        lastInboundAt: row.lastInboundAt ?? undefined,
+        updatedAt: row.updatedAt,
+        customer: toCustomer(row.customer),
+        lastMessage: last ? { direction: last.direction as "in" | "out", kind: last.kind, preview: previewOf(last.payload), createdAt: last.createdAt } : undefined,
+      };
+    });
+    const stamp = (s: ConversationSummary) => (s.lastMessage?.createdAt ?? s.updatedAt).getTime();
+    return summaries.sort((a, b) => stamp(b) - stamp(a)).slice(0, limit);
+  }
+
+  async listMessages(conversationId: string, opts: { limit?: number } = {}): Promise<StoredMessage[]> {
+    const rows = await this.prisma.message.findMany({ where: { conversationId }, orderBy: { createdAt: "desc" }, take: opts.limit ?? 200 });
+    return rows.reverse().map((m) => ({
+      id: m.id,
+      tenantId: m.tenantId,
+      conversationId: m.conversationId,
+      direction: m.direction as "in" | "out",
+      providerMessageId: m.providerMessageId ?? undefined,
+      kind: m.kind,
+      payload: m.payload,
+      status: m.status ?? undefined,
+      createdAt: m.createdAt,
+    }));
   }
 }
 

@@ -1,5 +1,5 @@
 import type { Category, DomainEvent, Offering, Order } from "@ordr/domain";
-import type { CatalogRepository, CreateOrderInput, EventBus, EventHandler, OrderRepository } from "../ports";
+import type { CatalogRepository, CreateOrderInput, EventBus, EventHandler, OrderRepository, OutboxFactory, OutboxRecord, OutboxStore } from "../ports";
 
 export class InMemoryCatalogRepository implements CatalogRepository {
   constructor(
@@ -25,9 +25,11 @@ export class InMemoryCatalogRepository implements CatalogRepository {
 export class InMemoryOrderRepository implements OrderRepository {
   readonly orders: Order[] = [];
   readonly history: Array<{ orderId: string; type: string; payload?: unknown }> = [];
+  /** Events that would have gone to the outbox table; tests inspect this. */
+  readonly outbox: DomainEvent[] = [];
   private readonly sequences = new Map<string, number>();
 
-  async create(input: CreateOrderInput): Promise<Order> {
+  async create(input: CreateOrderInput, outbox?: OutboxFactory): Promise<Order> {
     const number = (this.sequences.get(input.tenantId) ?? 0) + 1;
     this.sequences.set(input.tenantId, number);
     const now = new Date().toISOString();
@@ -35,6 +37,7 @@ export class InMemoryOrderRepository implements OrderRepository {
     const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, createdAt: now, updatedAt: now };
     this.orders.push(order);
     this.history.push({ orderId: order.id, type: "order.placed" });
+    if (outbox) this.outbox.push(outbox(structuredClone(order)));
     return structuredClone(order);
   }
 
@@ -49,12 +52,13 @@ export class InMemoryOrderRepository implements OrderRepository {
     return latest ? structuredClone(latest) : null;
   }
 
-  async updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }): Promise<Order> {
+  async updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order> {
     const o = this.orders.find((x) => x.tenantId === tenantId && x.id === orderId);
     if (!o) throw new Error(`order ${orderId} not found`);
     o.status = status;
     o.updatedAt = new Date().toISOString();
     this.history.push({ orderId, ...event });
+    if (outbox) this.outbox.push(outbox(structuredClone(o)));
     return structuredClone(o);
   }
 
@@ -74,6 +78,65 @@ export class InMemoryOrderRepository implements OrderRepository {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.number - a.number)
       .slice(0, limit)
       .map((o) => structuredClone(o));
+  }
+}
+
+type MemoryOutboxRow = OutboxRecord & { status: "pending" | "processing" | "sent" | "failed"; nextAttemptAt: number; claimedAt?: number; lastError?: string };
+
+/** Outbox semantics in memory, for relay tests. */
+export class InMemoryOutboxStore implements OutboxStore {
+  readonly rows: MemoryOutboxRow[] = [];
+
+  add(event: DomainEvent, at = new Date()): void {
+    if (this.rows.some((r) => r.id === event.id)) return;
+    this.rows.push({ ...structuredClone(event), attempts: 0, status: "pending", nextAttemptAt: at.getTime() });
+  }
+
+  async claim(limit: number, now = new Date()): Promise<OutboxRecord[]> {
+    const due = this.rows
+      .filter((r) => r.status === "pending" && r.nextAttemptAt <= now.getTime())
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
+      .slice(0, limit);
+    for (const r of due) {
+      r.status = "processing";
+      r.attempts += 1;
+      r.claimedAt = now.getTime();
+    }
+    return due.map(({ status: _s, nextAttemptAt: _n, claimedAt: _c, lastError: _e, ...rec }) => structuredClone(rec));
+  }
+
+  async markSent(id: string): Promise<void> {
+    const r = this.rows.find((x) => x.id === id);
+    if (r) r.status = "sent";
+  }
+
+  async markFailed(id: string, error: string, retryAt: Date | null): Promise<void> {
+    const r = this.rows.find((x) => x.id === id);
+    if (!r) return;
+    r.lastError = error;
+    if (retryAt) {
+      r.status = "pending";
+      r.nextAttemptAt = retryAt.getTime();
+    } else {
+      r.status = "failed";
+    }
+  }
+
+  async requeueStale(olderThan: Date): Promise<number> {
+    let n = 0;
+    for (const r of this.rows) {
+      if (r.status === "processing" && (r.claimedAt ?? 0) < olderThan.getTime()) {
+        r.status = "pending";
+        n += 1;
+      }
+    }
+    return n;
+  }
+
+  async counts(): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const r of this.rows) out[r.status] = (out[r.status] ?? 0) + 1;
+    return out;
   }
 }
 

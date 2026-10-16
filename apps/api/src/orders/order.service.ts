@@ -70,7 +70,12 @@ export class OrderService {
     const q = await this.quote(input.tenantId, input.cart, input.fulfillmentType);
     const paymentMethod = input.paymentMethod ?? s.paymentMethods[0] ?? "cash";
 
-    const order = await this.orders.create({
+    // The event id is fixed up front so the row the repository writes in its transaction and the
+    // publish below describe the same event; the outbox bus de-duplicates on id.
+    const eventId = randomUUID();
+    const placed = (o: Order) => this.event(eventId, "order.placed", o, { fulfillmentType: o.fulfillmentType, totalMinor: o.totalMinor });
+    const order = await this.orders.create(
+      {
       tenantId: input.tenantId,
       customerId: input.customerId,
       conversationId: input.conversationId,
@@ -86,10 +91,12 @@ export class OrderService {
       totalMinor: q.totalMinor,
       paymentStatus: "unpaid",
       paymentMethod,
-      deliveryLocation: input.deliveryLocation ? { ...input.deliveryLocation, notes: input.notes } : undefined,
-      notes: input.notes,
-    });
-    await this.emit("order.placed", order, { fulfillmentType: order.fulfillmentType, totalMinor: order.totalMinor });
+        deliveryLocation: input.deliveryLocation ? { ...input.deliveryLocation, notes: input.notes } : undefined,
+        notes: input.notes,
+      },
+      placed,
+    );
+    await this.publish(placed(order));
     this.logger.log(`order #${order.number} placed for tenant ${order.tenantId} (${order.fulfillmentType}, ${order.totalMinor} ${order.currency})`);
     return order;
   }
@@ -102,8 +109,11 @@ export class OrderService {
     const blueprint = this.blueprints.get(s.tenant.blueprintId);
     if (!blueprint) throw new OrderError(`blueprint ${s.tenant.blueprintId} not found`);
     const to = nextState(blueprint.orderStates, order.status, event);
-    const updated = await this.orders.updateStatus(tenantId, orderId, to, { type: "order.status_changed", payload: { from: order.status, to, event, actor } });
-    await this.emit("order.status_changed", updated, { from: order.status, to, event, actor });
+    const payload = { from: order.status, to, event, actor };
+    const eventId = randomUUID();
+    const changed = (o: Order) => this.event(eventId, "order.status_changed", o, payload);
+    const updated = await this.orders.updateStatus(tenantId, orderId, to, { type: "order.status_changed", payload }, changed);
+    await this.publish(changed(updated));
     return updated;
   }
 
@@ -111,19 +121,23 @@ export class OrderService {
     return this.orders.latestForCustomer(tenantId, customerId);
   }
 
-  private async emit(type: string, order: Order, payload: Record<string, unknown>): Promise<void> {
-    const event: DomainEvent = {
-      id: randomUUID(),
+  private event(id: string, type: string, order: Order, payload: Record<string, unknown>): DomainEvent {
+    return {
+      id,
       type,
       tenantId: order.tenantId,
       occurredAt: new Date().toISOString(),
       subject: { kind: "order", id: order.id },
       payload: { orderNumber: order.number, customerId: order.customerId, status: order.status, ...payload },
     };
+  }
+
+  /** A failing handler must never fail the order change itself; with the outbox the worker retries. */
+  private async publish(event: DomainEvent): Promise<void> {
     try {
       await this.bus.publish(event);
     } catch (err) {
-      this.logger.error(`event ${type} for order ${order.id} failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(`event ${event.type} for order ${event.subject.id} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

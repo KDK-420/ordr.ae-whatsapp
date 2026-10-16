@@ -62,6 +62,26 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  # Same image as the API, no HTTP: relays outbox events (customer notifications) with retries.
+  worker:
+    image: ordr/api:latest
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    env_file: .env
+    environment:
+      STORAGE: prisma
+      SKIP_MIGRATIONS: "1"
+      DATABASE_URL: postgresql://ordr:${POSTGRES_PASSWORD}@postgres:5432/ordr?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   dashboard:
     build:
       context: ..

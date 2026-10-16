@@ -1,6 +1,7 @@
 import type { Category, DeliveryLocation, LocalizedText, ModifierGroup, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus } from "@ordr/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { CatalogRepository, CreateOrderInput, OrderRepository } from "../ports";
+import type { CatalogRepository, CreateOrderInput, OrderRepository, OutboxFactory } from "../ports";
+import { toOutboxRow } from "./outbox";
 
 type OfferingRow = Prisma.OfferingGetPayload<{ include: { modifierGroups: { include: { options: true } } } }>;
 type OrderRow = Prisma.OrderGetPayload<{ include: { items: true } }>;
@@ -105,10 +106,10 @@ function toOrder(row: OrderRow): Order {
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(input: CreateOrderInput): Promise<Order> {
-    const row = await this.prisma.$transaction(async (tx) => {
+  async create(input: CreateOrderInput, outbox?: OutboxFactory): Promise<Order> {
+    return this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.update({ where: { id: input.tenantId }, data: { orderSeq: { increment: 1 } }, select: { orderSeq: true } });
-      return tx.order.create({
+      const row = await tx.order.create({
         data: {
           tenantId: input.tenantId,
           number: tenant.orderSeq,
@@ -142,8 +143,10 @@ export class PrismaOrderRepository implements OrderRepository {
         },
         include: { items: true },
       });
+      const order = toOrder(row);
+      if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
+      return order;
     });
-    return toOrder(row);
   }
 
   async findById(tenantId: string, orderId: string): Promise<Order | null> {
@@ -156,13 +159,17 @@ export class PrismaOrderRepository implements OrderRepository {
     return row ? toOrder(row) : null;
   }
 
-  async updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }): Promise<Order> {
-    const row = await this.prisma.order.update({
-      where: { id: orderId, tenantId },
-      data: { status, events: { create: { tenantId, type: event.type, payload: (event.payload ?? {}) as Prisma.InputJsonValue } } },
-      include: { items: true },
+  async updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.order.update({
+        where: { id: orderId, tenantId },
+        data: { status, events: { create: { tenantId, type: event.type, payload: (event.payload ?? {}) as Prisma.InputJsonValue } } },
+        include: { items: true },
+      });
+      const order = toOrder(row);
+      if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
+      return order;
     });
-    return toOrder(row);
   }
 
   async listByStatus(tenantId: string, statuses: string[], limit = 50): Promise<Order[]> {

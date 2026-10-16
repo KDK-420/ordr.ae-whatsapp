@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { logout, me, type Me } from "@/lib/api";
 
-/** App chrome: tenant name, signed-in user, sign out. */
+const NAV = [
+  { href: "/orders", label: "Orders" },
+  { href: "/inbox", label: "Inbox" },
+  { href: "/catalog", label: "Catalog" },
+  { href: "/settings", label: "Settings" },
+];
+
+/** App chrome: navigation, tenant name, signed-in user, sign out. */
 export function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [session, setSession] = useState<Me | null>(null);
 
   useEffect(() => {
@@ -24,15 +32,29 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <div className="flex items-baseline gap-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+          <div className="flex items-center gap-6">
             <Link href="/orders" className="text-lg font-semibold tracking-tight">
               ordr<span className="text-brand">.ae</span>
             </Link>
-            {session?.tenant ? <span className="text-sm text-slate-600">{session.tenant.name}</span> : null}
+            <nav className="flex gap-1 text-sm">
+              {NAV.map((item) => {
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-md px-3 py-1.5 ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            {session ? <span className="hidden text-slate-500 sm:inline">{session.user.email}</span> : null}
+            {session?.tenant ? <span className="hidden text-slate-600 md:inline">{session.tenant.name}</span> : null}
+            {session ? <span className="hidden text-slate-400 lg:inline">{session.user.email}</span> : null}
             <button type="button" onClick={onLogout} className="rounded-md border border-slate-300 px-3 py-1.5 hover:border-slate-400">
               Sign out
             </button>

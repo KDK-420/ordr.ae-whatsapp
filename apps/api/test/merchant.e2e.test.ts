@@ -157,11 +157,61 @@ describe("merchant API", () => {
     expect(outbound).toHaveLength(1);
   });
 
-  it("skips the notification outside the 24h window instead of failing the transition", async () => {
+  it("skips the notification outside the 24h window when no template is approved", async () => {
     const token = await login();
     const order = await placeOrder(h, "971500000002", 25 * 60);
     const res = await request(server()).post(`/merchant/orders/${order.id}/transition`).set("authorization", `Bearer ${token}`).send({ event: "accept" });
     expect(res.status).toBe(200);
     expect(h.sender.to("971500000002")).toHaveLength(0);
+  });
+
+  it("lists conversations, shows threads, lets agents reply inside the window and hands the thread to a human", async () => {
+    const token = await login();
+    const auth = { authorization: `Bearer ${token}` };
+    await placeOrder(h, "971500000001", 5);
+    const closedCustomer = await placeOrder(h, "971500000009", 30 * 60);
+
+    const list = await request(server()).get("/merchant/conversations").set(auth);
+    expect(list.status).toBe(200);
+    expect(list.body.conversations).toHaveLength(2);
+    const open = list.body.conversations.find((c: { customer: { waId: string } }) => c.customer.waId === "971500000001");
+    expect(open).toMatchObject({ status: "bot", windowOpen: true, customer: { name: "Sara" } });
+
+    const reply = await request(server()).post(`/merchant/conversations/${open.id}/messages`).set(auth).send({ text: "On its way!" });
+    expect(reply.status).toBe(201);
+    expect(reply.body).toMatchObject({ direction: "out", kind: "text", preview: "On its way!" });
+    expect(h.sender.to("971500000001").at(-1)).toMatchObject({ type: "text", text: { body: "On its way!" } });
+
+    const thread = await request(server()).get(`/merchant/conversations/${open.id}`).set(auth);
+    expect(thread.body.conversation).toMatchObject({ status: "human" });
+    expect(thread.body.messages.at(-1)).toMatchObject({ direction: "out", preview: "On its way!" });
+
+    const back = await request(server()).post(`/merchant/conversations/${open.id}/status`).set(auth).send({ status: "bot" });
+    expect(back.body.status).toBe("bot");
+
+    const closed = list.body.conversations.find((c: { id: string }) => c.id === closedCustomer.conversationId);
+    expect(closed.windowOpen).toBe(false);
+    expect((await request(server()).post(`/merchant/conversations/${closed.id}/messages`).set(auth).send({ text: "hi" })).status).toBe(409);
+    expect((await request(server()).get(`/merchant/conversations/nope`).set(auth)).status).toBe(404);
+    expect((await request(server()).post(`/merchant/conversations/${open.id}/messages`).set(auth).send({ text: "" })).status).toBe(400);
+  });
+
+  it("uses an approved template outside the 24h window once templates are submitted", async () => {
+    const token = await login();
+    const auth = { authorization: `Bearer ${token}` };
+    const before = await request(server()).get("/merchant/templates").set(auth);
+    expect(before.body).toMatchObject({ templates: [], languages: ["en", "ar"] });
+
+    // The fake Meta API approves immediately, so one submit is enough here.
+    const submitted = await request(server()).post("/merchant/templates/submit").set(auth);
+    expect(submitted.status).toBe(200);
+    expect(submitted.body.templates.map((t: { language: string; status: string }) => `${t.language}:${t.status}`)).toEqual(["en:approved", "ar:approved"]);
+
+    const order = await placeOrder(h, "971500000003", 25 * 60);
+    await request(server()).post(`/merchant/orders/${order.id}/transition`).set(auth).send({ event: "accept" });
+    const sent = h.sender.to("971500000003");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ type: "template", template: { name: "ordr_order_status", language: { code: "en" } } });
+    expect(JSON.stringify(sent[0])).toContain("confirmed");
   });
 });

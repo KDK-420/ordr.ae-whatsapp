@@ -5,7 +5,9 @@ import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsap
 import { demoCatalog } from "./actions/demo-catalog";
 import { createActionRegistry } from "./actions";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
-import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository } from "./adapters/memory-catalog";
+import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore } from "./adapters/memory-catalog";
+import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
+import { FakeTemplateApi, InMemoryTemplateRepository, PrismaTemplateRepository } from "./adapters/templates";
 import { PrismaCatalogRepository, PrismaOrderRepository } from "./adapters/prisma-catalog";
 import {
   PrismaConversationRepository,
@@ -23,11 +25,16 @@ import { hashPassword } from "./auth/password";
 import type { AppConfig } from "./config";
 import { ConversationService } from "./conversation/conversation.service";
 import { InboundQueue } from "./conversation/inbound-queue";
+import { OutboxRelay } from "./events/outbox-relay";
 import { HealthController } from "./health.controller";
+import { InboxService } from "./inbox/inbox.service";
+import { MerchantConversationsController } from "./merchant/conversations.controller";
 import { MerchantOrdersService } from "./merchant/merchant-orders.service";
 import { MerchantOrdersController } from "./merchant/orders.controller";
+import { MerchantTemplatesController } from "./merchant/templates.controller";
 import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
+import { TemplateService } from "./templates/template.service";
 import type {
   BlueprintRegistry,
   CatalogRepository,
@@ -35,7 +42,10 @@ import type {
   DedupeStore,
   EventBus,
   OrderRepository,
+  OutboxStore,
   SessionStore,
+  TemplateApi,
+  TemplateRepository,
   TenantContext,
   TenantRepository,
   UserRepository,
@@ -46,6 +56,11 @@ import { WebhookController } from "./webhook/webhook.controller";
 
 export interface AppOptions {
   config: AppConfig;
+  /**
+   * api: HTTP controllers; on Postgres, events only go to the outbox.
+   * worker: no controllers; events are dispatched from the outbox to handlers in this process.
+   */
+  role?: "api" | "worker";
   /** Pre-built adapters, mainly for tests and the simulator. Anything omitted is created from config. */
   overrides?: Partial<{
     tenants: TenantRepository;
@@ -59,6 +74,9 @@ export interface AppOptions {
     orders: OrderRepository;
     eventBus: EventBus;
     users: UserRepository;
+    outbox: OutboxStore;
+    templates: TemplateRepository;
+    templateApi: TemplateApi;
   }>;
 }
 
@@ -97,13 +115,13 @@ export function seedTenantFromConfig(config: AppConfig): TenantContext {
 
 @Module({})
 export class AppModule {
-  static register({ config, overrides = {} }: AppOptions): DynamicModule {
+  static register({ config, role = "api", overrides = {} }: AppOptions): DynamicModule {
     const logger = new Logger("AppModule");
     const providers: Provider[] = [
       { provide: TOKENS.Config, useValue: config },
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
-      { provide: TOKENS.EventBus, useValue: overrides.eventBus ?? new InMemoryEventBus() },
       OrderService,
+      OutboxRelay,
       overrides.actions
         ? { provide: TOKENS.ActionRegistry, useValue: overrides.actions }
         : {
@@ -122,14 +140,25 @@ export class AppModule {
       AuthService,
       AuthGuard,
       MerchantOrdersService,
+      TemplateService,
+      InboxService,
       OrderNotifier,
+      {
+        provide: TOKENS.TemplateApi,
+        useFactory: (sender: MessageSender) =>
+          overrides.templateApi ?? (config.WHATSAPP_SENDER === "meta" && sender instanceof CloudApiClient ? sender : new FakeTemplateApi()),
+        inject: [TOKENS.MessageSender],
+      },
     ];
 
     if (config.storage === "memory") {
-      logger.log("storage=memory: tenants, catalog, orders, conversations, sessions and dedupe live in process");
+      logger.log("storage=memory: tenants, catalog, orders, conversations, sessions and dedupe live in process; events are handled in process");
       const seed = seedTenantFromConfig(config);
       const demo = demoCatalog(seed.tenant.id);
       providers.push(
+        { provide: TOKENS.EventBus, useValue: overrides.eventBus ?? new InMemoryEventBus() },
+        { provide: TOKENS.OutboxStore, useValue: overrides.outbox ?? new InMemoryOutboxStore() },
+        { provide: TOKENS.TemplateRepository, useValue: overrides.templates ?? new InMemoryTemplateRepository() },
         { provide: TOKENS.CatalogRepository, useValue: overrides.catalog ?? new InMemoryCatalogRepository(demo.categories, demo.offerings) },
         { provide: TOKENS.OrderRepository, useValue: overrides.orders ?? new InMemoryOrderRepository() },
         { provide: TOKENS.TenantRepository, useValue: overrides.tenants ?? new InMemoryTenantRepository([seed]) },
@@ -140,7 +169,22 @@ export class AppModule {
       );
     } else {
       providers.push(PrismaService);
+      if (overrides.eventBus) {
+        providers.push({ provide: TOKENS.EventBus, useValue: overrides.eventBus });
+      } else if (role === "worker") {
+        logger.log("role=worker: dispatching outbox events to handlers in this process");
+        providers.push({ provide: TOKENS.EventBus, useValue: new InMemoryEventBus() });
+      } else {
+        logger.log("role=api: events are written to the outbox for the worker");
+        providers.push({ provide: TOKENS.EventBus, useFactory: (p: PrismaService) => new OutboxEventBus(p), inject: [PrismaService] });
+      }
       providers.push(
+        overrides.outbox
+          ? { provide: TOKENS.OutboxStore, useValue: overrides.outbox }
+          : { provide: TOKENS.OutboxStore, useFactory: (p: PrismaService) => new PrismaOutboxStore(p), inject: [PrismaService] },
+        overrides.templates
+          ? { provide: TOKENS.TemplateRepository, useValue: overrides.templates }
+          : { provide: TOKENS.TemplateRepository, useFactory: (p: PrismaService) => new PrismaTemplateRepository(p), inject: [PrismaService] },
         overrides.users
           ? { provide: TOKENS.UserRepository, useValue: overrides.users }
           : { provide: TOKENS.UserRepository, useFactory: (p: PrismaService) => new PrismaUserRepository(p), inject: [PrismaService] },
@@ -179,7 +223,10 @@ export class AppModule {
 
     return {
       module: AppModule,
-      controllers: [RootController, HealthController, WebhookController, AuthController, MerchantOrdersController],
+      controllers:
+        role === "api"
+          ? [RootController, HealthController, WebhookController, AuthController, MerchantOrdersController, MerchantTemplatesController, MerchantConversationsController]
+          : [],
       providers,
       exports: [ConversationService, InboundQueue, OrderService],
     };

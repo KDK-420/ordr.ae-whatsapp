@@ -83,6 +83,61 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  purpose: string;
+  body: string;
+  parameters: string[];
+  status: "draft" | "pending" | "approved" | "rejected" | "paused" | "disabled";
+  metaId?: string;
+  rejectedReason?: string;
+  updatedAt: string;
+}
+
+export interface TemplateList {
+  templates: MessageTemplate[];
+  defaults: Array<{ purpose: string; name: string; bodies: Record<string, string> }>;
+  languages: string[];
+}
+
+export type ConversationStatus = "bot" | "human" | "closed";
+
+export interface ConversationView {
+  id: string;
+  status: ConversationStatus;
+  customer: { id: string; name?: string; waId?: string; language?: string } | null;
+  lastInboundAt?: string;
+  updatedAt: string;
+  lastMessage?: { direction: "in" | "out"; kind: string; preview: string; createdAt: string };
+  windowOpen: boolean;
+  windowClosesAt?: string;
+}
+
+export interface MessageView {
+  id: string;
+  direction: "in" | "out";
+  kind: string;
+  preview: string;
+  payload: unknown;
+  status?: string;
+  createdAt: string;
+}
+
+export const listTemplates = () => call<TemplateList>("/merchant/templates");
+export const submitTemplates = () => call<{ templates: MessageTemplate[] }>("/merchant/templates/submit", { method: "POST" });
+export const syncTemplates = () => call<{ templates: MessageTemplate[] }>("/merchant/templates/sync", { method: "POST" });
+
+export const listConversations = (status?: ConversationStatus) =>
+  call<{ conversations: ConversationView[] }>(`/merchant/conversations${status ? `?status=${status}` : ""}`);
+export const getThread = (id: string) => call<{ conversation: ConversationView; messages: MessageView[] }>(`/merchant/conversations/${encodeURIComponent(id)}`);
+export const replyToConversation = (id: string, text: string) =>
+  call<MessageView>(`/merchant/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+export const setConversationStatus = (id: string, status: ConversationStatus) =>
+  call<ConversationView>(`/merchant/conversations/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify({ status }) });
+
 export const login = (email: string, password: string) =>
   call<{ token: string; expiresAt: string }>("/merchant/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const logout = () => call<void>("/merchant/auth/logout", { method: "POST" });

@@ -1,13 +1,16 @@
 import type { Customer, Tenant } from "@ordr/domain";
 import type { SessionState } from "@ordr/flow-schema";
+import { previewOf } from "../conversation/preview";
 import type {
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
+  ConversationSummary,
   CreateUserInput,
   DedupeStore,
   MessageRecord,
   SessionStore,
+  StoredMessage,
   TenantContext,
   TenantRepository,
   UserRecord,
@@ -73,8 +76,8 @@ export class InMemoryUserRepository implements UserRepository {
 
 export class InMemoryConversationRepository implements ConversationRepository {
   readonly customers = new Map<string, Customer>();
-  readonly conversations = new Map<string, ConversationRecord & { lastInboundAt?: Date }>();
-  readonly messages: MessageRecord[] = [];
+  readonly conversations = new Map<string, ConversationRecord & { lastInboundAt?: Date; updatedAt: Date }>();
+  readonly messages: StoredMessage[] = [];
   readonly statuses = new Map<string, string>();
 
   async upsertCustomer(tenantId: string, waId: string, name?: string): Promise<Customer> {
@@ -111,27 +114,57 @@ export class InMemoryConversationRepository implements ConversationRepository {
     for (const c of this.conversations.values()) {
       if (c.tenantId === tenantId && c.customerId === customerId && c.status !== "closed") return c;
     }
-    const created: ConversationRecord = { id: nextId("conv"), tenantId, customerId, channelId, status: "bot" };
+    const created = { id: nextId("conv"), tenantId, customerId, channelId, status: "bot" as ConversationStatus, updatedAt: new Date() };
     this.conversations.set(created.id, created);
     return created;
   }
 
   async setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void> {
     const c = this.conversations.get(conversationId);
-    if (c) c.status = status;
+    if (c) {
+      c.status = status;
+      c.updatedAt = new Date();
+    }
   }
 
   async touchInbound(conversationId: string, at: Date): Promise<void> {
     const c = this.conversations.get(conversationId);
-    if (c) c.lastInboundAt = at;
+    if (c) {
+      c.lastInboundAt = at;
+      c.updatedAt = at;
+    }
   }
 
   async recordMessage(message: MessageRecord): Promise<void> {
-    this.messages.push(message);
+    this.messages.push({ id: nextId("msg"), ...message });
   }
 
   async updateMessageStatus(providerMessageId: string, status: string): Promise<void> {
     this.statuses.set(providerMessageId, status);
+    for (const m of this.messages) if (m.providerMessageId === providerMessageId) m.status = status;
+  }
+
+  async listConversations(tenantId: string, opts: { status?: ConversationStatus; limit?: number } = {}): Promise<ConversationSummary[]> {
+    const customers = [...this.customers.values()];
+    const out: ConversationSummary[] = [];
+    for (const c of this.conversations.values()) {
+      if (c.tenantId !== tenantId) continue;
+      if (opts.status && c.status !== opts.status) continue;
+      const mine = this.messages.filter((m) => m.conversationId === c.id);
+      const last = mine[mine.length - 1];
+      out.push({
+        ...c,
+        customer: customers.find((x) => x.id === c.customerId) ?? null,
+        lastMessage: last ? { direction: last.direction, kind: last.kind, preview: previewOf(last.payload), createdAt: last.createdAt } : undefined,
+      });
+    }
+    const stamp = (s: ConversationSummary) => (s.lastMessage?.createdAt ?? s.updatedAt).getTime();
+    return out.sort((a, b) => stamp(b) - stamp(a)).slice(0, opts.limit ?? 100);
+  }
+
+  async listMessages(conversationId: string, opts: { limit?: number } = {}): Promise<StoredMessage[]> {
+    const mine = this.messages.filter((m) => m.conversationId === conversationId);
+    return mine.slice(-(opts.limit ?? 200)).map((m) => structuredClone(m));
   }
 }
 

@@ -3,15 +3,16 @@ import { type DomainEvent, formatMoney } from "@ordr/domain";
 import { type MessageSender, text } from "@ordr/whatsapp";
 import { COPY, statusLabel, t } from "../actions/copy";
 import type { ConversationRepository, EventBus, OrderRepository, TenantRepository } from "../ports";
+import { ORDER_STATUS_PURPOSE, TemplateService } from "../templates/template.service";
 import { TOKENS } from "../tokens";
 
 /** Meta allows free-form messages only within 24 hours of the customer's last message. */
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Tells the customer on WhatsApp when the merchant moves their order along.
- * Outside the 24 hour window Meta requires an approved template; until a template registry
- * exists those notifications are logged and skipped rather than failing the transition.
+ * Tells the customer on WhatsApp when the merchant moves their order along: a plain text inside
+ * the 24 hour service window, an approved template outside it. With no approved template the
+ * notification is logged and skipped rather than failing the transition.
  */
 @Injectable()
 export class OrderNotifier implements OnModuleInit {
@@ -23,6 +24,7 @@ export class OrderNotifier implements OnModuleInit {
     @Inject(TOKENS.TenantRepository) private readonly tenants: TenantRepository,
     @Inject(TOKENS.ConversationRepository) private readonly conversations: ConversationRepository,
     @Inject(TOKENS.MessageSender) private readonly sender: MessageSender,
+    @Inject(TemplateService) private readonly templates: TemplateService,
   ) {}
 
   onModuleInit(): void {
@@ -45,15 +47,24 @@ export class OrderNotifier implements OnModuleInit {
     if (!customer) return;
     const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
     const lastInbound = conversation?.lastInboundAt;
-    if (!lastInbound || Date.now() - lastInbound.getTime() > SERVICE_WINDOW_MS) {
-      this.logger.warn(`order #${order.number}: customer ${customer.waId} is outside the 24h window; "${order.status}" not sent (templates not implemented yet)`);
-      return;
-    }
+    const inWindow = !!lastInbound && Date.now() - lastInbound.getTime() <= SERVICE_WINDOW_MS;
 
     const language = customer.language ?? ctx.tenant.defaultLanguage;
-    const message = text(
-      t(COPY.orderStatus, language, { number: order.number, status: statusLabel(order.status, language), total: formatMoney(order.totalMinor, order.currency) }),
-    );
+    const values = { number: order.number, status: statusLabel(order.status, language), total: formatMoney(order.totalMinor, order.currency) };
+    let message;
+    let kind: string;
+    if (inWindow) {
+      message = text(t(COPY.orderStatus, language, values));
+      kind = "text";
+    } else {
+      const tpl = await this.templates.approved(order.tenantId, ORDER_STATUS_PURPOSE, language, [ctx.tenant.defaultLanguage, "en"]);
+      if (!tpl) {
+        this.logger.warn(`order #${order.number}: customer ${customer.waId} is outside the 24h window and no approved "${ORDER_STATUS_PURPOSE}" template exists; "${order.status}" not sent`);
+        return;
+      }
+      message = this.templates.render(tpl, { orderNumber: values.number, status: values.status, total: values.total });
+      kind = `template.${tpl.name}`;
+    }
     try {
       const { providerMessageId } = await this.sender.send(
         { phoneNumberId: ctx.channel.phoneNumberId, accessToken: ctx.channel.accessToken, to: customer.waId },
@@ -65,14 +76,16 @@ export class OrderNotifier implements OnModuleInit {
           conversationId: conversation.id,
           direction: "out",
           providerMessageId,
-          kind: "text",
+          kind,
           payload: message,
           createdAt: new Date(),
         });
       }
-      this.logger.log(`order #${order.number}: told ${customer.waId} it is now "${order.status}"`);
+      this.logger.log(`order #${order.number}: told ${customer.waId} it is now "${order.status}" (${kind})`);
     } catch (err) {
+      // Rethrow so the outbox relay retries with backoff; in memory mode OrderService logs and moves on.
       this.logger.error(`order #${order.number}: notification to ${customer.waId} failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 }

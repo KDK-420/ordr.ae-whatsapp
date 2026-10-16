@@ -259,7 +259,58 @@ model OrderItem {
   @@index([orderId])
 }
 
-/// Append-only history of what happened to an order; also the seed of the event outbox.
+/// WhatsApp message templates per tenant, mirrored from Meta. Required for messages the
+/// business starts outside the customer's 24 hour service window.
+model MessageTemplate {
+  id             String   @id @default(cuid())
+  tenantId       String
+  /// Meta template name: lowercase letters, digits and underscores
+  name           String
+  /// Meta language code, e.g. en, ar
+  language       String
+  /// UTILITY | MARKETING | AUTHENTICATION
+  category       String   @default("UTILITY")
+  /// What the app uses it for, e.g. order_status
+  purpose        String
+  /// Body text as submitted, with {{1}}, {{2}} ... placeholders
+  body           String
+  /// Parameter names in placeholder order, e.g. ["orderNumber", "status", "total"]
+  parameters     Json     @default("[]")
+  /// draft | pending | approved | rejected | paused | disabled
+  status         String   @default("draft")
+  metaId         String?
+  rejectedReason String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, name, language])
+  @@index([tenantId, purpose, status])
+}
+
+/// Transactional outbox: domain events written in the same transaction as the state change
+/// and relayed to handlers by the worker (apps/api/src/worker.ts).
+model OutboxEvent {
+  id            String    @id
+  tenantId      String
+  type          String
+  subjectKind   String
+  subjectId     String
+  payload       Json      @default("{}")
+  occurredAt    DateTime
+  /// pending | processing | sent | failed
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  claimedAt     DateTime?
+  sentAt        DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, occurredAt])
+}
+
+/// Append-only history of what happened to an order.
 model OrderEvent {
   id        String   @id @default(cuid())
   tenantId  String

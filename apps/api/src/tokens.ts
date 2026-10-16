@@ -12,4 +12,7 @@ export const TOKENS = {
   OrderRepository: Symbol("OrderRepository"),
   EventBus: Symbol("EventBus"),
   UserRepository: Symbol("UserRepository"),
+  OutboxStore: Symbol("OutboxStore"),
+  TemplateRepository: Symbol("TemplateRepository"),
+  TemplateApi: Symbol("TemplateApi"),
 } as const;

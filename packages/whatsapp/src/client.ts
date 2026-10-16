@@ -22,6 +22,20 @@ export class CloudApiError extends Error {
   }
 }
 
+export interface TemplateSummary {
+  id?: string;
+  name: string;
+  language: string;
+  status: string;
+  category?: string;
+  rejectedReason?: string;
+}
+
+interface TemplateListResponse {
+  data?: Array<{ id: string; name: string; language: string; status: string; category?: string; rejected_reason?: string }>;
+  paging?: { next?: string };
+}
+
 /** Minimal Meta WhatsApp Cloud API client. One instance serves every tenant; tokens travel with each call. */
 export class CloudApiClient implements MessageSender {
   private readonly baseUrl: string;
@@ -51,14 +65,56 @@ export class CloudApiClient implements MessageSender {
     });
   }
 
-  private async post<T>(phoneNumberId: string, accessToken: string, body: unknown): Promise<T> {
+  /**
+   * Submits a text-only template for review. Meta needs example values for every placeholder.
+   * Returns the template id and its initial review status (usually PENDING).
+   */
+  async createTemplate(
+    wabaId: string,
+    accessToken: string,
+    definition: { name: string; language: string; category: string; body: string; examples: string[] },
+  ): Promise<TemplateSummary> {
+    const components: Array<Record<string, unknown>> = [
+      { type: "BODY", text: definition.body, ...(definition.examples.length ? { example: { body_text: [definition.examples] } } : {}) },
+    ];
+    const res = await this.request<{ id: string; status: string; category?: string }>("POST", `${wabaId}/message_templates`, accessToken, {
+      name: definition.name,
+      language: definition.language,
+      category: definition.category,
+      components,
+    });
+    return { id: res.id, name: definition.name, language: definition.language, status: res.status, category: res.category ?? definition.category };
+  }
+
+  /** Every template on the WhatsApp Business Account with its review status. */
+  async listTemplates(wabaId: string, accessToken: string): Promise<TemplateSummary[]> {
+    const fields = "id,name,language,status,category,rejected_reason";
+    const out: TemplateSummary[] = [];
+    let path: string | undefined = `${wabaId}/message_templates?fields=${fields}&limit=100`;
+    while (path) {
+      const res: TemplateListResponse = await this.request<TemplateListResponse>("GET", path, accessToken);
+      for (const t of res.data ?? []) {
+        out.push({ id: t.id, name: t.name, language: t.language, status: t.status, category: t.category, rejectedReason: t.rejected_reason });
+      }
+      const next = res.paging?.next;
+      path = next ? next.replace(`${this.baseUrl}/`, "") : undefined;
+      if (path && path.startsWith("http")) break; // a different host: stop rather than loop forever
+    }
+    return out;
+  }
+
+  private post<T>(phoneNumberId: string, accessToken: string, body: unknown): Promise<T> {
+    return this.request<T>("POST", `${phoneNumberId}/messages`, accessToken, body);
+  }
+
+  private async request<T>(method: "GET" | "POST", path: string, accessToken: string, body?: unknown): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const res = await this.fetchImpl(`${this.baseUrl}/${phoneNumberId}/messages`, {
-        method: "POST",
+      const res = await this.fetchImpl(`${this.baseUrl}/${path}`, {
+        method,
         headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });
       const json = (await res.json().catch(() => ({}))) as {

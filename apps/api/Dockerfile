@@ -34,3 +34,4 @@ COPY --from=build --chown=node:node /app /app
 USER node
 EXPOSE 3000
 ENTRYPOINT ["/app/apps/api/docker-entrypoint.sh"]
+CMD ["node", "dist/main.js"]

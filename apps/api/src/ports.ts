@@ -61,11 +61,28 @@ export interface MessageRecord {
   createdAt: Date;
 }
 
+export interface StoredMessage extends MessageRecord {
+  id: string;
+  /** Delivery status reported by Meta for outbound messages: sent, delivered, read, failed. */
+  status?: string;
+}
+
+export interface ConversationSummary extends ConversationRecord {
+  lastInboundAt?: Date;
+  updatedAt: Date;
+  customer: Customer | null;
+  lastMessage?: { direction: "in" | "out"; kind: string; preview: string; createdAt: Date };
+}
+
 export interface ConversationRepository {
   upsertCustomer(tenantId: string, waId: string, name?: string): Promise<Customer>;
   findCustomerById(customerId: string): Promise<Customer | null>;
   findCustomersByIds(customerIds: string[]): Promise<Customer[]>;
   findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null>;
+  /** Most recently active first. */
+  listConversations(tenantId: string, opts?: { status?: ConversationStatus; limit?: number }): Promise<ConversationSummary[]>;
+  /** The last `limit` messages of a conversation, oldest first. */
+  listMessages(conversationId: string, opts?: { limit?: number }): Promise<StoredMessage[]>;
   setCustomerLanguage(customerId: string, language: string): Promise<void>;
   getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord>;
   setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void>;
@@ -117,12 +134,18 @@ export interface CreateOrderInput {
   notes?: string;
 }
 
+/** Builds the domain event to store in the outbox together with the change, once the saved order is known. */
+export type OutboxFactory = (order: Order) => DomainEvent;
+
 export interface OrderRepository {
-  /** Assigns the next per-tenant order number and records an "order.placed" history entry. */
-  create(input: CreateOrderInput): Promise<Order>;
+  /**
+   * Assigns the next per-tenant order number and records an "order.placed" history entry.
+   * When `outbox` is given, the event it builds is written in the same transaction.
+   */
+  create(input: CreateOrderInput, outbox?: OutboxFactory): Promise<Order>;
   findById(tenantId: string, orderId: string): Promise<Order | null>;
   latestForCustomer(tenantId: string, customerId: string): Promise<Order | null>;
-  updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }): Promise<Order>;
+  updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order>;
   listByStatus(tenantId: string, statuses: string[], limit?: number): Promise<Order[]>;
   /** Newest first, optionally restricted to statuses and to orders updated after `since`. */
   listRecent(tenantId: string, opts?: { statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
@@ -130,8 +153,88 @@ export interface OrderRepository {
 
 export type EventHandler = (event: DomainEvent) => Promise<void> | void;
 
-/** In-process for now. The outbox relay and a broker replace the implementation, not the port. */
+/**
+ * publish() hands an event to its handlers. In memory mode that happens right away in process.
+ * With Postgres the API process only records the event in the outbox (OutboxEventBus) and the
+ * worker process dispatches it from there (OutboxRelay over an InMemoryEventBus).
+ */
 export interface EventBus {
   publish(event: DomainEvent): Promise<void>;
   subscribe(type: string | "*", handler: EventHandler): () => void;
+}
+
+export type TemplateStatus = "draft" | "pending" | "approved" | "rejected" | "paused" | "disabled";
+
+export interface MessageTemplateRecord {
+  id: string;
+  tenantId: string;
+  name: string;
+  language: string;
+  category: string;
+  purpose: string;
+  body: string;
+  parameters: string[];
+  status: TemplateStatus;
+  metaId?: string;
+  rejectedReason?: string;
+  updatedAt: string;
+}
+
+export interface UpsertTemplateInput {
+  tenantId: string;
+  name: string;
+  language: string;
+  category: string;
+  purpose: string;
+  body: string;
+  parameters: string[];
+}
+
+export interface TemplateRepository {
+  list(tenantId: string): Promise<MessageTemplateRecord[]>;
+  findApproved(tenantId: string, purpose: string, language: string): Promise<MessageTemplateRecord | null>;
+  /** Creates or refreshes the definition (keyed by tenant, name and language), leaving status alone when it exists. */
+  upsert(input: UpsertTemplateInput): Promise<MessageTemplateRecord>;
+  setStatus(id: string, status: TemplateStatus, meta?: { metaId?: string; rejectedReason?: string }): Promise<void>;
+}
+
+export interface TemplateDefinition {
+  name: string;
+  language: string;
+  category: string;
+  body: string;
+  /** Example values for the placeholders, which Meta requires when the body has variables. */
+  examples: string[];
+}
+
+export interface RemoteTemplate {
+  id?: string;
+  name: string;
+  language: string;
+  status: string;
+  category?: string;
+  rejectedReason?: string;
+}
+
+/** The part of Meta's management API that deals with message templates. */
+export interface TemplateApi {
+  createTemplate(wabaId: string, accessToken: string, definition: TemplateDefinition): Promise<RemoteTemplate>;
+  listTemplates(wabaId: string, accessToken: string): Promise<RemoteTemplate[]>;
+}
+
+export interface OutboxRecord extends DomainEvent {
+  /** Number of delivery attempts including the one in progress. */
+  attempts: number;
+}
+
+/** Durable queue of domain events awaiting dispatch. */
+export interface OutboxStore {
+  /** Atomically claims up to `limit` due events, marking them "processing". */
+  claim(limit: number, now?: Date): Promise<OutboxRecord[]>;
+  markSent(id: string, at?: Date): Promise<void>;
+  /** Schedules a retry at `retryAt`, or parks the event as "failed" when retryAt is null. */
+  markFailed(id: string, error: string, retryAt: Date | null): Promise<void>;
+  /** Returns events stuck in "processing" since before `olderThan` to "pending"; resolves to the count. */
+  requeueStale(olderThan: Date): Promise<number>;
+  counts(): Promise<Record<string, number>>;
 }

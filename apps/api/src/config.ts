@@ -25,6 +25,10 @@ const EnvSchema = z.object({
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
   SEED_ADMIN_NAME: z.string().default("Owner"),
+  /** Worker: how often to look for outbox events, how many to take, and when to give up on one. */
+  OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1000),
+  OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(25),
+  OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().positive().default(12),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema> & { storage: "memory" | "prisma" };
