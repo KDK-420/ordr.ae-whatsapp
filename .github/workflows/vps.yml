@@ -8,6 +8,11 @@
 name: VPS
 
 on:
+  # Temporary: a push that changes this file on the setup branch runs setup with the defaults,
+  # because workflow_dispatch is only offered for workflows that exist on the default branch.
+  push:
+    branches: [claude/status-5leuh8]
+    paths: [.github/workflows/vps.yml]
   workflow_dispatch:
     inputs:
       host:
@@ -25,7 +30,7 @@ on:
         default: setup
 
 concurrency:
-  group: vps-${{ inputs.host }}
+  group: vps-${{ inputs.host || '200.141.6.31' }}
   cancel-in-progress: false
 
 jobs:
@@ -33,9 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      HOST: ${{ inputs.host }}
-      DOMAIN: ${{ inputs.domain }}
-      MODE: ${{ inputs.mode }}
+      HOST: ${{ inputs.host || '200.141.6.31' }}
+      DOMAIN: ${{ inputs.domain || '200-141-6-31.sslip.io' }}
+      MODE: ${{ inputs.mode || 'setup' }}
       BRANCH: ${{ github.ref_name }}
       SSHPASS: ${{ secrets.VPS_PASSWORD }}
       SSH: sshpass -e ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
@@ -52,12 +57,12 @@ jobs:
           $SSH "root@$HOST" 'echo "connected to $(hostname) as $(whoami) on $(. /etc/os-release && echo "$PRETTY_NAME")"'
 
       - name: Bootstrap server
-        if: inputs.mode == 'setup'
+        if: env.MODE == 'setup'
         run: |
           $SSH "root@$HOST" "BRANCH='$BRANCH' bash -s" < deploy/bootstrap.sh
 
       - name: Write deploy/.env on the server
-        if: inputs.mode == 'setup'
+        if: env.MODE == 'setup'
         env:
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           META_VERIFY_TOKEN: ${{ secrets.META_VERIFY_TOKEN }}
