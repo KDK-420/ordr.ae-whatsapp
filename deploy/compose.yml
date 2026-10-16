@@ -96,7 +96,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # A directory mount, not a file mount: git replaces files by inode and a file mount would go stale.
+      - ./caddy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -134,7 +134,7 @@ Test the key login in a second terminal before closing the first one.
 - `apps/dashboard/Dockerfile` builds the Next.js dashboard as a standalone server on port 3001.
 - `deploy/compose.yml` wires the services. Postgres and Redis are reachable only on the Docker
   network. `DATABASE_URL` and `REDIS_URL` are set there, not in `.env`.
-- `deploy/Caddyfile` serves `DOMAIN` with automatic certificates: API paths to port 3000,
+- `deploy/caddy/Caddyfile` serves `DOMAIN` with automatic certificates: API paths to port 3000,
   everything else to the dashboard on 3001.
 
 ## Growing out of it
