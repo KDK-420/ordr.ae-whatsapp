@@ -18,7 +18,8 @@ async function main() {
   const phoneNumberId = env.SEED_PHONE_NUMBER_ID ?? "000000000000000";
   await prisma.channel.upsert({
     where: { phoneNumberId },
-    update: { accessToken: env.SEED_ACCESS_TOKEN ?? "replace-me" },
+    // The seeded tenant owns the number; reseeding under a new tenant name moves it along.
+    update: { tenantId: tenant.id, accessToken: env.SEED_ACCESS_TOKEN ?? "replace-me" },
     create: {
       tenantId: tenant.id,
       phoneNumberId,

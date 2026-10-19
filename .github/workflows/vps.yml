@@ -10,9 +10,15 @@
 # accounts of the actor and the repository owner (github.com/<user>.keys), vars.SSH_PUBLIC_KEYS
 # (one per line) and the ssh_public_key input.
 #
-# Optional secrets written into deploy/.env on the server when present (setup mode):
-#   META_APP_SECRET, META_VERIFY_TOKEN, SEED_PHONE_NUMBER_ID, SEED_WABA_ID, SEED_DISPLAY_PHONE,
-#   SEED_ACCESS_TOKEN, SEED_TENANT_NAME
+# Optional secrets written into deploy/.env on the server when present (every run; empty ones
+# never blank a value already there):
+#   META_APP_SECRET, META_VERIFY_TOKEN, AUTH_SECRET, ANTHROPIC_API_KEY, SEED_PHONE_NUMBER_ID,
+#   SEED_WABA_ID, SEED_DISPLAY_PHONE, SEED_ACCESS_TOKEN, SEED_TENANT_NAME, SEED_ADMIN_EMAIL,
+#   SEED_ADMIN_PASSWORD
+#
+# The seed input switches the demo tenant between verticals: it writes SEED_BLUEPRINT_ID (and a
+# matching SEED_TENANT_NAME unless the secret sets one) and reseeds, moving the WhatsApp number
+# and the dashboard owner to that tenant.
 name: VPS
 
 on:
@@ -38,6 +44,11 @@ on:
         description: Turn off SSH password login (only allowed when this run connected with a key)
         type: boolean
         default: false
+      seed:
+        description: Reseed the demo tenant as this vertical (no = leave data alone; setup mode always seeds)
+        type: choice
+        options: [no, restaurant, salon]
+        default: no
 
 concurrency:
   group: vps-${{ inputs.host || '200.141.6.31' }}
@@ -52,6 +63,7 @@ jobs:
       DOMAIN: ${{ inputs.domain || 'app.ordr.ae' }}
       MODE: ${{ inputs.mode || 'setup' }}
       DISABLE_PASSWORD_AUTH: ${{ inputs.disable_password_auth || 'false' }}
+      SEED_VERTICAL: ${{ inputs.seed || 'no' }}
       BRANCH: ${{ github.ref_name }}
       SSHPASS: ${{ secrets.VPS_PASSWORD }}
       SSH_OPTS: -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20
@@ -186,6 +198,13 @@ jobs:
           add SEED_ADMIN_PASSWORD "$SEED_ADMIN_PASSWORD"
           add AUTH_SECRET "$AUTH_SECRET"
           add ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          if [ "$SEED_VERTICAL" != "no" ]; then
+            add SEED_BLUEPRINT_ID "$SEED_VERTICAL"
+            case "$SEED_VERTICAL" in
+              salon) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Salon" ;;
+              restaurant) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Restaurant" ;;
+            esac
+          fi
           if [ -z "$META_APP_SECRET" ] && [ "$MODE" = "setup" ]; then
             # Placeholder so the stack can start; webhook signatures will not verify until replaced.
             script+='grep -q "^META_APP_SECRET=\"\?replace-me" .env && setkv META_APP_SECRET "not-configured-$(openssl rand -hex 8)" || true'$'\n'
@@ -197,7 +216,7 @@ jobs:
       - name: Deploy
         run: |
           flags="--no-pull"
-          [ "$MODE" = "setup" ] && flags="--no-pull --seed"
+          if [ "$MODE" = "setup" ] || [ "$SEED_VERTICAL" != "no" ]; then flags="--no-pull --seed"; fi
           $SSH "root@$HOST" "cd /opt/ordr && git fetch --quiet origin '$BRANCH' && git checkout --quiet '$BRANCH' && git reset --quiet --hard 'origin/$BRANCH' && chmod +x deploy/*.sh && ./deploy/deploy.sh $flags"
 
       - name: Disable SSH password login
@@ -225,7 +244,10 @@ jobs:
             if [ -n "$out" ] && [ "$dash" = "200" ]; then
               echo "https://$DOMAIN/health -> $out"
               echo "https://$DOMAIN/login -> HTTP $dash"
-              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
+              ai="$($SSH "root@$HOST" 'cd /opt/ordr/deploy && docker compose logs --no-log-prefix api 2>/dev/null | grep -o "AI assistant[^\"]*" | tail -1' 2>/dev/null || true)"
+              tenant="$($SSH "root@$HOST" 'cd /opt/ordr/deploy && docker compose exec -T postgres psql -U ordr ordr -Atc "select name || '"'"' ('"'"' || \"blueprintId\" || '"'"')'"'"' from \"Tenant\" order by \"createdAt\" desc limit 1"' 2>/dev/null || true)"
+              echo "assistant: ${ai:-unknown}; newest tenant: ${tenant:-unknown}"
+              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- Assistant: ${ai:-unknown}"; echo "- Newest tenant: ${tenant:-unknown}"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 6

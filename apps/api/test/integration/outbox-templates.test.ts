@@ -33,7 +33,12 @@ describe("PrismaOutboxStore", () => {
     const store = new PrismaOutboxStore(prisma);
     const t0 = new Date();
     await prisma.outboxEvent.createMany({
-      data: [event(`${suffix}_b`, new Date(t0.getTime() - 1000)), event(`${suffix}_a`, new Date(t0.getTime() - 2000)), { ...event(`${suffix}_c`, t0), nextAttemptAt: new Date(t0.getTime() + 60_000) }],
+      // nextAttemptAt is set explicitly: the column default is the database clock, which may sit a few ms (or a timezone) after t0.
+      data: [
+        { ...event(`${suffix}_b`, new Date(t0.getTime() - 1000)), nextAttemptAt: new Date(t0.getTime() - 1000) },
+        { ...event(`${suffix}_a`, new Date(t0.getTime() - 2000)), nextAttemptAt: new Date(t0.getTime() - 2000) },
+        { ...event(`${suffix}_c`, t0), nextAttemptAt: new Date(t0.getTime() + 60_000) },
+      ],
     });
 
     const first = await store.claim(10, t0);

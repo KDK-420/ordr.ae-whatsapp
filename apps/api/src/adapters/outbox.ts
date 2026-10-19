@@ -74,7 +74,8 @@ export class PrismaOutboxStore implements OutboxStore {
         FOR UPDATE SKIP LOCKED
       )
       RETURNING id, "tenantId", type, "subjectKind", "subjectId", payload, "occurredAt", attempts`;
-    return rows.map(toRecord);
+    // RETURNING does not promise the subquery's order, so sort here: oldest event first.
+    return rows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.id.localeCompare(b.id)).map(toRecord);
   }
 
   async markSent(id: string, at = new Date()): Promise<void> {

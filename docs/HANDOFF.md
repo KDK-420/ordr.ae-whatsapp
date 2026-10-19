@@ -3,7 +3,7 @@
 Read docs/PLAN.md first for the architecture and roadmap, docs/DEPLOY.md for the server. This
 note says where the build is and what to do next.
 
-## What exists (all green: 58 package tests, 65 API tests, 10 Postgres integration tests)
+## What exists (all green: 58 package tests, 65 API tests, 12 Postgres integration tests)
 
 ### Deployed
 
