@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing";
 import { FakeSender, fixtures, type OutboundMessage, parseWebhook } from "@ordr/whatsapp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository } from "../src/adapters/memory";
+import type { Assistant, DraftReplyInput, InterpretInput, PickOptionInput } from "../src/ai/assistant";
 import { InMemoryEventBus, InMemoryOrderRepository } from "../src/adapters/memory-catalog";
 import { AppModule, seedTenantFromConfig } from "../src/app.module";
 import { loadConfig } from "../src/config";
@@ -25,11 +26,33 @@ function rowsOf(m: OutboundMessage | undefined): Array<{ id: string; title: stri
   return [];
 }
 
+/** Stands in for Claude: answers from a script and records what it was asked. */
+class ScriptedAssistant implements Assistant {
+  readonly enabled = true;
+  readonly interpretCalls: InterpretInput[] = [];
+  readonly pickCalls: PickOptionInput[] = [];
+  flows = new Map<string, string>();
+  replies = new Map<string, string>();
+  picks = new Map<string, string>();
+  async interpret(input: InterpretInput) {
+    this.interpretCalls.push(input);
+    return { flow: this.flows.get(input.text) ?? null, reply: this.replies.get(input.text) ?? null, confidence: "high" as const };
+  }
+  async pickOption(input: PickOptionInput) {
+    this.pickCalls.push(input);
+    return this.picks.get(input.text) ?? null;
+  }
+  async draftReply(_input: DraftReplyInput) {
+    return "draft";
+  }
+}
+
 describe("salon booking over WhatsApp", () => {
   let app: INestApplication;
   let sender: FakeSender;
   let orders: InMemoryOrderRepository;
   let service: ConversationService;
+  let assistant: ScriptedAssistant;
   const base = { phoneNumberId: "200000000000000", from: "971500000001", profileName: "Noor" };
 
   beforeEach(async () => {
@@ -44,6 +67,7 @@ describe("salon booking over WhatsApp", () => {
     });
     sender = new FakeSender();
     orders = new InMemoryOrderRepository();
+    assistant = new ScriptedAssistant();
     const moduleRef = await Test.createTestingModule({
       imports: [
         AppModule.register({
@@ -56,6 +80,7 @@ describe("salon booking over WhatsApp", () => {
             tenants: new InMemoryTenantRepository([seedTenantFromConfig(config)]),
             eventBus: new InMemoryEventBus(),
             dedupe: new InMemoryDedupeStore(),
+            assistant,
           },
         }),
       ],
@@ -138,5 +163,41 @@ describe("salon booking over WhatsApp", () => {
     expect(bodies.at(-2)).toBe("Sorry, that time was just taken. Let's pick another.");
     expect(bodies.at(-1)).toBe("Which day suits you?");
     expect(orders.orders).toHaveLength(1);
+  });
+
+  it("lets the assistant route free text into a flow and onto the shown options", async () => {
+    assistant.flows.set("I'd like to get my hair cut tomorrow", "book_service");
+    assistant.picks.set("the hair cut one", "svc_haircut");
+    assistant.picks.set("whoever is free", "any");
+
+    await send(fixtures.textMessageWebhook("I'd like to get my hair cut tomorrow", base));
+    expect(bodyOf(last())).toBe("Which service would you like?");
+    const asked = assistant.interpretCalls[0]!;
+    expect(asked.knowledge.services.map((s) => s.id)).toContain("svc_haircut");
+    expect(asked.knowledge.staff.map((s) => s.title)).toEqual(["Sara", "Mona"]);
+    expect(asked.knowledge.intents.map((i) => i.flow)).toEqual(expect.arrayContaining(["book_service", "my_bookings", "talk_to_us"]));
+    expect(asked.knowledge.intents.find((i) => i.flow === "my_bookings")?.keywords).toContain("bookings");
+
+    await send(fixtures.textMessageWebhook("the hair cut one", base));
+    expect(bodyOf(last())).toBe("Haircut: who would you like it with?");
+    expect(assistant.pickCalls[0]).toMatchObject({ prompt: "Which service would you like?", options: expect.arrayContaining([expect.objectContaining({ id: "svc_haircut" })]) });
+
+    await send(fixtures.textMessageWebhook("whoever is free", base));
+    expect(bodyOf(last())).toBe("Which day suits you?");
+
+    // Text the assistant cannot place falls back to the question's own retry prompt.
+    await send(fixtures.textMessageWebhook("hmm", base));
+    const bodies = sender.to(base.from).map(bodyOf);
+    expect(bodies.at(-1)).toBe("Which day suits you?");
+    expect(bodies.at(-2)).toMatch(/choose|pick|option/i);
+  });
+
+  it("answers a question from tenant facts without starting a flow", async () => {
+    assistant.replies.set("do you have parking?", "Yes, there is free parking behind the building.");
+    await send(fixtures.textMessageWebhook("do you have parking?", base));
+    expect(sender.to(base.from).map(bodyOf)).toEqual(["Yes, there is free parking behind the building."]);
+    // The next message gets the menu as usual.
+    await send(fixtures.textMessageWebhook("ok", base));
+    expect(bodyOf(last())).toBe("Welcome to Demo Salon! What would you like to do?");
   });
 });

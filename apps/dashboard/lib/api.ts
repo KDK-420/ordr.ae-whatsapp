@@ -202,6 +202,8 @@ export const listConversations = (status?: ConversationStatus) =>
 export const getThread = (id: string) => call<{ conversation: ConversationView; messages: MessageView[] }>(`/merchant/conversations/${encodeURIComponent(id)}`);
 export const replyToConversation = (id: string, text: string) =>
   call<MessageView>(`/merchant/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+export const draftReply = (id: string, instruction?: string) =>
+  call<{ text: string }>(`/merchant/conversations/${encodeURIComponent(id)}/draft`, { method: "POST", body: JSON.stringify({ instruction }) });
 export const setConversationStatus = (id: string, status: ConversationStatus) =>
   call<ConversationView>(`/merchant/conversations/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify({ status }) });
 

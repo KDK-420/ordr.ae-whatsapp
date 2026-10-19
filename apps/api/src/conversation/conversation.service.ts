@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult } from "@ordr/flow-schema";
-import { type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, text } from "@ordr/whatsapp";
+import { type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult, type SessionState } from "@ordr/flow-schema";
+import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, text } from "@ordr/whatsapp";
+import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
 import type { BlueprintRegistry, ConversationRepository, DedupeStore, SessionStore, TenantContext, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
@@ -24,6 +25,7 @@ export class ConversationService {
     @Inject(TOKENS.MessageSender) private readonly sender: MessageSender,
     @Inject(TOKENS.ActionRegistry) private readonly actions: ActionRegistry,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
+    @Inject(AssistantService) private readonly assistant: AssistantService,
   ) {}
 
   async handleEvent(event: InboundEvent): Promise<void> {
@@ -97,10 +99,22 @@ export class ConversationService {
         const carried = session?.context.cart ? { cart: session.context.cart } : {};
         result = await runner.start(globalFlow, { language, context: { ...baseContext, ...carried } }, actionCtx);
       } else if (session?.awaiting) {
-        result = await runner.resume(session, event.content, actionCtx);
+        // Free text the question does not accept: let the assistant map it onto one of the options shown.
+        const content = await this.resolveAnswer(runner, session, event.content, language);
+        result = await runner.resume(session, content, actionCtx);
       } else {
         const entry = blueprint.fallbackFlow ?? blueprint.entryFlow;
-        result = await runner.start(entry, { language, context: baseContext }, actionCtx);
+        const understood = event.content.kind === "text" ? await this.assistant.interpret(tenant, blueprint, conversation.id, event.content.text, language) : null;
+        if (understood?.flow && understood.flow !== entry) {
+          const preface = understood.reply ? [text(understood.reply)] : [];
+          const started = await runner.start(understood.flow, { language, context: baseContext }, actionCtx);
+          result = { ...started, outbound: [...preface, ...started.outbound] };
+        } else if (understood?.reply && !understood.flow) {
+          // A question answered from tenant facts; no flow to run.
+          result = { outbound: [text(understood.reply)], session: null, handoff: false, completed: true };
+        } else {
+          result = await runner.start(entry, { language, context: baseContext }, actionCtx);
+        }
       }
     } catch (err) {
       this.logger.error(`flow error for tenant ${tenant.id}, customer ${event.from}: ${err instanceof Error ? err.stack : String(err)}`);
@@ -118,6 +132,17 @@ export class ConversationService {
 
     if (result.session) await this.sessions.set(tenant.id, event.from, result.session, this.config.SESSION_TTL_SECONDS);
     else await this.sessions.delete(tenant.id, event.from);
+  }
+
+  /** Turns free text into the button or list reply it means, when the assistant is confident; otherwise the input as sent. */
+  private async resolveAnswer(runner: FlowRunner, session: SessionState, content: InboundContent, language: string): Promise<InboundContent> {
+    if (content.kind !== "text" || runner.accepts(session, content)) return content;
+    const pending = runner.pendingOptions(session);
+    if (!pending) return content;
+    const id = await this.assistant.pickOption({ text: content.text, language, prompt: pending.prompt, options: pending.options });
+    const option = id ? pending.options.find((o) => o.id === id) : undefined;
+    if (!option) return content;
+    return { kind: pending.kind, id: option.id, title: option.title };
   }
 
   private async deliver(ctx: TenantContext, conversationId: string, to: string, messages: RunResult["outbound"]): Promise<void> {

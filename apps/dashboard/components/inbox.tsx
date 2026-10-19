@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type ConversationView, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
+import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
 import { age } from "@/lib/format";
 
 const LIST_POLL_MS = 8000;
@@ -139,6 +139,20 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
     }
   }
 
+  /** Asks the assistant for a reply; whatever is typed already becomes the instruction for it. */
+  async function suggest() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { text } = await draftReply(conversation.id, draft.trim() || undefined);
+      setDraft(text);
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 503 ? "AI drafting is off: set ANTHROPIC_API_KEY on the server." : err instanceof Error ? err.message : "Could not draft");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setStatus(status: ConversationView["status"]) {
     setBusy(true);
     try {
@@ -221,6 +235,15 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
               dir="auto"
               className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand"
             />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={suggest}
+              title="Let the assistant draft a reply from the conversation; type a hint first to steer it"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium hover:border-slate-400 disabled:opacity-50"
+            >
+              Draft with AI
+            </button>
             <button type="submit" disabled={busy || !draft.trim()} className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">
               Send
             </button>

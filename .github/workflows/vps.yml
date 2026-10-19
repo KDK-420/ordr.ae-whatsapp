@@ -148,10 +148,12 @@ jobs:
         run: |
           $SSH "root@$HOST" "BRANCH='$BRANCH' bash -s" < deploy/bootstrap.sh
 
+      # Runs in both modes so a secret added or changed in GitHub reaches the server on the next deploy.
+      # Empty secrets are skipped, so values already on the server are never blanked.
       - name: Write deploy/.env on the server
-        if: env.MODE == 'setup'
         env:
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           META_VERIFY_TOKEN: ${{ secrets.META_VERIFY_TOKEN }}
           SEED_TENANT_NAME: ${{ secrets.SEED_TENANT_NAME }}
           SEED_PHONE_NUMBER_ID: ${{ secrets.SEED_PHONE_NUMBER_ID }}
@@ -183,7 +185,8 @@ jobs:
           add SEED_ADMIN_EMAIL "$SEED_ADMIN_EMAIL"
           add SEED_ADMIN_PASSWORD "$SEED_ADMIN_PASSWORD"
           add AUTH_SECRET "$AUTH_SECRET"
-          if [ -z "$META_APP_SECRET" ]; then
+          add ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          if [ -z "$META_APP_SECRET" ] && [ "$MODE" = "setup" ]; then
             # Placeholder so the stack can start; webhook signatures will not verify until replaced.
             script+='grep -q "^META_APP_SECRET=\"\?replace-me" .env && setkv META_APP_SECRET "not-configured-$(openssl rand -hex 8)" || true'$'\n'
             echo "::warning::META_APP_SECRET secret not set; a placeholder was written. Put the real value in /opt/ordr/deploy/.env or add the secret and rerun."

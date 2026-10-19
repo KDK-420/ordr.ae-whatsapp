@@ -25,6 +25,9 @@ const EnvSchema = z.object({
   SEED_ADMIN_EMAIL: z.string().email().optional(),
   SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
   SEED_ADMIN_NAME: z.string().default("Owner"),
+  /** Claude assistant for free text, option matching and agent drafts. Off when the key is missing. */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
   /** Worker: how often to look for outbox events, how many to take, and when to give up on one. */
   OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1000),
   OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(25),

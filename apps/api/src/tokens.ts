@@ -16,4 +16,5 @@ export const TOKENS = {
   TemplateRepository: Symbol("TemplateRepository"),
   TemplateApi: Symbol("TemplateApi"),
   ResourceRepository: Symbol("ResourceRepository"),
+  Assistant: Symbol("Assistant"),
 } as const;

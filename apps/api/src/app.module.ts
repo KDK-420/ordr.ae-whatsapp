@@ -5,6 +5,9 @@ import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsap
 import { demoCatalog } from "./actions/demo-catalog";
 import { demoSalonCatalog } from "./actions/demo-salon";
 import { createActionRegistry } from "./actions";
+import { AnthropicAssistant } from "./ai/anthropic.assistant";
+import { type Assistant, NoopAssistant } from "./ai/assistant";
+import { AssistantService } from "./ai/assistant.service";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
@@ -83,6 +86,7 @@ export interface AppOptions {
     templates: TemplateRepository;
     templateApi: TemplateApi;
     resources: ResourceRepository;
+    assistant: Assistant;
   }>;
 }
 
@@ -149,6 +153,19 @@ export class AppModule {
       MerchantOrdersService,
       TemplateService,
       InboxService,
+      AssistantService,
+      {
+        provide: TOKENS.Assistant,
+        useFactory: (): Assistant => {
+          if (overrides.assistant) return overrides.assistant;
+          if (!config.ANTHROPIC_API_KEY) {
+            logger.log("ANTHROPIC_API_KEY not set: AI assistant off, flows run deterministically");
+            return new NoopAssistant();
+          }
+          logger.log(`AI assistant on (${config.ANTHROPIC_MODEL})`);
+          return new AnthropicAssistant({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
+        },
+      },
       OrderNotifier,
       {
         provide: TOKENS.TemplateApi,

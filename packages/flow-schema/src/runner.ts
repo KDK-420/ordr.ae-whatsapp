@@ -111,6 +111,28 @@ export class FlowRunner {
     return this.run(session, flow, this.getNode(flow, flow.entry), [], actionCtx);
   }
 
+  /**
+   * The choices the parked question is waiting for (buttons or list rows), for an assistant that maps
+   * free text onto one of them. Null when the session is not waiting or the question takes free text.
+   */
+  pendingOptions(session: SessionState): { prompt: string; kind: "button" | "list"; options: DynamicRow[] } | null {
+    if (!session.awaiting) return null;
+    const node = this.getNode(this.getFlow(session.flowId), session.nodeId);
+    if (node.type !== "question") return null;
+    const prompt = this.t(node.prompt, session);
+    if (node.input.kind === "buttons") return { prompt, kind: "button", options: node.input.options.map((o) => this.toRow(o, session)) };
+    if (node.input.kind === "list") return { prompt, kind: "list", options: this.listRows(node, session) };
+    return null;
+  }
+
+  /** Whether `resume` would accept this input as an answer, without changing the session. */
+  accepts(session: SessionState, input: InboundContent): boolean {
+    if (!session.awaiting) return false;
+    const node = this.getNode(this.getFlow(session.flowId), session.nodeId);
+    if (node.type !== "question") return false;
+    return this.matchAnswer(node, input, session).ok;
+  }
+
   async resume(session: SessionState, input: InboundContent, actionCtx: Omit<ActionContext, "language" | "context">): Promise<RunResult> {
     const flow = this.getFlow(session.flowId);
     const node = this.getNode(flow, session.nodeId);

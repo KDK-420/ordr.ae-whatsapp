@@ -1,9 +1,9 @@
-# Handoff: state of the build as of 2026-10-16 (round 3)
+# Handoff: state of the build as of 2026-10-19 (round 4)
 
 Read docs/PLAN.md first for the architecture and roadmap, docs/DEPLOY.md for the server. This
 note says where the build is and what to do next.
 
-## What exists (all green: 45 package tests, 46 API tests, 10 Postgres integration tests)
+## What exists (all green: 58 package tests, 59 API tests, 10 Postgres integration tests)
 
 ### Deployed
 
@@ -13,7 +13,40 @@ Postgres, Redis, API, worker, dashboard, Caddy. Caddy routes `/health`, `/webhoo
 `/merchant/*` to the API and everything else to the dashboard. SSH is key-only; the workflow
 logs in with the `VPS_SSH_KEY` secret.
 
-### Round 3 (this round)
+### Round 4 (this round): salon bookings and the Claude assistant
+
+- **Scheduling domain** (`packages/domain/src/scheduling.ts`): weekly opening hours per
+  resource, timezone helpers (tenants run in `Asia/Dubai` by default), `generateSlots` with
+  step, service duration, buffer between appointments and lead time, overlap checks.
+- **Resources** (staff, rooms, assets) with hours, skills (offering ids they can serve) and sort
+  order; `Resource` table, `ResourceRepository` (memory and Prisma). Bookings are Orders with
+  `kind: "booking"`, `scheduledAt`, `resourceId`, `durationMinutes`; `createBooking` locks the
+  resource row and rechecks overlaps inside the transaction, so two customers cannot take the
+  same slot (migration `20261016100000_resources_bookings`).
+- **SchedulingService** (`apps/api/src/scheduling`): services, staff per service, days with
+  availability, slots by part of day, book with "anyone available" (first free person by sort
+  order), upcoming, cancel. Settings come from the blueprint and can be overridden per tenant
+  in `tenant.settings` (`slotStepMinutes`, `bufferMinutes`, `leadMinutes`, `maxAdvanceDays`).
+- **Salon blueprint** (`packages/blueprints/src/salon`): main menu, `book_service` (service →
+  staff → day → part of day → time → confirm, with a clean recovery when the slot is taken
+  meanwhile), `my_bookings` (list and cancel), plus the shared talk-to-us and language flows,
+  in English and Arabic. Booking status notifications use booking wording with the appointment
+  time. `SEED_BLUEPRINT_ID=salon` seeds the demo salon (two stylists, five services) in memory
+  mode and through `prisma/seed.ts`.
+- **Claude assistant** (`apps/api/src/ai`, ADR-002 in the plan): on by itself when
+  `ANTHROPIC_API_KEY` is set, off otherwise with identical flow behaviour. Three jobs, all
+  through `@anthropic-ai/sdk` with structured JSON output, low effort and server-side refusal
+  fallbacks: (1) free text that no command or flow understood is interpreted against the
+  tenant's services, staff, flow descriptions and `tenant.settings.facts`, and either starts the
+  right flow or answers a factual question; (2) a typed answer the current question does not
+  accept is mapped onto one of the buttons or rows actually shown (`FlowRunner.pendingOptions`),
+  so "the hair cut one" selects Haircut; (3) `POST /merchant/conversations/:id/draft` and the
+  "Draft with AI" button in the inbox propose a reply for an agent to edit. The model never
+  writes to the database and never states prices or times the flow will not confirm; every
+  model failure degrades to the menu. `ScriptedAssistant` in `test/salon.e2e.test.ts` shows how
+  to test flows that lean on it; `src/ai/anthropic.assistant.test.ts` pins the request shape.
+
+### Round 3
 
 - **Transactional outbox and worker.** Order changes write their domain event to `OutboxEvent`
   in the same Postgres transaction (`OrderRepository.create/updateStatus` take an outbox
@@ -120,6 +153,17 @@ For a local dashboard login without Postgres, start the API with `STORAGE=memory
 6. Analytics on the dashboard (orders per day, revenue, top items) and order history search.
 7. WhatsApp Flows node type (`form`) in the schema and runner, needed for the salon date picker
    in Phase 2.
+8. Salon, remaining: dashboard calendar (day view by staff with confirm / check in / complete),
+   Settings › Team and hours (resources CRUD and `GET /merchant/bookings?from&to`), the
+   `durationMinutes` field in the catalog editor, orders-board columns derived from the
+   blueprint state machine, and appointment reminders (24h and 2h) sent by the worker through
+   the outbox with a `booking_reminder` template.
+9. Demo simulator page in the dashboard: a WhatsApp-style chat where a demo customer (synthetic
+   wa id) talks to the bot through the real ConversationService, outbound captured instead of
+   sent; for showing the salon flow without a phone.
+10. Assistant: let merchants edit `facts` in Settings, pass slot preferences the model extracts
+    ("tomorrow afternoon") into the booking flow as prefilled answers, and keep an eye on token
+    cost per conversation in the logs.
 
 ## Open decisions still waiting on the owner
 

@@ -18,10 +18,16 @@ residency (PLAN.md, ADR-007) pick a provider with a UAE location.
 
 The `VPS` workflow (`.github/workflows/vps.yml`) does steps 1 to 3 below over SSH from a
 GitHub-hosted runner. Optional secrets `META_APP_SECRET`, `META_VERIFY_TOKEN`, `AUTH_SECRET`,
-`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` and the other `SEED_*` values are written into
-`deploy/.env` on the server when present; otherwise fill them in by hand on the server. The
-bootstrap generates `AUTH_SECRET` and a `SEED_ADMIN_PASSWORD` when they are empty; read the
-generated password with `grep SEED_ADMIN /opt/ordr/deploy/.env` on the server.
+`ANTHROPIC_API_KEY`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` and the other `SEED_*` values
+are written into `deploy/.env` on the server on every run (setup and deploy) when present, so
+adding or rotating a secret in GitHub only needs a `deploy` run; empty secrets never blank a
+value already on the server. The bootstrap generates `AUTH_SECRET` and a `SEED_ADMIN_PASSWORD`
+when they are empty; read the generated password with `grep SEED_ADMIN /opt/ordr/deploy/.env`
+on the server.
+
+`ANTHROPIC_API_KEY` turns on the Claude assistant (free-text understanding, matching typed
+answers to the options shown, "Draft with AI" in the inbox). Without it every flow still works,
+just menu-driven. The model is `ANTHROPIC_MODEL` in `deploy/.env` (default `claude-opus-5-5`).
 
 Actions tab > VPS > Run workflow. Inputs: `host`, `domain` (default `app.ordr.ae`; the run fails
 early if its A record does not point at the server), `mode` (`setup` the first time, `deploy` for
@@ -113,6 +119,8 @@ All commands from `/opt/ordr/deploy`.
 | Restore | `docker compose exec -T postgres pg_restore -U ordr -d ordr --clean --if-exists < ../backups/ordr-<stamp>.dump` |
 | Open a psql shell | `docker compose exec postgres psql -U ordr ordr` |
 | Reseed demo data | `./deploy.sh --no-pull --seed` |
+| Switch the demo tenant to the salon | set `SEED_BLUEPRINT_ID=salon` and `SEED_TENANT_NAME="Demo Salon"` in `.env`, then `./deploy.sh --no-pull --seed` |
+| Check the assistant is on | `docker compose logs api | grep "AI assistant"` |
 
 Backups land in `/opt/ordr/backups` and are kept for 14 days. Copy them off the server (rsync,
 object storage) because a VPS has no managed backups.

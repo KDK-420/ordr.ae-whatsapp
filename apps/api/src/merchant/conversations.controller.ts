@@ -1,5 +1,7 @@
-import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query, ServiceUnavailableException, UseGuards } from "@nestjs/common";
 import { z } from "zod";
+import { AssistantUnavailableError } from "../ai/assistant";
+import { AssistantService } from "../ai/assistant.service";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
 import { InboxError, InboxService } from "../inbox/inbox.service";
@@ -7,6 +9,7 @@ import type { ConversationStatus } from "../ports";
 
 const ReplySchema = z.object({ text: z.string().trim().min(1).max(4096) });
 const StatusSchema = z.object({ status: z.enum(["bot", "human", "closed"]) });
+const DraftSchema = z.object({ instruction: z.string().trim().max(1000).optional() });
 const STATUSES: ConversationStatus[] = ["bot", "human", "closed"];
 
 function rethrow(err: unknown): never {
@@ -21,7 +24,10 @@ function rethrow(err: unknown): never {
 @Controller("merchant/conversations")
 @UseGuards(AuthGuard)
 export class MerchantConversationsController {
-  constructor(@Inject(InboxService) private readonly inbox: InboxService) {}
+  constructor(
+    @Inject(InboxService) private readonly inbox: InboxService,
+    @Inject(AssistantService) private readonly assistant: AssistantService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query("status") status?: string) {
@@ -40,6 +46,22 @@ export class MerchantConversationsController {
     const parsed = ReplySchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("text is required");
     return this.inbox.reply(user.tenantId, id, parsed.data.text, `user:${user.email}`).catch(rethrow);
+  }
+
+  /** A reply drafted by the assistant for the agent to edit and send. */
+  @Post(":id/draft")
+  @HttpCode(200)
+  async draft(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    const parsed = DraftSchema.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException("instruction must be a short text");
+    if (!this.assistant.enabled) throw new ServiceUnavailableException("AI assistant is not configured");
+    await this.inbox.thread(user.tenantId, id).catch(rethrow);
+    try {
+      return { text: await this.assistant.draftReply(user.tenantId, id, parsed.data.instruction) };
+    } catch (err) {
+      if (err instanceof AssistantUnavailableError) throw new ServiceUnavailableException(err.message);
+      throw new BadGatewayException(err instanceof Error ? err.message : "draft failed");
+    }
   }
 
   @Post(":id/status")
