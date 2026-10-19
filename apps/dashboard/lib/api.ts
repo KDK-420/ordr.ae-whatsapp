@@ -207,6 +207,31 @@ export const draftReply = (id: string, instruction?: string) =>
 export const setConversationStatus = (id: string, status: ConversationStatus) =>
   call<ConversationView>(`/merchant/conversations/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify({ status }) });
 
+export interface DemoCustomer {
+  waId: string;
+  name: string;
+  conversationId: string;
+  language?: string;
+  updatedAt: string;
+}
+export interface DemoThread {
+  customer: DemoCustomer;
+  conversation: ConversationView;
+  messages: MessageView[];
+}
+export type DemoInput =
+  | { kind: "text"; text: string }
+  | { kind: "button"; id: string; title: string }
+  | { kind: "list"; id: string; title: string; description?: string }
+  | { kind: "location"; latitude: number; longitude: number; name?: string; address?: string };
+
+export const listDemoCustomers = () => call<{ customers: DemoCustomer[] }>("/merchant/simulator/customers");
+export const createDemoCustomer = (name: string) => call<DemoCustomer>("/merchant/simulator/customers", { method: "POST", body: JSON.stringify({ name }) });
+export const getDemoThread = (waId: string) => call<DemoThread>(`/merchant/simulator/customers/${encodeURIComponent(waId)}`);
+export const sendDemoMessage = (waId: string, input: DemoInput) =>
+  call<DemoThread>(`/merchant/simulator/customers/${encodeURIComponent(waId)}/messages`, { method: "POST", body: JSON.stringify(input) });
+export const resetDemoCustomer = (waId: string) => call<DemoThread>(`/merchant/simulator/customers/${encodeURIComponent(waId)}/reset`, { method: "POST" });
+
 export const login = (email: string, password: string) =>
   call<{ token: string; expiresAt: string }>("/merchant/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const logout = () => call<void>("/merchant/auth/logout", { method: "POST" });

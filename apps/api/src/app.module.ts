@@ -41,6 +41,8 @@ import { MerchantTemplatesController } from "./merchant/templates.controller";
 import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
 import { SchedulingService } from "./scheduling/scheduling.service";
+import { MerchantSimulatorController } from "./simulator/simulator.controller";
+import { DemoAwareSender, SimulatorService } from "./simulator/simulator.service";
 import { TemplateService } from "./templates/template.service";
 import type {
   BlueprintRegistry,
@@ -127,6 +129,9 @@ export function seedTenantFromConfig(config: AppConfig): TenantContext {
 export class AppModule {
   static register({ config, role = "api", overrides = {} }: AppOptions): DynamicModule {
     const logger = new Logger("AppModule");
+    // The transport talks to Meta (or logs); the sender in front of it keeps demo customers from the simulator page off the wire.
+    const transport: MessageSender = overrides.sender ?? (config.WHATSAPP_SENDER === "log" ? new LoggingSender() : new CloudApiClient({ graphVersion: config.META_GRAPH_VERSION }));
+    const sender: MessageSender = overrides.sender ?? new DemoAwareSender(transport);
     const providers: Provider[] = [
       { provide: TOKENS.Config, useValue: config },
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
@@ -140,12 +145,7 @@ export class AppModule {
             useFactory: (catalog: CatalogRepository, orders: OrderService, scheduling: SchedulingService) => createActionRegistry({ catalog, orders, scheduling }),
             inject: [TOKENS.CatalogRepository, OrderService, SchedulingService],
           },
-      {
-        provide: TOKENS.MessageSender,
-        useValue:
-          overrides.sender ??
-          (config.WHATSAPP_SENDER === "log" ? new LoggingSender() : new CloudApiClient({ graphVersion: config.META_GRAPH_VERSION })),
-      },
+      { provide: TOKENS.MessageSender, useValue: sender },
       InboundQueue,
       ConversationService,
       AuthService,
@@ -153,6 +153,7 @@ export class AppModule {
       MerchantOrdersService,
       TemplateService,
       InboxService,
+      SimulatorService,
       AssistantService,
       {
         provide: TOKENS.Assistant,
@@ -169,9 +170,8 @@ export class AppModule {
       OrderNotifier,
       {
         provide: TOKENS.TemplateApi,
-        useFactory: (sender: MessageSender) =>
-          overrides.templateApi ?? (config.WHATSAPP_SENDER === "meta" && sender instanceof CloudApiClient ? sender : new FakeTemplateApi()),
-        inject: [TOKENS.MessageSender],
+        useFactory: () =>
+          overrides.templateApi ?? (config.WHATSAPP_SENDER === "meta" && transport instanceof CloudApiClient ? transport : new FakeTemplateApi()),
       },
     ];
 
@@ -261,6 +261,7 @@ export class AppModule {
               MerchantOrdersController,
               MerchantTemplatesController,
               MerchantConversationsController,
+              MerchantSimulatorController,
               MerchantCatalogController,
               MerchantUsersController,
             ]

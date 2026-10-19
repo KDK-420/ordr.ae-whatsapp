@@ -10,6 +10,7 @@ const NAV = [
   { href: "/inbox", label: "Inbox" },
   { href: "/catalog", label: "Catalog" },
   { href: "/settings", label: "Settings" },
+  { href: "/demo", label: "Demo" },
 ];
 
 /** App chrome: navigation, tenant name, signed-in user, sign out. */
