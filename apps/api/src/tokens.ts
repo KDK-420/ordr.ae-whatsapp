@@ -15,4 +15,5 @@ export const TOKENS = {
   OutboxStore: Symbol("OutboxStore"),
   TemplateRepository: Symbol("TemplateRepository"),
   TemplateApi: Symbol("TemplateApi"),
+  ResourceRepository: Symbol("ResourceRepository"),
 } as const;

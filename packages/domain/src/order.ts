@@ -42,7 +42,9 @@ export interface Order {
   conversationId?: string;
   items: OrderItem[];
   resourceId?: ResourceId;
+  /** Bookings: ISO start and length of the appointment. */
   scheduledAt?: string;
+  durationMinutes?: number;
   currency: string;
   subtotalMinor: number;
   deliveryFeeMinor: number;

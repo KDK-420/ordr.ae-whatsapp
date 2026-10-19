@@ -3,6 +3,7 @@ import { type DomainEvent, formatMoney } from "@ordr/domain";
 import { type MessageSender, text } from "@ordr/whatsapp";
 import { COPY, statusLabel, t } from "../actions/copy";
 import type { ConversationRepository, EventBus, OrderRepository, TenantRepository } from "../ports";
+import { formatWhen } from "../scheduling/format";
 import { ORDER_STATUS_PURPOSE, TemplateService } from "../templates/template.service";
 import { TOKENS } from "../tokens";
 
@@ -51,10 +52,13 @@ export class OrderNotifier implements OnModuleInit {
 
     const language = customer.language ?? ctx.tenant.defaultLanguage;
     const values = { number: order.number, status: statusLabel(order.status, language), total: formatMoney(order.totalMinor, order.currency) };
+    const booking = order.kind === "booking" && order.scheduledAt;
     let message;
     let kind: string;
     if (inWindow) {
-      message = text(t(COPY.orderStatus, language, values));
+      message = booking
+        ? text(t(COPY.bookingStatus, language, { ...values, when: formatWhen(new Date(order.scheduledAt!), ctx.tenant.timezone || "Asia/Dubai", language) }))
+        : text(t(COPY.orderStatus, language, values));
       kind = "text";
     } else {
       const tpl = await this.templates.approved(order.tenantId, ORDER_STATUS_PURPOSE, language, [ctx.tenant.defaultLanguage, "en"]);

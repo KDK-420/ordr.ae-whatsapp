@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { type Cart, type DeliveryLocation, type DomainEvent, nextState, type Order, type Quote, quote as buildQuote, type Tenant } from "@ordr/domain";
+import { addItem, type Cart, type DeliveryLocation, type DomainEvent, emptyCart, nextState, type Offering, type Order, type Quote, quote as buildQuote, type Tenant } from "@ordr/domain";
 import type { BlueprintRegistry, EventBus, OrderRepository, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
@@ -23,6 +23,23 @@ export interface PlaceOrderInput {
   deliveryLocation?: DeliveryLocation;
   notes?: string;
   paymentMethod?: string;
+  source?: Order["source"];
+}
+
+export interface PlaceBookingInput {
+  tenantId: string;
+  customerId: string;
+  conversationId?: string;
+  offering: Offering;
+  /** Service name in the customer's language, stored on the line item. */
+  title: string;
+  resourceId: string;
+  startAt: Date;
+  durationMinutes: number;
+  fulfillmentType: string;
+  /** Statuses that make an overlapping booking a conflict. */
+  blockingStatuses: string[];
+  notes?: string;
   source?: Order["source"];
 }
 
@@ -98,6 +115,45 @@ export class OrderService {
     );
     await this.publish(placed(order));
     this.logger.log(`order #${order.number} placed for tenant ${order.tenantId} (${order.fulfillmentType}, ${order.totalMinor} ${order.currency})`);
+    return order;
+  }
+
+  /** A service booking: one line, a start time, a resource. Throws SlotTakenError on a conflict. */
+  async placeBooking(input: PlaceBookingInput): Promise<Order> {
+    const s = await this.settingsFor(input.tenantId);
+    const blueprint = this.blueprints.get(s.tenant.blueprintId);
+    if (!blueprint) throw new OrderError(`blueprint ${s.tenant.blueprintId} not found`);
+    const cart = addItem(emptyCart(input.offering.currency), { offeringId: input.offering.id, title: input.title, quantity: 1, unitPriceMinor: input.offering.priceMinor, modifiers: [] });
+    const q = buildQuote(cart, { fulfillmentType: input.fulfillmentType, deliveryFeeMinor: 0, vatRate: s.vatRate, vatInclusive: s.vatInclusive });
+    const eventId = randomUUID();
+    const placed = (o: Order) => this.event(eventId, "order.placed", o, { fulfillmentType: o.fulfillmentType, totalMinor: o.totalMinor, scheduledAt: o.scheduledAt, resourceId: o.resourceId });
+    const order = await this.orders.createBooking(
+      {
+        tenantId: input.tenantId,
+        customerId: input.customerId,
+        conversationId: input.conversationId,
+        kind: "booking",
+        initialStatus: blueprint.orderStates.initial,
+        fulfillmentType: input.fulfillmentType,
+        source: input.source ?? "whatsapp",
+        items: cart.items.map((i) => ({ ...i })),
+        currency: q.currency,
+        subtotalMinor: q.subtotalMinor,
+        deliveryFeeMinor: 0,
+        vatMinor: q.vatMinor,
+        totalMinor: q.totalMinor,
+        paymentStatus: "unpaid",
+        paymentMethod: s.paymentMethods[0] ?? "cash",
+        notes: input.notes,
+        scheduledAt: input.startAt,
+        resourceId: input.resourceId,
+        durationMinutes: input.durationMinutes,
+      },
+      input.blockingStatuses,
+      placed,
+    );
+    await this.publish(placed(order));
+    this.logger.log(`booking #${order.number} placed for tenant ${order.tenantId} at ${input.startAt.toISOString()} on ${input.resourceId}`);
     return order;
   }
 

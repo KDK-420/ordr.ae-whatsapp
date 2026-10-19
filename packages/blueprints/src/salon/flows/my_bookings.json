@@ -1,0 +1,34 @@
+{
+  "id": "my_bookings",
+  "description": "Show upcoming bookings and let the customer cancel one.",
+  "entry": "load",
+  "nodes": [
+    { "id": "load", "type": "action", "action": "booking.upcoming", "saveAs": "upcoming", "next": "has_any", "onError": "none" },
+    { "id": "has_any", "type": "branch", "cases": [{ "var": "upcoming.count", "eq": 0, "next": "none" }], "default": "pick" },
+    {
+      "id": "pick",
+      "type": "question",
+      "var": "booking",
+      "prompt": { "en": "Your upcoming bookings:", "ar": "حجوزاتك القادمة:" },
+      "input": { "kind": "list", "button": { "en": "Bookings", "ar": "الحجوزات" }, "rowsFrom": "upcoming.rows", "onEmpty": "none" },
+      "next": "ask"
+    },
+    {
+      "id": "ask",
+      "type": "question",
+      "var": "booking_action",
+      "prompt": { "en": "{{booking.title}}. What would you like to do?", "ar": "{{booking.title}}. ماذا تود أن تفعل؟" },
+      "input": {
+        "kind": "buttons",
+        "options": [
+          { "id": "keep", "title": { "en": "Keep it", "ar": "أبقِه" }, "next": "kept" },
+          { "id": "cancel", "title": { "en": "Cancel booking", "ar": "إلغاء الحجز" }, "next": "do_cancel" }
+        ]
+      }
+    },
+    { "id": "do_cancel", "type": "action", "action": "booking.cancel", "params": { "orderId": "{{booking.id}}" }, "saveAs": "result", "next": "done", "onError": "none" },
+    { "id": "done", "type": "end", "text": "{{result.text}}" },
+    { "id": "kept", "type": "end", "text": { "en": "See you then! Send \"menu\" if you need anything else.", "ar": "نراك حينها! أرسل \"القائمة\" إذا احتجت أي شيء آخر." } },
+    { "id": "none", "type": "end", "text": { "en": "You have no upcoming bookings. Send \"menu\" to book one.", "ar": "ليس لديك حجوزات قادمة. أرسل \"القائمة\" للحجز." } }
+  ]
+}

@@ -206,6 +206,29 @@ model ModifierOption {
 }
 
 // ---------------------------------------------------------------------------
+// Scheduling
+// ---------------------------------------------------------------------------
+
+/// Bookable staff, rooms or assets for service blueprints (salon, clinic).
+model Resource {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// staff | room | asset
+  type      String   @default("staff")
+  name      Json
+  /// Weekly working hours: { "mon": [{ "start": "10:00", "end": "20:00" }], ... }; missing day = closed
+  hours     Json     @default("{}")
+  /// Offering ids this resource can serve; empty = all
+  skills    Json     @default("[]")
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, sortOrder])
+}
+
+// ---------------------------------------------------------------------------
 // Orders
 // ---------------------------------------------------------------------------
 
@@ -230,7 +253,10 @@ model Order {
   paymentMethod    String?
   deliveryLocation Json?
   notes            String?
+  /// Bookings: start of the appointment, the resource it occupies and how long it takes
   scheduledAt      DateTime?
+  resourceId       String?
+  durationMinutes  Int?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -240,6 +266,8 @@ model Order {
   @@unique([tenantId, number])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, scheduledAt])
+  @@index([resourceId, scheduledAt])
 }
 
 model OrderItem {

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { demoCatalog } from "../src/actions/demo-catalog";
+import { demoSalonCatalog } from "../src/actions/demo-salon";
 import { hashPassword } from "../src/auth/password";
 
 const prisma = new PrismaClient();
@@ -40,7 +41,8 @@ async function main() {
   } else {
     console.log("SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set: no dashboard user created");
   }
-  const demo = demoCatalog(tenant.id);
+  const blueprintId = env.SEED_BLUEPRINT_ID ?? "restaurant";
+  const demo = blueprintId === "salon" ? demoSalonCatalog(tenant.id) : { ...demoCatalog(tenant.id), resources: [] };
   for (const c of demo.categories) {
     await prisma.category.upsert({
       where: { id: c.id },
@@ -51,7 +53,16 @@ async function main() {
   for (const o of demo.offerings) {
     await prisma.offering.upsert({
       where: { id: o.id },
-      update: { name: o.name, description: o.description ?? Prisma.JsonNull, priceMinor: o.priceMinor, sortOrder: o.sortOrder, isActive: o.isActive, categoryId: o.categoryId },
+      update: {
+        name: o.name,
+        description: o.description ?? Prisma.JsonNull,
+        type: o.type,
+        priceMinor: o.priceMinor,
+        durationMinutes: o.durationMinutes ?? null,
+        sortOrder: o.sortOrder,
+        isActive: o.isActive,
+        categoryId: o.categoryId,
+      },
       create: {
         id: o.id,
         tenantId: tenant.id,
@@ -61,6 +72,7 @@ async function main() {
         description: o.description ?? Prisma.JsonNull,
         priceMinor: o.priceMinor,
         currency: o.currency,
+        durationMinutes: o.durationMinutes ?? null,
         sortOrder: o.sortOrder,
         isActive: o.isActive,
       },
@@ -81,7 +93,16 @@ async function main() {
       });
     }
   }
-  console.log(`Seeded tenant "${tenant.name}" (${tenant.id}) with channel ${phoneNumberId}, ${demo.categories.length} categories and ${demo.offerings.length} offerings`);
+  for (const r of demo.resources) {
+    await prisma.resource.upsert({
+      where: { id: r.id },
+      update: { name: r.name, type: r.type, hours: r.hours as Prisma.InputJsonValue, skills: r.skills as Prisma.InputJsonValue, sortOrder: r.sortOrder, isActive: r.isActive },
+      create: { id: r.id, tenantId: tenant.id, name: r.name, type: r.type, hours: r.hours as Prisma.InputJsonValue, skills: r.skills as Prisma.InputJsonValue, sortOrder: r.sortOrder, isActive: r.isActive },
+    });
+  }
+  console.log(
+    `Seeded tenant "${tenant.name}" (${tenant.id}, ${blueprintId}) with channel ${phoneNumberId}, ${demo.categories.length} categories, ${demo.offerings.length} offerings and ${demo.resources.length} resources`,
+  );
 }
 
 main()

@@ -3,12 +3,13 @@ import { getBlueprint } from "@ordr/blueprints";
 import type { ActionRegistry } from "@ordr/flow-schema";
 import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsapp";
 import { demoCatalog } from "./actions/demo-catalog";
+import { demoSalonCatalog } from "./actions/demo-salon";
 import { createActionRegistry } from "./actions";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
-import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore } from "./adapters/memory-catalog";
+import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
 import { FakeTemplateApi, InMemoryTemplateRepository, PrismaTemplateRepository } from "./adapters/templates";
-import { PrismaCatalogRepository, PrismaOrderRepository } from "./adapters/prisma-catalog";
+import { PrismaCatalogRepository, PrismaOrderRepository, PrismaResourceRepository } from "./adapters/prisma-catalog";
 import {
   PrismaConversationRepository,
   PrismaDedupeStore,
@@ -36,6 +37,7 @@ import { MerchantOrdersController } from "./merchant/orders.controller";
 import { MerchantTemplatesController } from "./merchant/templates.controller";
 import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
+import { SchedulingService } from "./scheduling/scheduling.service";
 import { TemplateService } from "./templates/template.service";
 import type {
   BlueprintRegistry,
@@ -45,6 +47,7 @@ import type {
   EventBus,
   OrderRepository,
   OutboxStore,
+  ResourceRepository,
   SessionStore,
   TemplateApi,
   TemplateRepository,
@@ -79,6 +82,7 @@ export interface AppOptions {
     outbox: OutboxStore;
     templates: TemplateRepository;
     templateApi: TemplateApi;
+    resources: ResourceRepository;
   }>;
 }
 
@@ -123,13 +127,14 @@ export class AppModule {
       { provide: TOKENS.Config, useValue: config },
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
       OrderService,
+      SchedulingService,
       OutboxRelay,
       overrides.actions
         ? { provide: TOKENS.ActionRegistry, useValue: overrides.actions }
         : {
             provide: TOKENS.ActionRegistry,
-            useFactory: (catalog: CatalogRepository, orders: OrderService) => createActionRegistry({ catalog, orders }),
-            inject: [TOKENS.CatalogRepository, OrderService],
+            useFactory: (catalog: CatalogRepository, orders: OrderService, scheduling: SchedulingService) => createActionRegistry({ catalog, orders, scheduling }),
+            inject: [TOKENS.CatalogRepository, OrderService, SchedulingService],
           },
       {
         provide: TOKENS.MessageSender,
@@ -156,8 +161,9 @@ export class AppModule {
     if (config.storage === "memory") {
       logger.log("storage=memory: tenants, catalog, orders, conversations, sessions and dedupe live in process; events are handled in process");
       const seed = seedTenantFromConfig(config);
-      const demo = demoCatalog(seed.tenant.id);
+      const demo = config.SEED_BLUEPRINT_ID === "salon" ? demoSalonCatalog(seed.tenant.id) : { ...demoCatalog(seed.tenant.id), resources: [] };
       providers.push(
+        { provide: TOKENS.ResourceRepository, useValue: overrides.resources ?? new InMemoryResourceRepository(demo.resources) },
         { provide: TOKENS.EventBus, useValue: overrides.eventBus ?? new InMemoryEventBus() },
         { provide: TOKENS.OutboxStore, useValue: overrides.outbox ?? new InMemoryOutboxStore() },
         { provide: TOKENS.TemplateRepository, useValue: overrides.templates ?? new InMemoryTemplateRepository() },
@@ -196,6 +202,9 @@ export class AppModule {
         overrides.orders
           ? { provide: TOKENS.OrderRepository, useValue: overrides.orders }
           : { provide: TOKENS.OrderRepository, useFactory: (p: PrismaService) => new PrismaOrderRepository(p), inject: [PrismaService] },
+        overrides.resources
+          ? { provide: TOKENS.ResourceRepository, useValue: overrides.resources }
+          : { provide: TOKENS.ResourceRepository, useFactory: (p: PrismaService) => new PrismaResourceRepository(p), inject: [PrismaService] },
         overrides.tenants
           ? { provide: TOKENS.TenantRepository, useValue: overrides.tenants }
           : { provide: TOKENS.TenantRepository, useFactory: (p: PrismaService) => new PrismaTenantRepository(p), inject: [PrismaService] },

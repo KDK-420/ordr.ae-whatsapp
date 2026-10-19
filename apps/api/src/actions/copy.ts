@@ -13,6 +13,17 @@ export const COPY = {
   payCashPickup: { en: "Please pay {{total}} when you collect your order.", ar: "يرجى دفع {{total}} عند استلام طلبك." },
   weWillUpdate: { en: "We will message you here as your order progresses.", ar: "سنرسل لك التحديثات هنا مع تقدم طلبك." },
   orderStatus: { en: "Order #{{number}} is {{status}}. Total {{total}}.", ar: "الطلب رقم {{number}} حالته: {{status}}. الإجمالي {{total}}." },
+  bookingStatus: { en: "Your booking on {{when}} is {{status}}.", ar: "حجزك في {{when}} حالته: {{status}}." },
+  bookingReminder: { en: "Reminder: your booking at {{tenant}} is on {{when}}. Reply here if you need to change it.", ar: "تذكير: حجزك في {{tenant}} في {{when}}. راسلنا هنا إذا أردت تغييره." },
+  minutes: { en: "min", ar: "دقيقة" },
+  anyone: { en: "Anyone available", ar: "أي موظف متاح" },
+  bookingPlaced: {
+    en: "Booked! {{service}} with {{staff}} on {{when}}. Total {{total}}. We will confirm shortly and remind you before your visit.",
+    ar: "تم الحجز! {{service}} مع {{staff}} في {{when}}. الإجمالي {{total}}. سنؤكد الحجز قريباً ونذكّرك قبل موعدك.",
+  },
+  bookingCancelled: { en: "Your booking on {{when}} has been cancelled.", ar: "تم إلغاء حجزك في {{when}}." },
+  cannotCancel: { en: "This booking can no longer be cancelled here. Send \"agent\" and we will help.", ar: "لا يمكن إلغاء هذا الحجز هنا. أرسل \"موظف\" وسنساعدك." },
+  noUpcoming: { en: "You have no upcoming bookings. Send \"menu\" to book one.", ar: "ليس لديك حجوزات قادمة. أرسل \"القائمة\" للحجز." },
   statuses: {
     en: {
       placed: "received and waiting for confirmation",
@@ -24,6 +35,11 @@ export const COPY = {
       completed: "completed",
       cancelled: "cancelled",
       rejected: "rejected",
+      requested: "requested and waiting for confirmation",
+      confirmed: "confirmed",
+      checked_in: "checked in",
+      in_progress: "in progress",
+      no_show: "marked as a no-show",
     },
     ar: {
       placed: "تم استلامه وبانتظار التأكيد",
@@ -35,6 +51,11 @@ export const COPY = {
       completed: "مكتمل",
       cancelled: "ملغي",
       rejected: "مرفوض",
+      requested: "تم طلبه وبانتظار التأكيد",
+      confirmed: "مؤكد",
+      checked_in: "تم تسجيل الوصول",
+      in_progress: "جارٍ",
+      no_show: "لم يتم الحضور",
     },
   } as Record<string, Record<string, string>>,
 } as const;

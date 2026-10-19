@@ -1,7 +1,8 @@
-import type { Category, DomainEvent, ModifierGroup, Offering, Order } from "@ordr/domain";
+import { type Category, type DomainEvent, type ModifierGroup, type Offering, type Order, overlaps, type Resource, SlotTakenError } from "@ordr/domain";
 import type {
   CatalogRepository,
   CategoryInput,
+  CreateBookingInput,
   CreateOrderInput,
   EventBus,
   EventHandler,
@@ -11,7 +12,52 @@ import type {
   OutboxFactory,
   OutboxRecord,
   OutboxStore,
+  ResourceInput,
+  ResourceRepository,
 } from "../ports";
+
+export class InMemoryResourceRepository implements ResourceRepository {
+  constructor(readonly resources: Resource[] = []) {}
+
+  async list(tenantId: string, opts: { includeInactive?: boolean } = {}): Promise<Resource[]> {
+    return this.resources
+      .filter((r) => r.tenantId === tenantId && (opts.includeInactive || r.isActive))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r) => structuredClone(r));
+  }
+
+  async get(tenantId: string, resourceId: string): Promise<Resource | null> {
+    const r = this.resources.find((x) => x.tenantId === tenantId && x.id === resourceId);
+    return r ? structuredClone(r) : null;
+  }
+
+  async create(tenantId: string, input: ResourceInput): Promise<Resource> {
+    const r: Resource = {
+      id: catalogId("res"),
+      tenantId,
+      type: input.type ?? "staff",
+      name: { ...input.name },
+      hours: structuredClone(input.hours ?? {}),
+      skills: [...(input.skills ?? [])],
+      sortOrder: input.sortOrder ?? this.resources.length,
+      isActive: input.isActive ?? true,
+    };
+    this.resources.push(r);
+    return structuredClone(r);
+  }
+
+  async update(tenantId: string, resourceId: string, patch: Partial<ResourceInput>): Promise<Resource | null> {
+    const r = this.resources.find((x) => x.tenantId === tenantId && x.id === resourceId);
+    if (!r) return null;
+    if (patch.name) r.name = { ...patch.name };
+    if (patch.type) r.type = patch.type;
+    if (patch.hours) r.hours = structuredClone(patch.hours);
+    if (patch.skills) r.skills = [...patch.skills];
+    if (patch.sortOrder !== undefined) r.sortOrder = patch.sortOrder;
+    if (patch.isActive !== undefined) r.isActive = patch.isActive;
+    return structuredClone(r);
+  }
+}
 
 let catalogSeq = 0;
 const catalogId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${++catalogSeq}`;
@@ -119,12 +165,37 @@ export class InMemoryOrderRepository implements OrderRepository {
     const number = (this.sequences.get(input.tenantId) ?? 0) + 1;
     this.sequences.set(input.tenantId, number);
     const now = new Date().toISOString();
-    const { initialStatus, ...rest } = input;
-    const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, createdAt: now, updatedAt: now };
+    const { initialStatus, scheduledAt, ...rest } = input;
+    const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, scheduledAt: scheduledAt?.toISOString(), createdAt: now, updatedAt: now };
     this.orders.push(order);
     this.history.push({ orderId: order.id, type: "order.placed" });
     if (outbox) this.outbox.push(outbox(structuredClone(order)));
     return structuredClone(order);
+  }
+
+  async createBooking(input: CreateBookingInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order> {
+    const start = input.scheduledAt;
+    const end = new Date(start.getTime() + input.durationMinutes * 60_000);
+    const clash = this.orders.some((o) => {
+      if (o.tenantId !== input.tenantId || o.resourceId !== input.resourceId || !o.scheduledAt || !blockingStatuses.includes(o.status)) return false;
+      const s = new Date(o.scheduledAt);
+      return overlaps(start, end, s, new Date(s.getTime() + (o.durationMinutes ?? 0) * 60_000));
+    });
+    if (clash) throw new SlotTakenError();
+    return this.create(input, outbox);
+  }
+
+  async listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]> {
+    return this.orders
+      .filter((o) => o.tenantId === tenantId && o.scheduledAt)
+      .filter((o) => !opts.resourceId || o.resourceId === opts.resourceId)
+      .filter((o) => !opts.statuses || opts.statuses.includes(o.status))
+      .filter((o) => {
+        const at = new Date(o.scheduledAt!);
+        return at >= opts.from && at < opts.to;
+      })
+      .sort((a, b) => a.scheduledAt!.localeCompare(b.scheduledAt!))
+      .map((o) => structuredClone(o));
   }
 
   async findById(tenantId: string, orderId: string): Promise<Order | null> {

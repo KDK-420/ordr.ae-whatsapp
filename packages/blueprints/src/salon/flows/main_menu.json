@@ -1,0 +1,32 @@
+{
+  "id": "main_menu",
+  "description": "Entry point shown on first contact and on 'menu'.",
+  "entry": "welcome",
+  "nodes": [
+    {
+      "id": "welcome",
+      "type": "question",
+      "var": "menu_choice",
+      "prompt": {
+        "en": "Welcome to {{tenant.name}}! What would you like to do?",
+        "ar": "أهلاً بك في {{tenant.name}}! ماذا تود أن تفعل؟"
+      },
+      "input": {
+        "kind": "buttons",
+        "options": [
+          { "id": "book", "title": { "en": "Book appointment", "ar": "احجز موعداً" }, "next": "go_book" },
+          { "id": "my_bookings", "title": { "en": "My bookings", "ar": "حجوزاتي" }, "next": "go_bookings" },
+          { "id": "talk_to_us", "title": { "en": "Talk to us", "ar": "تحدث معنا" }, "next": "go_talk" }
+        ]
+      },
+      "invalidText": {
+        "en": "Please tap one of the buttons, or type 1, 2 or 3.",
+        "ar": "يرجى الضغط على أحد الأزرار، أو كتابة 1 أو 2 أو 3."
+      },
+      "maxRetries": 2
+    },
+    { "id": "go_book", "type": "goto_flow", "flow": "book_service" },
+    { "id": "go_bookings", "type": "goto_flow", "flow": "my_bookings" },
+    { "id": "go_talk", "type": "goto_flow", "flow": "talk_to_us" }
+  ]
+}

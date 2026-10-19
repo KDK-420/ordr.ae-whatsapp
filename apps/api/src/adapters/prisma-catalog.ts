@@ -1,7 +1,93 @@
-import type { Category, DeliveryLocation, LocalizedText, ModifierGroup, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus } from "@ordr/domain";
+import {
+  type Category,
+  type DeliveryLocation,
+  type LocalizedText,
+  type ModifierGroup,
+  type Offering,
+  type Order,
+  type OrderItem,
+  type OrderKind,
+  type OrderSource,
+  overlaps,
+  type PaymentStatus,
+  type Resource,
+  SlotTakenError,
+  type WeeklyHours,
+} from "@ordr/domain";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { CatalogRepository, CategoryInput, CreateOrderInput, ModifierGroupInput, OfferingInput, OrderRepository, OutboxFactory } from "../ports";
+import type {
+  CatalogRepository,
+  CategoryInput,
+  CreateBookingInput,
+  CreateOrderInput,
+  ModifierGroupInput,
+  OfferingInput,
+  OrderRepository,
+  OutboxFactory,
+  ResourceInput,
+  ResourceRepository,
+} from "../ports";
 import { toOutboxRow } from "./outbox";
+
+type ResourceRow = Prisma.ResourceGetPayload<Record<string, never>>;
+
+const toResource = (r: ResourceRow): Resource => ({
+  id: r.id,
+  tenantId: r.tenantId,
+  type: r.type === "room" || r.type === "asset" ? r.type : "staff",
+  name: (r.name as LocalizedText) ?? {},
+  hours: (r.hours as WeeklyHours) ?? {},
+  skills: Array.isArray(r.skills) ? (r.skills as string[]) : [],
+  sortOrder: r.sortOrder,
+  isActive: r.isActive,
+});
+
+export class PrismaResourceRepository implements ResourceRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async list(tenantId: string, opts: { includeInactive?: boolean } = {}): Promise<Resource[]> {
+    const rows = await this.prisma.resource.findMany({ where: { tenantId, ...(opts.includeInactive ? {} : { isActive: true }) }, orderBy: { sortOrder: "asc" } });
+    return rows.map(toResource);
+  }
+
+  async get(tenantId: string, resourceId: string): Promise<Resource | null> {
+    const r = await this.prisma.resource.findFirst({ where: { tenantId, id: resourceId } });
+    return r ? toResource(r) : null;
+  }
+
+  async create(tenantId: string, input: ResourceInput): Promise<Resource> {
+    const sortOrder = input.sortOrder ?? (await this.prisma.resource.count({ where: { tenantId } }));
+    const r = await this.prisma.resource.create({
+      data: {
+        tenantId,
+        type: input.type ?? "staff",
+        name: input.name as Prisma.InputJsonValue,
+        hours: (input.hours ?? {}) as Prisma.InputJsonValue,
+        skills: (input.skills ?? []) as Prisma.InputJsonValue,
+        sortOrder,
+        isActive: input.isActive ?? true,
+      },
+    });
+    return toResource(r);
+  }
+
+  async update(tenantId: string, resourceId: string, patch: Partial<ResourceInput>): Promise<Resource | null> {
+    const existing = await this.prisma.resource.findFirst({ where: { tenantId, id: resourceId } });
+    if (!existing) return null;
+    const r = await this.prisma.resource.update({
+      where: { id: resourceId },
+      data: {
+        ...(patch.name ? { name: patch.name as Prisma.InputJsonValue } : {}),
+        ...(patch.type ? { type: patch.type } : {}),
+        ...(patch.hours ? { hours: patch.hours as Prisma.InputJsonValue } : {}),
+        ...(patch.skills ? { skills: patch.skills as Prisma.InputJsonValue } : {}),
+        ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
+        ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
+      },
+    });
+    return toResource(r);
+  }
+}
 
 const OFFERING_INCLUDE = { modifierGroups: { include: { options: true } } } as const;
 
@@ -198,6 +284,8 @@ function toOrder(row: OrderRow): Order {
     deliveryLocation: (row.deliveryLocation as unknown as DeliveryLocation | null) ?? undefined,
     notes: row.notes ?? undefined,
     scheduledAt: row.scheduledAt?.toISOString(),
+    resourceId: row.resourceId ?? undefined,
+    durationMinutes: row.durationMinutes ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -228,6 +316,9 @@ export class PrismaOrderRepository implements OrderRepository {
           paymentMethod: input.paymentMethod,
           deliveryLocation: input.deliveryLocation ? (input.deliveryLocation as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
           notes: input.notes,
+          scheduledAt: input.scheduledAt,
+          resourceId: input.resourceId,
+          durationMinutes: input.durationMinutes,
           items: {
             create: input.items.map((i) => ({
               offeringId: i.offeringId || null,
@@ -274,6 +365,80 @@ export class PrismaOrderRepository implements OrderRepository {
 
   async listByStatus(tenantId: string, statuses: string[], limit = 50): Promise<Order[]> {
     const rows = await this.prisma.order.findMany({ where: { tenantId, status: { in: statuses } }, orderBy: { createdAt: "asc" }, take: limit, include: { items: true } });
+    return rows.map(toOrder);
+  }
+
+  async createBooking(input: CreateBookingInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order> {
+    const start = input.scheduledAt;
+    const end = new Date(start.getTime() + input.durationMinutes * 60_000);
+    return this.prisma.$transaction(async (tx) => {
+      // Row lock on the resource serializes concurrent bookings for it; the overlap check below is then exact.
+      await tx.$queryRaw`SELECT id FROM "Resource" WHERE id = ${input.resourceId} FOR UPDATE`;
+      const candidates = await tx.order.findMany({
+        where: {
+          tenantId: input.tenantId,
+          resourceId: input.resourceId,
+          status: { in: blockingStatuses },
+          scheduledAt: { gte: new Date(start.getTime() - 24 * 60 * 60_000), lt: end },
+        },
+        select: { scheduledAt: true, durationMinutes: true },
+      });
+      const clash = candidates.some((c) => c.scheduledAt && overlaps(start, end, c.scheduledAt, new Date(c.scheduledAt.getTime() + (c.durationMinutes ?? 0) * 60_000)));
+      if (clash) throw new SlotTakenError();
+      const tenant = await tx.tenant.update({ where: { id: input.tenantId }, data: { orderSeq: { increment: 1 } }, select: { orderSeq: true } });
+      const row = await tx.order.create({
+        data: {
+          tenantId: input.tenantId,
+          number: tenant.orderSeq,
+          kind: input.kind,
+          status: input.initialStatus,
+          fulfillmentType: input.fulfillmentType,
+          source: input.source,
+          customerId: input.customerId,
+          conversationId: input.conversationId,
+          currency: input.currency,
+          subtotalMinor: input.subtotalMinor,
+          deliveryFeeMinor: input.deliveryFeeMinor,
+          vatMinor: input.vatMinor,
+          totalMinor: input.totalMinor,
+          paymentStatus: input.paymentStatus,
+          paymentMethod: input.paymentMethod,
+          notes: input.notes,
+          scheduledAt: start,
+          resourceId: input.resourceId,
+          durationMinutes: input.durationMinutes,
+          items: {
+            create: input.items.map((i) => ({
+              offeringId: i.offeringId || null,
+              title: i.title,
+              quantity: i.quantity,
+              unitPriceMinor: i.unitPriceMinor,
+              modifiers: i.modifiers as unknown as Prisma.InputJsonValue,
+              lineTotalMinor: i.lineTotalMinor,
+              notes: i.notes,
+            })),
+          },
+          events: { create: { tenantId: input.tenantId, type: "order.placed", payload: {} } },
+        },
+        include: { items: true },
+      });
+      const order = toOrder(row);
+      if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
+      return order;
+    });
+  }
+
+  async listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]> {
+    const rows = await this.prisma.order.findMany({
+      where: {
+        tenantId,
+        scheduledAt: { gte: opts.from, lt: opts.to },
+        ...(opts.resourceId ? { resourceId: opts.resourceId } : {}),
+        ...(opts.statuses ? { status: { in: opts.statuses } } : {}),
+      },
+      orderBy: { scheduledAt: "asc" },
+      include: { items: true },
+    });
     return rows.map(toOrder);
   }
 

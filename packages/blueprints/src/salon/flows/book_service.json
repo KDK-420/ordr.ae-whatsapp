@@ -1,0 +1,102 @@
+{
+  "id": "book_service",
+  "description": "Pick a service, a stylist (or anyone), a day, a part of the day and a time, then confirm.",
+  "entry": "load_services",
+  "nodes": [
+    { "id": "load_services", "type": "action", "action": "booking.services", "saveAs": "services", "next": "pick_service", "onError": "error" },
+    {
+      "id": "pick_service",
+      "type": "question",
+      "var": "service",
+      "prompt": { "en": "Which service would you like?", "ar": "أي خدمة تود حجزها؟" },
+      "input": { "kind": "list", "button": { "en": "Services", "ar": "الخدمات" }, "rowsFrom": "services", "onEmpty": "no_services" },
+      "next": "load_staff"
+    },
+    { "id": "load_staff", "type": "action", "action": "booking.staff", "params": { "serviceId": "{{service.id}}" }, "saveAs": "staff", "next": "pick_staff", "onError": "error" },
+    {
+      "id": "pick_staff",
+      "type": "question",
+      "var": "staff",
+      "prompt": { "en": "{{service.title}}: who would you like it with?", "ar": "{{service.title}}: مع من تود الحجز؟" },
+      "input": { "kind": "list", "button": { "en": "Choose", "ar": "اختر" }, "rowsFrom": "staff", "onEmpty": "no_staff" },
+      "next": "load_days"
+    },
+    { "id": "load_days", "type": "action", "action": "booking.days", "params": { "serviceId": "{{service.id}}", "resourceId": "{{staff.id}}" }, "saveAs": "days", "next": "pick_day", "onError": "error" },
+    {
+      "id": "pick_day",
+      "type": "question",
+      "var": "day",
+      "prompt": { "en": "Which day suits you?", "ar": "أي يوم يناسبك؟" },
+      "input": { "kind": "list", "button": { "en": "Days", "ar": "الأيام" }, "rowsFrom": "days", "onEmpty": "no_days" },
+      "next": "ask_period"
+    },
+    {
+      "id": "ask_period",
+      "type": "question",
+      "var": "period",
+      "prompt": { "en": "{{day.title}}: what time of day?", "ar": "{{day.title}}: في أي وقت من اليوم؟" },
+      "input": {
+        "kind": "buttons",
+        "options": [
+          { "id": "morning", "title": { "en": "Morning", "ar": "صباحاً" } },
+          { "id": "afternoon", "title": { "en": "Afternoon", "ar": "بعد الظهر" } },
+          { "id": "evening", "title": { "en": "Evening", "ar": "مساءً" } }
+        ]
+      },
+      "next": "load_slots"
+    },
+    {
+      "id": "load_slots",
+      "type": "action",
+      "action": "booking.slots",
+      "params": { "serviceId": "{{service.id}}", "resourceId": "{{staff.id}}", "date": "{{day.id}}", "period": "{{period.id}}" },
+      "saveAs": "slots",
+      "next": "pick_slot",
+      "onError": "error"
+    },
+    {
+      "id": "pick_slot",
+      "type": "question",
+      "var": "slot",
+      "prompt": { "en": "Pick a time:", "ar": "اختر الوقت:" },
+      "input": { "kind": "list", "button": { "en": "Times", "ar": "الأوقات" }, "rowsFrom": "slots", "onEmpty": "no_slots" },
+      "next": "confirm"
+    },
+    {
+      "id": "no_slots",
+      "type": "message",
+      "text": { "en": "No free times in that part of the day. Let's try another.", "ar": "لا توجد أوقات متاحة في هذا الجزء من اليوم. لنجرب وقتاً آخر." },
+      "next": "ask_period"
+    },
+    {
+      "id": "confirm",
+      "type": "question",
+      "var": "confirmation",
+      "prompt": {
+        "en": "{{service.title}} with {{staff.title}} on {{day.title}} at {{slot.title}}. Shall we book it?",
+        "ar": "{{service.title}} مع {{staff.title}} يوم {{day.title}} الساعة {{slot.title}}. هل نؤكد الحجز؟"
+      },
+      "input": {
+        "kind": "buttons",
+        "options": [
+          { "id": "confirm", "title": { "en": "Book it", "ar": "احجز" }, "next": "create" },
+          { "id": "change", "title": { "en": "Change time", "ar": "غيّر الوقت" }, "next": "load_days" },
+          { "id": "cancel", "title": { "en": "Cancel", "ar": "إلغاء" }, "next": "cancelled" }
+        ]
+      }
+    },
+    { "id": "create", "type": "action", "action": "booking.create", "params": { "serviceId": "{{service.id}}", "slotId": "{{slot.id}}" }, "saveAs": "booking", "next": "done", "onError": "slot_taken" },
+    { "id": "done", "type": "end", "text": "{{booking.text}}" },
+    {
+      "id": "slot_taken",
+      "type": "message",
+      "text": { "en": "Sorry, that time was just taken. Let's pick another.", "ar": "عذراً، تم حجز هذا الوقت للتو. لنختر وقتاً آخر." },
+      "next": "load_days"
+    },
+    { "id": "no_services", "type": "end", "text": { "en": "Bookings are not available right now. Please try again later.", "ar": "الحجز غير متاح حالياً. يرجى المحاولة لاحقاً." } },
+    { "id": "no_staff", "type": "end", "text": { "en": "Nobody is available for that service at the moment. Send \"agent\" and we will help.", "ar": "لا يوجد موظف متاح لهذه الخدمة حالياً. أرسل \"موظف\" وسنساعدك." } },
+    { "id": "no_days", "type": "end", "text": { "en": "No availability in the next two weeks. Send \"agent\" and we will find a time for you.", "ar": "لا توجد مواعيد متاحة خلال الأسبوعين القادمين. أرسل \"موظف\" وسنجد لك وقتاً." } },
+    { "id": "cancelled", "type": "end", "text": { "en": "No problem. Send \"menu\" whenever you are ready.", "ar": "لا مشكلة. أرسل \"القائمة\" عندما تكون جاهزاً." } },
+    { "id": "error", "type": "end", "text": { "en": "Something went wrong. Please try again in a moment or send \"agent\".", "ar": "حدث خطأ ما. يرجى المحاولة بعد قليل أو إرسال \"موظف\"." } }
+  ]
+}

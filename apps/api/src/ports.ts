@@ -1,5 +1,5 @@
 import type { Category, Channel, Customer, DomainEvent, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus, DeliveryLocation, Tenant } from "@ordr/domain";
-import type { LocalizedText } from "@ordr/domain";
+import type { LocalizedText, Resource, WeeklyHours } from "@ordr/domain";
 import type { Blueprint, SessionState } from "@ordr/flow-schema";
 
 export interface TenantContext {
@@ -178,10 +178,31 @@ export interface CreateOrderInput {
   paymentMethod?: string;
   deliveryLocation?: DeliveryLocation;
   notes?: string;
+  scheduledAt?: Date;
+  resourceId?: string;
+  durationMinutes?: number;
 }
+
+export type CreateBookingInput = CreateOrderInput & { scheduledAt: Date; resourceId: string; durationMinutes: number };
 
 /** Builds the domain event to store in the outbox together with the change, once the saved order is known. */
 export type OutboxFactory = (order: Order) => DomainEvent;
+
+export interface ResourceInput {
+  name: LocalizedText;
+  type?: Resource["type"];
+  hours?: WeeklyHours;
+  skills?: string[];
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+export interface ResourceRepository {
+  list(tenantId: string, opts?: { includeInactive?: boolean }): Promise<Resource[]>;
+  get(tenantId: string, resourceId: string): Promise<Resource | null>;
+  create(tenantId: string, input: ResourceInput): Promise<Resource>;
+  update(tenantId: string, resourceId: string, patch: Partial<ResourceInput>): Promise<Resource | null>;
+}
 
 export interface OrderRepository {
   /**
@@ -195,6 +216,13 @@ export interface OrderRepository {
   listByStatus(tenantId: string, statuses: string[], limit?: number): Promise<Order[]>;
   /** Newest first, optionally restricted to statuses and to orders updated after `since`. */
   listRecent(tenantId: string, opts?: { statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
+  /**
+   * Like create, but serialized per resource: throws SlotTakenError when another order in one of
+   * `blockingStatuses` overlaps the requested time on the same resource.
+   */
+  createBooking(input: CreateBookingInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order>;
+  /** Orders scheduled in [from, to), soonest first. */
+  listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]>;
 }
 
 export type EventHandler = (event: DomainEvent) => Promise<void> | void;
