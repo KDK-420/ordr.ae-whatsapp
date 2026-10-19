@@ -1,16 +1,20 @@
 import { Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import type { Customer, Tenant } from "@ordr/domain";
+import type { Channel, Customer, Tenant } from "@ordr/domain";
 import type { SessionState } from "@ordr/flow-schema";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { previewOf } from "../conversation/preview";
 import type {
+  ChannelInput,
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
   ConversationSummary,
+  CreateTenantInput,
   CreateUserInput,
   DedupeStore,
   MessageRecord,
+  NumberPoolRepository,
+  PooledNumber,
   SessionStore,
   StoredMessage,
   TenantContext,
@@ -88,18 +92,87 @@ export class PrismaTenantRepository implements TenantRepository {
 
   async findById(tenantId: string): Promise<Tenant | null> {
     const t = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!t) return null;
-    return {
-      id: t.id,
-      name: t.name,
-      slug: t.slug,
-      blueprintId: t.blueprintId,
-      defaultLanguage: t.defaultLanguage,
-      timezone: t.timezone,
-      settings: (t.settings as Record<string, unknown>) ?? {},
-    };
+    return t ? toTenant(t) : null;
+  }
+
+  async list(): Promise<Array<{ tenant: Tenant; channel: Channel | null }>> {
+    const rows = await this.prisma.tenant.findMany({ orderBy: { createdAt: "desc" }, include: { channels: { where: { status: "active" }, orderBy: { createdAt: "asc" }, take: 1 } } });
+    return rows.map((t) => {
+      const c = t.channels[0];
+      return { tenant: toTenant(t), channel: c ? toContext({ ...c, tenant: t }).channel : null };
+    });
+  }
+
+  async create(input: CreateTenantInput): Promise<Tenant> {
+    const t = await this.prisma.tenant.create({
+      data: { name: input.name, slug: input.slug, blueprintId: input.blueprintId, defaultLanguage: input.defaultLanguage ?? "en", timezone: input.timezone ?? "Asia/Dubai", settings: (input.settings ?? {}) as Prisma.InputJsonValue },
+    });
+    return toTenant(t);
+  }
+
+  async attachChannel(tenantId: string, input: ChannelInput): Promise<Channel> {
+    // Only the channel fields: callers may pass a richer object such as a pooled number.
+    const fields = { wabaId: input.wabaId, displayPhone: input.displayPhone, accessToken: input.accessToken };
+    const c = await this.prisma.channel.upsert({
+      where: { phoneNumberId: input.phoneNumberId },
+      update: { tenantId, ...fields, status: "active" },
+      create: { tenantId, phoneNumberId: input.phoneNumberId, ...fields, status: "active" },
+      include: { tenant: true },
+    });
+    this.cache.delete(input.phoneNumberId);
+    return toContext(c).channel;
+  }
+
+  async detachChannel(phoneNumberId: string): Promise<void> {
+    await this.prisma.channel.updateMany({ where: { phoneNumberId }, data: { status: "disabled" } });
+    this.cache.delete(phoneNumberId);
   }
 }
+
+const toTenant = (t: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; settings: unknown }): Tenant => ({
+  id: t.id,
+  name: t.name,
+  slug: t.slug,
+  blueprintId: t.blueprintId,
+  defaultLanguage: t.defaultLanguage,
+  timezone: t.timezone,
+  settings: (t.settings as Record<string, unknown>) ?? {},
+});
+
+export class PrismaNumberPoolRepository implements NumberPoolRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async list(): Promise<PooledNumber[]> {
+    const rows = await this.prisma.phoneNumber.findMany({ orderBy: { createdAt: "asc" } });
+    return rows.map(toPooled);
+  }
+
+  async findById(id: string): Promise<PooledNumber | null> {
+    const n = await this.prisma.phoneNumber.findUnique({ where: { id } });
+    return n ? toPooled(n) : null;
+  }
+
+  async create(input: ChannelInput & { label?: string }): Promise<PooledNumber> {
+    return toPooled(await this.prisma.phoneNumber.create({ data: input }));
+  }
+
+  async setTenant(id: string, tenantId: string | null): Promise<PooledNumber | null> {
+    const n = await this.prisma.phoneNumber.findUnique({ where: { id } });
+    if (!n) return null;
+    return toPooled(await this.prisma.phoneNumber.update({ where: { id }, data: { tenantId } }));
+  }
+}
+
+const toPooled = (n: { id: string; phoneNumberId: string; wabaId: string; displayPhone: string; accessToken: string; label: string | null; tenantId: string | null; createdAt: Date }): PooledNumber => ({
+  id: n.id,
+  phoneNumberId: n.phoneNumberId,
+  wabaId: n.wabaId,
+  displayPhone: n.displayPhone,
+  accessToken: n.accessToken,
+  label: n.label ?? undefined,
+  tenantId: n.tenantId,
+  createdAt: n.createdAt.toISOString(),
+});
 
 export class PrismaConversationRepository implements ConversationRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -252,7 +325,7 @@ export class PrismaUserRepository implements UserRepository {
   }
 }
 
-const toUser = (u: { id: string; tenantId: string; email: string; name: string; role: string; passwordHash: string; isActive: boolean }): UserRecord => ({
+const toUser = (u: { id: string; tenantId: string; email: string; name: string; role: string; passwordHash: string; isActive: boolean; isPlatformAdmin: boolean }): UserRecord => ({
   id: u.id,
   tenantId: u.tenantId,
   email: u.email,
@@ -260,6 +333,7 @@ const toUser = (u: { id: string; tenantId: string; email: string; name: string; 
   role: u.role === "owner" ? "owner" : ("staff" satisfies UserRole),
   passwordHash: u.passwordHash,
   isActive: u.isActive,
+  isPlatformAdmin: u.isPlatformAdmin,
 });
 
 export class PrismaSessionStore implements SessionStore {

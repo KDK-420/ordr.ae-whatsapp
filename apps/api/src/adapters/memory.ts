@@ -1,14 +1,18 @@
-import type { Customer, Tenant } from "@ordr/domain";
+import type { Channel, Customer, Tenant } from "@ordr/domain";
 import type { SessionState } from "@ordr/flow-schema";
 import { previewOf } from "../conversation/preview";
 import type {
+  ChannelInput,
   ConversationRecord,
   ConversationRepository,
   ConversationStatus,
   ConversationSummary,
+  CreateTenantInput,
   CreateUserInput,
   DedupeStore,
   MessageRecord,
+  NumberPoolRepository,
+  PooledNumber,
   SessionStore,
   StoredMessage,
   TenantContext,
@@ -32,7 +36,8 @@ export class InMemoryTenantRepository implements TenantRepository {
   }
 
   async findByPhoneNumberId(phoneNumberId: string): Promise<TenantContext | null> {
-    return this.byPhone.get(phoneNumberId) ?? null;
+    const ctx = this.byPhone.get(phoneNumberId);
+    return ctx && ctx.channel.status === "active" ? ctx : null;
   }
 
   async findById(tenantId: string): Promise<Tenant | null> {
@@ -44,14 +49,89 @@ export class InMemoryTenantRepository implements TenantRepository {
     for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active") return ctx;
     return null;
   }
+
+  /** Tenants without a number live here until a channel is attached. */
+  private readonly tenants = new Map<string, Tenant>();
+
+  async list(): Promise<Array<{ tenant: Tenant; channel: Channel | null }>> {
+    // Seeded tenants were there first; created ones follow in creation order. Newest first, like the Prisma adapter.
+    const out = new Map<string, { tenant: Tenant; channel: Channel | null }>();
+    for (const ctx of this.byPhone.values()) if (!this.tenants.has(ctx.tenant.id)) out.set(ctx.tenant.id, { tenant: ctx.tenant, channel: null });
+    for (const t of this.tenants.values()) out.set(t.id, { tenant: t, channel: null });
+    for (const ctx of this.byPhone.values()) {
+      const row = out.get(ctx.tenant.id);
+      if (row && ctx.channel.status === "active" && !row.channel) row.channel = ctx.channel;
+    }
+    return [...out.values()].reverse();
+  }
+
+  async create(input: CreateTenantInput): Promise<Tenant> {
+    for (const t of await this.list()) if (t.tenant.slug === input.slug) throw new Error(`slug ${input.slug} already exists`);
+    const tenant: Tenant = { id: nextId("tenant"), name: input.name, slug: input.slug, blueprintId: input.blueprintId, defaultLanguage: input.defaultLanguage ?? "en", timezone: input.timezone ?? "Asia/Dubai", settings: input.settings ?? {} };
+    this.tenants.set(tenant.id, tenant);
+    return tenant;
+  }
+
+  async attachChannel(tenantId: string, input: ChannelInput): Promise<Channel> {
+    const tenant = this.tenants.get(tenantId) ?? (await this.findById(tenantId));
+    if (!tenant) throw new Error(`tenant ${tenantId} not found`);
+    const existing = this.byPhone.get(input.phoneNumberId);
+    const channel: Channel = {
+      id: existing?.channel.id ?? nextId("channel"),
+      tenantId,
+      provider: "meta_cloud",
+      phoneNumberId: input.phoneNumberId,
+      wabaId: input.wabaId,
+      displayPhone: input.displayPhone,
+      accessToken: input.accessToken,
+      status: "active",
+    };
+    this.byPhone.set(input.phoneNumberId, { tenant, channel });
+    return channel;
+  }
+
+  async detachChannel(phoneNumberId: string): Promise<void> {
+    const ctx = this.byPhone.get(phoneNumberId);
+    if (ctx) {
+      this.tenants.set(ctx.tenant.id, ctx.tenant);
+      this.byPhone.set(phoneNumberId, { tenant: ctx.tenant, channel: { ...ctx.channel, status: "disabled" } });
+    }
+  }
+}
+
+export class InMemoryNumberPoolRepository implements NumberPoolRepository {
+  readonly numbers: PooledNumber[] = [];
+
+  async list(): Promise<PooledNumber[]> {
+    return this.numbers.map((n) => ({ ...n }));
+  }
+
+  async findById(id: string): Promise<PooledNumber | null> {
+    const n = this.numbers.find((x) => x.id === id);
+    return n ? { ...n } : null;
+  }
+
+  async create(input: ChannelInput & { label?: string }): Promise<PooledNumber> {
+    if (this.numbers.some((n) => n.phoneNumberId === input.phoneNumberId)) throw new Error(`number ${input.phoneNumberId} already in the pool`);
+    const n: PooledNumber = { id: nextId("num"), ...input, tenantId: null, createdAt: new Date().toISOString() };
+    this.numbers.push(n);
+    return { ...n };
+  }
+
+  async setTenant(id: string, tenantId: string | null): Promise<PooledNumber | null> {
+    const n = this.numbers.find((x) => x.id === id);
+    if (!n) return null;
+    n.tenantId = tenantId;
+    return { ...n };
+  }
 }
 
 export class InMemoryUserRepository implements UserRepository {
   readonly users: UserRecord[] = [];
   readonly logins = new Map<string, Date>();
 
-  constructor(seed: Array<Omit<UserRecord, "id" | "isActive"> & Partial<Pick<UserRecord, "id" | "isActive">>> = []) {
-    for (const u of seed) this.users.push({ id: u.id ?? nextId("usr"), isActive: u.isActive ?? true, ...u });
+  constructor(seed: Array<Omit<UserRecord, "id" | "isActive" | "isPlatformAdmin"> & Partial<Pick<UserRecord, "id" | "isActive" | "isPlatformAdmin">>> = []) {
+    for (const u of seed) this.users.push({ id: u.id ?? nextId("usr"), isActive: u.isActive ?? true, isPlatformAdmin: false, ...u });
   }
 
   async findByEmail(email: string): Promise<UserRecord | null> {
@@ -64,7 +144,7 @@ export class InMemoryUserRepository implements UserRepository {
   }
 
   async create(input: CreateUserInput): Promise<UserRecord> {
-    const user: UserRecord = { id: nextId("usr"), isActive: true, ...input, email: input.email.trim().toLowerCase() };
+    const user: UserRecord = { id: nextId("usr"), isActive: true, isPlatformAdmin: false, ...input, email: input.email.trim().toLowerCase() };
     this.users.push(user);
     return user;
   }

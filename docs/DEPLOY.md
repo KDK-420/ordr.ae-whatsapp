@@ -98,6 +98,21 @@ their 24 hour service window is open.
 Caddy obtains the TLS certificate on first request, so `https://<DOMAIN>/health` may take a few
 seconds the first time.
 
+## Onboard a merchant (platform admin)
+
+1. In Meta's WhatsApp Manager, add a phone number to ordr.ae's WhatsApp Business Account and
+   verify it (SMS or call to the SIM). Set its display name and profile to the merchant's
+   brand. Note its Phone number ID; the WABA ID and the system-user token are the same for
+   every number on the account.
+2. Dashboard › Admin › Number pool › Add: display number, Phone number ID, WABA ID, token.
+3. Admin › New merchant: name, vertical, owner name and email, pick the number, keep "load the
+   demo catalog" ticked for a first demo. Copy the one-time password shown and send it to the
+   owner privately.
+4. The owner signs in at https://app.ordr.ae/login, edits the catalog and team, and customers
+   can message the number right away. Templates: Settings › WhatsApp templates › Submit once.
+
+The webhook below is registered once for the whole account; every number on it delivers to it.
+
 ## Register the webhook with Meta
 
 In the Meta app dashboard, WhatsApp > Configuration > Webhook: paste the callback URL

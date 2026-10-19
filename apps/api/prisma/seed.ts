@@ -35,8 +35,8 @@ async function main() {
     const passwordHash = hashPassword(adminPassword);
     await prisma.user.upsert({
       where: { email: adminEmail },
-      update: { passwordHash, tenantId: tenant.id, role: "owner", isActive: true },
-      create: { tenantId: tenant.id, email: adminEmail, name: env.SEED_ADMIN_NAME ?? "Owner", role: "owner", passwordHash },
+      update: { passwordHash, tenantId: tenant.id, role: "owner", isActive: true, isPlatformAdmin: true },
+      create: { tenantId: tenant.id, email: adminEmail, name: env.SEED_ADMIN_NAME ?? "Owner", role: "owner", passwordHash, isPlatformAdmin: true },
     });
     console.log(`Dashboard owner ${adminEmail} is ready`);
   } else {

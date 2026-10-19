@@ -49,7 +49,7 @@ export interface OrderList {
 }
 
 export interface Me {
-  user: { id: string; email: string; name: string; role: string; tenantId: string };
+  user: { id: string; email: string; name: string; role: string; tenantId: string; platformAdmin: boolean };
   tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; modules: string[] } | null;
 }
 
@@ -237,6 +237,39 @@ export interface BookingList {
   timezone: string;
 }
 export const listBookings = (from: string, to: string) => call<BookingList>(`/merchant/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+
+export interface PooledNumber {
+  id: string;
+  phoneNumberId: string;
+  wabaId: string;
+  displayPhone: string;
+  label?: string;
+  tenantId: string | null;
+  createdAt: string;
+}
+export interface AdminOverview {
+  tenants: Array<{
+    tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string };
+    channel: { id: string; phoneNumberId: string; displayPhone: string } | null;
+    owners: Array<{ id: string; email: string; name: string }>;
+  }>;
+  numbers: PooledNumber[];
+  verticals: Array<{ id: string; name: string; languages: string[] }>;
+}
+export interface CreateTenantResult {
+  tenant: { id: string; name: string; slug: string; blueprintId: string };
+  owner: { id: string; email: string; temporaryPassword: string };
+  channel: { id: string; displayPhone: string } | null;
+}
+export const getAdminOverview = () => call<AdminOverview>("/admin/overview");
+export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean }) =>
+  call<CreateTenantResult>("/admin/tenants", { method: "POST", body: JSON.stringify(input) });
+export const resetTenantOwnerPassword = (tenantId: string, userId: string) =>
+  call<{ email: string; temporaryPassword: string }>(`/admin/tenants/${encodeURIComponent(tenantId)}/owners/${encodeURIComponent(userId)}/reset-password`, { method: "POST" });
+export const addPooledNumber = (input: { phoneNumberId: string; wabaId: string; displayPhone: string; accessToken: string; label?: string }) =>
+  call<PooledNumber>("/admin/numbers", { method: "POST", body: JSON.stringify(input) });
+export const assignPooledNumber = (id: string, tenantId: string) => call<PooledNumber>(`/admin/numbers/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ tenantId }) });
+export const releasePooledNumber = (id: string) => call<PooledNumber>(`/admin/numbers/${encodeURIComponent(id)}/release`, { method: "POST" });
 
 export interface DemoCustomer {
   waId: string;

@@ -11,6 +11,8 @@ export interface AuthUser {
   email: string;
   name: string;
   role: UserRole;
+  /** May create tenants and manage the number pool. */
+  platformAdmin: boolean;
 }
 
 export interface LoginResult {
@@ -22,7 +24,7 @@ export interface LoginResult {
 /** Verified against when the email is unknown, so a failed login costs the same time either way. */
 const DUMMY_HASH = hashPassword("not-a-real-password");
 
-const publicUser = (u: UserRecord): AuthUser => ({ id: u.id, tenantId: u.tenantId, email: u.email, name: u.name, role: u.role });
+const publicUser = (u: UserRecord): AuthUser => ({ id: u.id, tenantId: u.tenantId, email: u.email, name: u.name, role: u.role, platformAdmin: u.isPlatformAdmin });
 
 @Injectable()
 export class AuthService {

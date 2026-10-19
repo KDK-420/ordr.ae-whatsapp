@@ -36,6 +36,8 @@ model User {
   passwordHash String
   /// owner or staff
   role         String    @default("staff")
+  /// Platform operator: may create tenants and manage the number pool at /admin
+  isPlatformAdmin Boolean @default(false)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
@@ -60,6 +62,23 @@ model Channel {
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   conversations Conversation[]
+}
+
+/// WhatsApp numbers the platform owns and hands to tenants. Assigning one creates or moves the tenant's Channel.
+model PhoneNumber {
+  id            String   @id @default(cuid())
+  phoneNumberId String   @unique
+  wabaId        String
+  displayPhone  String
+  accessToken   String
+  /// Free text for operators, e.g. "SIM #3, du"
+  label         String?
+  /// Tenant currently using this number, null while in the pool
+  tenantId      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model Customer {

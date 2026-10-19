@@ -5,14 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { logout, me, type Me } from "@/lib/api";
 
-/** `module` hides the entry unless the tenant's blueprint lists that dashboard module. */
-const NAV: Array<{ href: string; label: string; module?: string }> = [
+/** `module` hides the entry unless the tenant's blueprint lists that dashboard module; `admin` shows it to platform admins only. */
+const NAV: Array<{ href: string; label: string; module?: string; admin?: boolean }> = [
   { href: "/orders", label: "Orders" },
   { href: "/calendar", label: "Calendar", module: "calendar" },
   { href: "/inbox", label: "Inbox" },
   { href: "/catalog", label: "Catalog" },
   { href: "/settings", label: "Settings" },
   { href: "/demo", label: "Demo" },
+  { href: "/admin", label: "Admin", admin: true },
 ];
 
 /** App chrome: navigation, tenant name, signed-in user, sign out. */
@@ -41,7 +42,7 @@ export function Shell({ children }: { children: ReactNode }) {
               ordr<span className="text-brand">.ae</span>
             </Link>
             <nav className="flex gap-1 text-sm">
-              {NAV.filter((item) => !item.module || session?.tenant?.modules.includes(item.module)).map((item) => {
+              {NAV.filter((item) => (!item.module || session?.tenant?.modules.includes(item.module)) && (!item.admin || session?.user.platformAdmin)).map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link

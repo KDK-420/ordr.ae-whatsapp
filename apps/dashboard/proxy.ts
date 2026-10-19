@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 const SESSION_COOKIE = "ordr_session";
-const APP_PREFIXES = ["/orders", "/calendar", "/inbox", "/catalog", "/settings", "/demo"];
+const APP_PREFIXES = ["/orders", "/calendar", "/inbox", "/catalog", "/settings", "/demo", "/admin"];
 
 /** Keeps signed-out visitors away from the app pages and signed-in ones away from the login form. */
 export function proxy(request: NextRequest) {
@@ -21,4 +21,4 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/orders/:path*", "/calendar/:path*", "/inbox/:path*", "/catalog/:path*", "/settings/:path*", "/demo/:path*", "/login"] };
+export const config = { matcher: ["/orders/:path*", "/calendar/:path*", "/inbox/:path*", "/catalog/:path*", "/settings/:path*", "/demo/:path*", "/admin/:path*", "/login"] };

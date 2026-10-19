@@ -5,10 +5,12 @@ import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsap
 import { demoCatalog } from "./actions/demo-catalog";
 import { demoSalonCatalog } from "./actions/demo-salon";
 import { createActionRegistry } from "./actions";
+import { AdminController } from "./admin/admin.controller";
+import { AdminService } from "./admin/admin.service";
 import { AnthropicAssistant } from "./ai/anthropic.assistant";
 import { type Assistant, NoopAssistant } from "./ai/assistant";
 import { AssistantService } from "./ai/assistant.service";
-import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
+import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryNumberPoolRepository, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
 import { FakeTemplateApi, InMemoryTemplateRepository, PrismaTemplateRepository } from "./adapters/templates";
@@ -20,6 +22,7 @@ import {
   PrismaSessionStore,
   PrismaTenantRepository,
   PrismaUserRepository,
+  PrismaNumberPoolRepository,
 } from "./adapters/prisma";
 import { createRedis, RedisDedupeStore, RedisSessionStore } from "./adapters/redis";
 import { AuthController } from "./auth/auth.controller";
@@ -62,6 +65,7 @@ import type {
   TenantContext,
   TenantRepository,
   UserRepository,
+  NumberPoolRepository,
 } from "./ports";
 import { RootController } from "./root.controller";
 import { TOKENS } from "./tokens";
@@ -92,6 +96,7 @@ export interface AppOptions {
     templateApi: TemplateApi;
     resources: ResourceRepository;
     assistant: Assistant;
+    numbers: NumberPoolRepository;
   }>;
 }
 
@@ -99,7 +104,7 @@ export interface AppOptions {
 function seedUsersFromConfig(config: AppConfig, tenantId: string): InMemoryUserRepository {
   if (!config.SEED_ADMIN_EMAIL || !config.SEED_ADMIN_PASSWORD) return new InMemoryUserRepository();
   return new InMemoryUserRepository([
-    { tenantId, email: config.SEED_ADMIN_EMAIL, name: config.SEED_ADMIN_NAME, role: "owner", passwordHash: hashPassword(config.SEED_ADMIN_PASSWORD) },
+    { tenantId, email: config.SEED_ADMIN_EMAIL, name: config.SEED_ADMIN_NAME, role: "owner", isPlatformAdmin: true, passwordHash: hashPassword(config.SEED_ADMIN_PASSWORD) },
   ]);
 }
 
@@ -156,6 +161,7 @@ export class AppModule {
       MerchantOrdersService,
       TemplateService,
       InboxService,
+      AdminService,
       SimulatorService,
       AssistantService,
       {
@@ -195,6 +201,7 @@ export class AppModule {
         { provide: TOKENS.SessionStore, useValue: overrides.sessions ?? new InMemorySessionStore() },
         { provide: TOKENS.DedupeStore, useValue: overrides.dedupe ?? new InMemoryDedupeStore() },
         { provide: TOKENS.UserRepository, useValue: overrides.users ?? seedUsersFromConfig(config, seed.tenant.id) },
+        { provide: TOKENS.NumberPoolRepository, useValue: overrides.numbers ?? new InMemoryNumberPoolRepository() },
       );
     } else {
       providers.push(PrismaService);
@@ -232,6 +239,9 @@ export class AppModule {
         overrides.conversations
           ? { provide: TOKENS.ConversationRepository, useValue: overrides.conversations }
           : { provide: TOKENS.ConversationRepository, useFactory: (p: PrismaService) => new PrismaConversationRepository(p), inject: [PrismaService] },
+        overrides.numbers
+          ? { provide: TOKENS.NumberPoolRepository, useValue: overrides.numbers }
+          : { provide: TOKENS.NumberPoolRepository, useFactory: (p: PrismaService) => new PrismaNumberPoolRepository(p), inject: [PrismaService] },
       );
       if (config.REDIS_URL) {
         logger.log("storage=prisma with Redis for sessions and dedupe");
@@ -266,6 +276,7 @@ export class AppModule {
               MerchantTemplatesController,
               MerchantConversationsController,
               MerchantSimulatorController,
+              AdminController,
               MerchantBookingsController,
               MerchantResourcesController,
               MerchantCatalogController,

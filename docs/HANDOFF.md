@@ -3,7 +3,7 @@
 Read docs/PLAN.md first for the architecture and roadmap, docs/DEPLOY.md for the server. This
 note says where the build is and what to do next.
 
-## What exists (all green: 58 package tests, 65 API tests, 12 Postgres integration tests)
+## What exists (all green: 58 package tests, 66 API tests, 13 Postgres integration tests)
 
 ### Deployed
 
@@ -59,6 +59,15 @@ logs in with the `VPS_SSH_KEY` secret.
   booking (cancelled, finished or moved bookings get nothing) and sends text inside the 24h
   window or the `ordr_booking_reminder` template outside it. In memory mode nothing relays the
   outbox, so reminders only go out through the worker on Postgres.
+- **Merchant onboarding (platform admin).** `User.isPlatformAdmin` (the seeded owner has it)
+  unlocks `/admin` in the dashboard and the `/admin/*` API: a pool of WhatsApp numbers the
+  platform owns (`PhoneNumber` table; the access token never leaves the API), "New merchant"
+  (tenant + owner with a one-time password + optional demo catalog and salon staff with fresh
+  ids + a number from the pool), assign / move / release numbers, reset an owner's password.
+  Assigning a number upserts the tenant's `Channel` by `phoneNumberId`, so routing follows the
+  number; releasing sets the channel `disabled` and keeps the history. This is "Option A":
+  merchants never touch Meta; numbers are verified once in ordr.ae's own WhatsApp account and
+  their display name and profile are set per number in WhatsApp Manager.
 - **Demo page** (`/demo` in the dashboard, `apps/api/src/simulator`): a WhatsApp-styled phone
   where you add a demo customer (synthetic wa id starting with `000`) and chat with the real
   bot: buttons, list sheets and location requests are tappable, agent replies from the Inbox
@@ -167,8 +176,9 @@ For a local dashboard login without Postgres, start the API with `STORAGE=memory
    always "cash".
 4. Multi-select modifier groups in the ordering flow (the catalog editor already stores
    maxSelect > 1), item notes, scheduled orders, delivery zones with per-zone fees.
-5. Onboarding: Embedded Signup and tenant creation from the dashboard instead of the seed;
-   super-admin console.
+5. Onboarding, next: Embedded Signup for merchants who want their own WhatsApp account
+   (needs Meta app review and Tech Provider status); self-serve signup page; a "sign in as"
+   for platform admins; tenant deactivation.
 6. Analytics on the dashboard (orders per day, revenue, top items) and order history search.
 7. WhatsApp Flows node type (`form`) in the schema and runner, needed for the salon date picker
    in Phase 2.

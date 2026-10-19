@@ -7,11 +7,49 @@ export interface TenantContext {
   channel: Channel;
 }
 
+export interface CreateTenantInput {
+  name: string;
+  slug: string;
+  blueprintId: string;
+  defaultLanguage?: string;
+  timezone?: string;
+  settings?: Record<string, unknown>;
+}
+
+export interface ChannelInput {
+  phoneNumberId: string;
+  wabaId: string;
+  displayPhone: string;
+  accessToken: string;
+}
+
 export interface TenantRepository {
   findByPhoneNumberId(phoneNumberId: string): Promise<TenantContext | null>;
   findById(tenantId: string): Promise<Tenant | null>;
   /** Tenant with its active channel, for outbound messages that start on our side. */
   findContextById(tenantId: string): Promise<TenantContext | null>;
+  /** Every tenant with its active channel, if any; newest first. Platform admin only. */
+  list(): Promise<Array<{ tenant: Tenant; channel: Channel | null }>>;
+  create(input: CreateTenantInput): Promise<Tenant>;
+  /** Points a WhatsApp number at a tenant: creates the channel, or moves an existing one for that number. */
+  attachChannel(tenantId: string, input: ChannelInput): Promise<Channel>;
+  /** Stops routing for a number (status inactive); conversation history stays. */
+  detachChannel(phoneNumberId: string): Promise<void>;
+}
+
+/** A WhatsApp number the platform owns; assigned to at most one tenant at a time. */
+export interface PooledNumber extends ChannelInput {
+  id: string;
+  label?: string;
+  tenantId: string | null;
+  createdAt: string;
+}
+
+export interface NumberPoolRepository {
+  list(): Promise<PooledNumber[]>;
+  findById(id: string): Promise<PooledNumber | null>;
+  create(input: ChannelInput & { label?: string }): Promise<PooledNumber>;
+  setTenant(id: string, tenantId: string | null): Promise<PooledNumber | null>;
 }
 
 export type UserRole = "owner" | "staff";
@@ -24,6 +62,8 @@ export interface UserRecord {
   role: UserRole;
   passwordHash: string;
   isActive: boolean;
+  /** Platform operator: tenants and the number pool at /admin. */
+  isPlatformAdmin: boolean;
 }
 
 export interface CreateUserInput {
@@ -32,6 +72,7 @@ export interface CreateUserInput {
   name: string;
   role: UserRole;
   passwordHash: string;
+  isPlatformAdmin?: boolean;
 }
 
 /** Merchant staff accounts for the dashboard. Emails are unique across tenants. */
