@@ -310,5 +310,7 @@ export interface OutboxStore {
   markFailed(id: string, error: string, retryAt: Date | null): Promise<void>;
   /** Returns events stuck in "processing" since before `olderThan` to "pending"; resolves to the count. */
   requeueStale(olderThan: Date): Promise<number>;
+  /** Queues events to be dispatched no earlier than `at` (reminders). Ids already present are left alone. */
+  schedule(events: DomainEvent[], at: Date): Promise<void>;
   counts(): Promise<Record<string, number>>;
 }

@@ -3,7 +3,7 @@ import { localTime } from "@ordr/domain";
 import { describe, expect, it } from "vitest";
 import { demoSalonCatalog } from "../actions/demo-salon";
 import { InMemoryTenantRepository } from "../adapters/memory";
-import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryResourceRepository } from "../adapters/memory-catalog";
+import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "../adapters/memory-catalog";
 import { seedTenantFromConfig } from "../app.module";
 import { loadConfig } from "../config";
 import { OrderService } from "../orders/order.service";
@@ -19,10 +19,11 @@ function setup() {
   const demo = demoSalonCatalog(seed.tenant.id);
   const orders = new InMemoryOrderRepository();
   const bus = new InMemoryEventBus();
-  const orderService = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus);
+  const outbox = new InMemoryOutboxStore();
+  const orderService = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus, outbox);
   const scheduling = new SchedulingService(new InMemoryCatalogRepository(demo.categories, demo.offerings), new InMemoryResourceRepository(demo.resources), orders, { get: getBlueprint }, orderService);
   scheduling.now = () => NOW;
-  return { scheduling, orders, bus, tenantId: seed.tenant.id };
+  return { scheduling, orders, bus, outbox, tenantId: seed.tenant.id };
 }
 
 const times = (slots: Array<{ startAt: Date; resource: { id: string } }>) => slots.map((s) => `${localTime(s.startAt, TZ)}@${s.resource.id}`);

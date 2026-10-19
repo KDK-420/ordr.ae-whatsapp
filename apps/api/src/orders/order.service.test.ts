@@ -2,7 +2,7 @@ import { getBlueprint } from "@ordr/blueprints";
 import { addItem, emptyCart, InvalidTransitionError } from "@ordr/domain";
 import { describe, expect, it } from "vitest";
 import { InMemoryTenantRepository } from "../adapters/memory";
-import { InMemoryEventBus, InMemoryOrderRepository } from "../adapters/memory-catalog";
+import { InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore } from "../adapters/memory-catalog";
 import { seedTenantFromConfig } from "../app.module";
 import { loadConfig } from "../config";
 import { OrderError, OrderService } from "./order.service";
@@ -13,7 +13,7 @@ function setup(tenantSettings: Record<string, unknown> = {}) {
   seed.tenant.settings = tenantSettings;
   const orders = new InMemoryOrderRepository();
   const bus = new InMemoryEventBus();
-  const service = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus);
+  const service = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus, new InMemoryOutboxStore());
   const cart = addItem(emptyCart("AED"), { offeringId: "it_fries", title: "Fries", quantity: 2, unitPriceMinor: 1200, modifiers: [] });
   return { service, orders, bus, cart, tenantId: seed.tenant.id };
 }

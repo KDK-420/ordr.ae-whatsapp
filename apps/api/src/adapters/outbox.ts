@@ -88,6 +88,11 @@ export class PrismaOutboxStore implements OutboxStore {
     });
   }
 
+  async schedule(events: DomainEvent[], at: Date): Promise<void> {
+    if (events.length === 0) return;
+    await this.prisma.outboxEvent.createMany({ data: events.map((e) => ({ ...toOutboxRow(e), nextAttemptAt: at })), skipDuplicates: true });
+  }
+
   async requeueStale(olderThan: Date): Promise<number> {
     const res = await this.prisma.outboxEvent.updateMany({ where: { status: "processing", claimedAt: { lt: olderThan } }, data: { status: "pending" } });
     return res.count;

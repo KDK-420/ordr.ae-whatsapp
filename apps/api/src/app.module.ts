@@ -40,6 +40,7 @@ import { MerchantUsersController } from "./merchant/users.controller";
 import { MerchantOrdersService } from "./merchant/merchant-orders.service";
 import { MerchantOrdersController } from "./merchant/orders.controller";
 import { MerchantTemplatesController } from "./merchant/templates.controller";
+import { BookingReminderNotifier } from "./orders/booking-reminder";
 import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
 import { SchedulingService } from "./scheduling/scheduling.service";
@@ -170,6 +171,7 @@ export class AppModule {
         },
       },
       OrderNotifier,
+      BookingReminderNotifier,
       {
         provide: TOKENS.TemplateApi,
         useFactory: () =>

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { addItem, type Cart, type DeliveryLocation, type DomainEvent, emptyCart, nextState, type Offering, type Order, type Quote, quote as buildQuote, type Tenant } from "@ordr/domain";
-import type { BlueprintRegistry, EventBus, OrderRepository, TenantRepository } from "../ports";
+import type { BlueprintRegistry, EventBus, OrderRepository, OutboxStore, TenantRepository } from "../ports";
+import { BOOKING_REMINDER_EVENT, type BookingReminderPayload, reminderEventId } from "./booking-reminder";
 import { TOKENS } from "../tokens";
 
 export interface OrderSettings {
@@ -59,6 +60,7 @@ export class OrderService {
     @Inject(TOKENS.TenantRepository) private readonly tenants: TenantRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(TOKENS.EventBus) private readonly bus: EventBus,
+    @Inject(TOKENS.OutboxStore) private readonly outbox: OutboxStore,
   ) {}
 
   /** Blueprint defaults overridden by tenant settings. */
@@ -153,6 +155,7 @@ export class OrderService {
       placed,
     );
     await this.publish(placed(order));
+    await this.scheduleReminders(order, blueprint.settings, s.tenant.settings);
     this.logger.log(`booking #${order.number} placed for tenant ${order.tenantId} at ${input.startAt.toISOString()} on ${input.resourceId}`);
     return order;
   }
@@ -175,6 +178,30 @@ export class OrderService {
 
   latestForCustomer(tenantId: string, customerId: string): Promise<Order | null> {
     return this.orders.latestForCustomer(tenantId, customerId);
+  }
+
+  /**
+   * Queues one outbox event per reminder lead time (blueprint or tenant `reminderMinutes`, e.g.
+   * [1440, 120]) to fire that long before the appointment. Lead times already in the past are skipped.
+   */
+  private async scheduleReminders(order: Order, ...settings: Array<Record<string, unknown>>): Promise<void> {
+    if (!order.scheduledAt) return;
+    // The last settings object wins (tenant over blueprint).
+    const configured = settings.map((s) => s.reminderMinutes).filter((v): v is unknown[] => Array.isArray(v)).at(-1);
+    const leads = (configured ?? [1440, 120]).filter((m): m is number => typeof m === "number" && m > 0);
+    const startsAt = new Date(order.scheduledAt).getTime();
+    const now = Date.now();
+    for (const leadMinutes of leads) {
+      const at = new Date(startsAt - leadMinutes * 60_000);
+      if (at.getTime() <= now + 60_000) continue;
+      const payload: BookingReminderPayload = { leadMinutes, scheduledAt: order.scheduledAt };
+      const event = this.event(reminderEventId(order.id, leadMinutes), BOOKING_REMINDER_EVENT, order, { ...payload });
+      try {
+        await this.outbox.schedule([event], at);
+      } catch (err) {
+        this.logger.error(`could not schedule the ${leadMinutes} min reminder for booking #${order.number}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
 
   private event(id: string, type: string, order: Order, payload: Record<string, unknown>): DomainEvent {

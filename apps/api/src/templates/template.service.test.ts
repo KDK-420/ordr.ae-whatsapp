@@ -19,13 +19,18 @@ describe("TemplateService", () => {
     const { service, api, tenantId, wabaId } = setup();
     api.statusForNew = "PENDING";
     const first = await service.submitDefaults(tenantId, ["en", "ar", "fr"]);
-    expect(first.map((t) => `${t.name}/${t.language}:${t.status}`)).toEqual(["ordr_order_status/en:pending", "ordr_order_status/ar:pending"]);
-    expect(api.created.map((c) => c.wabaId)).toEqual([wabaId, wabaId]);
+    expect(first.map((t) => `${t.name}/${t.language}:${t.status}`)).toEqual([
+      "ordr_order_status/en:pending",
+      "ordr_order_status/ar:pending",
+      "ordr_booking_reminder/en:pending",
+      "ordr_booking_reminder/ar:pending",
+    ]);
+    expect(api.created.map((c) => c.wabaId)).toEqual([wabaId, wabaId, wabaId, wabaId]);
     expect(api.created[0]!.definition.body).toContain("{{1}}");
 
     // Submitting again does not resubmit templates already under review.
     await service.submitDefaults(tenantId, ["en", "ar"]);
-    expect(api.created).toHaveLength(2);
+    expect(api.created).toHaveLength(4);
   });
 
   it("syncs review statuses from Meta and then serves approved templates with fallbacks", async () => {

@@ -5,6 +5,7 @@ import type { MessageTemplateRecord, TemplateApi, TemplateRepository, TenantRepo
 import { TOKENS } from "../tokens";
 
 export const ORDER_STATUS_PURPOSE = "order_status";
+export const BOOKING_REMINDER_PURPOSE = "booking_reminder";
 
 /** Templates every tenant needs. Bodies use Meta's positional placeholders. */
 export const DEFAULT_TEMPLATES = [
@@ -18,6 +19,17 @@ export const DEFAULT_TEMPLATES = [
       ar: "الطلب رقم {{1}} حالته: {{2}}. الإجمالي {{3}}. راسلنا هنا إذا كان لديك أي سؤال.",
     } as Record<string, string>,
     examples: ["42", "confirmed", "AED 34.00"],
+  },
+  {
+    purpose: BOOKING_REMINDER_PURPOSE,
+    name: "ordr_booking_reminder",
+    category: "UTILITY",
+    parameters: ["tenant", "when"],
+    bodies: {
+      en: "Reminder: your booking at {{1}} is on {{2}}. Reply here if you need to change it.",
+      ar: "تذكير: حجزك في {{1}} في {{2}}. راسلنا هنا إذا أردت تغييره.",
+    } as Record<string, string>,
+    examples: ["Demo Salon", "Tue 20 Oct, 11:00"],
   },
 ];
 

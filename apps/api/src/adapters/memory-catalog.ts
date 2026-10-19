@@ -279,6 +279,10 @@ export class InMemoryOutboxStore implements OutboxStore {
     }
   }
 
+  async schedule(events: DomainEvent[], at: Date): Promise<void> {
+    for (const e of events) this.add(e, at);
+  }
+
   async requeueStale(olderThan: Date): Promise<number> {
     let n = 0;
     for (const r of this.rows) {
