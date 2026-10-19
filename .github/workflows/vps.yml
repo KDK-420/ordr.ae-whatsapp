@@ -47,8 +47,8 @@ on:
       seed:
         description: Reseed the demo tenant as this vertical (no = leave data alone; setup mode always seeds)
         type: choice
-        options: [no, restaurant, salon]
-        default: no
+        options: ["no", restaurant, salon]
+        default: "no"
 
 concurrency:
   group: vps-${{ inputs.host || '200.141.6.31' }}
