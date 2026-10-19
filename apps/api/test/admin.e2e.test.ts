@@ -63,26 +63,26 @@ describe("platform admin: tenants and the number pool", () => {
   it("lets a platform admin add numbers, create a salon with an owner and a number, and route its messages", async () => {
     const staff = await login(STAFF.email, STAFF.password);
     expect(staff.user.platformAdmin).toBe(false);
-    expect((await request(server()).get("/admin/overview").set("authorization", staff.auth)).status).toBe(403);
+    expect((await request(server()).get("/merchant/admin/overview").set("authorization", staff.auth)).status).toBe(403);
 
     const { auth, user } = await login(ADMIN.email, ADMIN.password);
     expect(user.platformAdmin).toBe(true);
-    const before = await request(server()).get("/admin/overview").set("authorization", auth);
+    const before = await request(server()).get("/merchant/admin/overview").set("authorization", auth);
     expect(before.status).toBe(200);
     expect(before.body.tenants.map((t: { tenant: { slug: string } }) => t.tenant.slug)).toEqual(["seed"]);
     expect(before.body.verticals.map((v: { id: string }) => v.id).sort()).toEqual(["restaurant", "salon"]);
 
     const added = await request(server())
-      .post("/admin/numbers")
+      .post("/merchant/admin/numbers")
       .set("authorization", auth)
       .send({ phoneNumberId: "300000000000001", wabaId: "400000000000001", displayPhone: "+971 50 111 1111", accessToken: "EAAB-a-long-enough-system-user-token", label: "SIM 1" });
     expect(added.status).toBe(201);
     expect(added.body).toMatchObject({ phoneNumberId: "300000000000001", tenantId: null, label: "SIM 1" });
     expect(added.body.accessToken).toBeUndefined();
-    expect((await request(server()).post("/admin/numbers").set("authorization", auth).send({ ...added.body, accessToken: "EAAB-a-long-enough-system-user-token" })).status).toBe(409);
+    expect((await request(server()).post("/merchant/admin/numbers").set("authorization", auth).send({ ...added.body, accessToken: "EAAB-a-long-enough-system-user-token" })).status).toBe(409);
 
     const created = await request(server())
-      .post("/admin/tenants")
+      .post("/merchant/admin/tenants")
       .set("authorization", auth)
       .send({ name: "Glow Salon", blueprintId: "salon", ownerEmail: "Owner@Glow.test", ownerName: "Lina", numberId: added.body.id });
     expect(created.status).toBe(201);
@@ -91,10 +91,10 @@ describe("platform admin: tenants and the number pool", () => {
     expect(created.body.channel).toMatchObject({ phoneNumberId: "300000000000001", displayPhone: "+971 50 111 1111" });
     const tempPassword = created.body.owner.temporaryPassword as string;
     expect(tempPassword).toHaveLength(14);
-    expect((await request(server()).post("/admin/tenants").set("authorization", auth).send({ name: "Glow Salon", blueprintId: "salon", ownerEmail: "owner@glow.test", ownerName: "Lina" })).status).toBe(409);
-    expect((await request(server()).post("/admin/tenants").set("authorization", auth).send({ name: "X", blueprintId: "salon", ownerEmail: "x@x.test", ownerName: "X" })).status).toBe(400);
+    expect((await request(server()).post("/merchant/admin/tenants").set("authorization", auth).send({ name: "Glow Salon", blueprintId: "salon", ownerEmail: "owner@glow.test", ownerName: "Lina" })).status).toBe(409);
+    expect((await request(server()).post("/merchant/admin/tenants").set("authorization", auth).send({ name: "X", blueprintId: "salon", ownerEmail: "x@x.test", ownerName: "X" })).status).toBe(400);
 
-    const after = await request(server()).get("/admin/overview").set("authorization", auth);
+    const after = await request(server()).get("/merchant/admin/overview").set("authorization", auth);
     expect(after.body.tenants[0]).toMatchObject({ tenant: { slug: "glow-salon" }, channel: { displayPhone: "+971 50 111 1111" }, owners: [{ email: "owner@glow.test" }] });
     expect(after.body.numbers[0].tenantId).toBe(created.body.tenant.id);
 
@@ -115,14 +115,14 @@ describe("platform admin: tenants and the number pool", () => {
     expect(welcome && welcome.type === "interactive" && "body" in welcome.interactive ? welcome.interactive.body.text : welcome).toBe("Welcome to Glow Salon! What would you like to do?");
 
     // Releasing the number stops routing; assigning it to another tenant moves it.
-    expect((await request(server()).post(`/admin/numbers/${added.body.id}/release`).set("authorization", auth)).body.tenantId).toBeNull();
+    expect((await request(server()).post(`/merchant/admin/numbers/${added.body.id}/release`).set("authorization", auth)).body.tenantId).toBeNull();
     for (const ev of parseWebhook(fixtures.textMessageWebhook("hi again", { phoneNumberId: "300000000000001", from: "971500009999", profileName: "Noor" }))) await conversations.handleEvent(ev);
     expect(sender.to("971500009999")).toHaveLength(1);
-    const moved = await request(server()).post(`/admin/numbers/${added.body.id}/assign`).set("authorization", auth).send({ tenantId: "tenant_seed" });
+    const moved = await request(server()).post(`/merchant/admin/numbers/${added.body.id}/assign`).set("authorization", auth).send({ tenantId: "tenant_seed" });
     expect(moved.body.tenantId).toBe("tenant_seed");
-    expect((await request(server()).post("/admin/numbers/nope/assign").set("authorization", auth).send({ tenantId: "tenant_seed" })).status).toBe(404);
+    expect((await request(server()).post("/merchant/admin/numbers/nope/assign").set("authorization", auth).send({ tenantId: "tenant_seed" })).status).toBe(404);
 
-    const reset = await request(server()).post(`/admin/tenants/${created.body.tenant.id}/owners/${created.body.owner.id}/reset-password`).set("authorization", auth);
+    const reset = await request(server()).post(`/merchant/admin/tenants/${created.body.tenant.id}/owners/${created.body.owner.id}/reset-password`).set("authorization", auth);
     expect(reset.body).toMatchObject({ email: "owner@glow.test" });
     await login("owner@glow.test", reset.body.temporaryPassword);
   });

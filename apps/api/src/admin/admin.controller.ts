@@ -46,7 +46,7 @@ function parse<T>(schema: z.ZodType<T>, body: unknown): T {
 }
 
 /** Platform operator console: tenants and the WhatsApp number pool. */
-@Controller("admin")
+@Controller("merchant/admin")
 @UseGuards(AuthGuard)
 export class AdminController {
   constructor(@Inject(AdminService) private readonly admin: AdminService) {}

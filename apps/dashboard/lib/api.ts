@@ -261,15 +261,15 @@ export interface CreateTenantResult {
   owner: { id: string; email: string; temporaryPassword: string };
   channel: { id: string; displayPhone: string } | null;
 }
-export const getAdminOverview = () => call<AdminOverview>("/admin/overview");
+export const getAdminOverview = () => call<AdminOverview>("/merchant/admin/overview");
 export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean }) =>
-  call<CreateTenantResult>("/admin/tenants", { method: "POST", body: JSON.stringify(input) });
+  call<CreateTenantResult>("/merchant/admin/tenants", { method: "POST", body: JSON.stringify(input) });
 export const resetTenantOwnerPassword = (tenantId: string, userId: string) =>
-  call<{ email: string; temporaryPassword: string }>(`/admin/tenants/${encodeURIComponent(tenantId)}/owners/${encodeURIComponent(userId)}/reset-password`, { method: "POST" });
+  call<{ email: string; temporaryPassword: string }>(`/merchant/admin/tenants/${encodeURIComponent(tenantId)}/owners/${encodeURIComponent(userId)}/reset-password`, { method: "POST" });
 export const addPooledNumber = (input: { phoneNumberId: string; wabaId: string; displayPhone: string; accessToken: string; label?: string }) =>
-  call<PooledNumber>("/admin/numbers", { method: "POST", body: JSON.stringify(input) });
-export const assignPooledNumber = (id: string, tenantId: string) => call<PooledNumber>(`/admin/numbers/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ tenantId }) });
-export const releasePooledNumber = (id: string) => call<PooledNumber>(`/admin/numbers/${encodeURIComponent(id)}/release`, { method: "POST" });
+  call<PooledNumber>("/merchant/admin/numbers", { method: "POST", body: JSON.stringify(input) });
+export const assignPooledNumber = (id: string, tenantId: string) => call<PooledNumber>(`/merchant/admin/numbers/${encodeURIComponent(id)}/assign`, { method: "POST", body: JSON.stringify({ tenantId }) });
+export const releasePooledNumber = (id: string) => call<PooledNumber>(`/merchant/admin/numbers/${encodeURIComponent(id)}/release`, { method: "POST" });
 
 export interface DemoCustomer {
   waId: string;
