@@ -128,7 +128,10 @@ export function Catalog() {
                   <td className="px-4 py-3" dir="rtl">
                     {o.name.ar ?? ""}
                   </td>
-                  <td className="px-4 py-3 text-right">{money(o.priceMinor, o.currency)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {money(o.priceMinor, o.currency)}
+                    {o.durationMinutes ? <span className="ml-1 text-xs text-slate-400">· {o.durationMinutes} min</span> : null}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{o.modifierGroups.length ? o.modifierGroups.map((g) => label(g.name)).join(", ") : "–"}</td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={o.isActive} onChange={() => void toggleOffering(o)} aria-label="Active" />
@@ -270,6 +273,8 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
   const [name, setName] = useState<LocalizedText>(item?.name ?? {});
   const [description, setDescription] = useState<LocalizedText>(item?.description ?? {});
   const [price, setPrice] = useState(item ? fromMinor(item.priceMinor) : "");
+  const [type, setType] = useState<Offering["type"]>(item?.type ?? "product");
+  const [duration, setDuration] = useState(item?.durationMinutes ? String(item.durationMinutes) : "");
   const [categoryId, setCategoryId] = useState<string>(item?.categoryId ?? defaultCategoryId ?? "");
   const [sortOrder, setSortOrder] = useState(String(item?.sortOrder ?? 0));
   const [isActive, setIsActive] = useState(item?.isActive ?? true);
@@ -293,6 +298,8 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
         name,
         description: Object.values(description).some(Boolean) ? description : null,
         priceMinor: toMinor(price),
+        type,
+        durationMinutes: type === "service" ? Number(duration) || null : null,
         categoryId: categoryId || null,
         sortOrder: Number(sortOrder) || 0,
         isActive,
@@ -329,6 +336,19 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
           </div>
         </label>
         <div className="grid grid-cols-3 gap-3">
+          <label className="block text-sm font-medium">
+            Kind
+            <select value={type} onChange={(e) => setType(e.target.value as Offering["type"])} className={`${inputCls} mt-1`}>
+              <option value="product">Product</option>
+              <option value="service">Service</option>
+            </select>
+          </label>
+          {type === "service" ? (
+            <label className="block text-sm font-medium">
+              Duration (min)
+              <input type="number" min={5} step={5} required value={duration} onChange={(e) => setDuration(e.target.value)} className={`${inputCls} mt-1`} />
+            </label>
+          ) : null}
           <label className="block text-sm font-medium">
             Price (AED)
             <input type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} mt-1`} />

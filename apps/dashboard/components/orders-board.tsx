@@ -6,13 +6,33 @@ import { age, DESTRUCTIVE_EVENTS, EVENT_LABEL, FULFILLMENT_LABEL, label, money, 
 
 const POLL_MS = 8000;
 
-/** Board columns in kitchen order. Any status the blueprint adds later lands in "Other". */
-const COLUMNS: Array<{ key: string; title: string; statuses: string[] }> = [
+interface Column {
+  key: string;
+  title: string;
+  statuses: string[];
+}
+
+/** Kitchen layout for the restaurant states; anything else is laid out from the state machine. */
+const RESTAURANT_COLUMNS: Column[] = [
   { key: "new", title: "New", statuses: ["placed"] },
   { key: "progress", title: "In progress", statuses: ["accepted", "preparing"] },
   { key: "ready", title: "Ready", statuses: ["ready", "out_for_delivery"] },
   { key: "done", title: "Done (24 h)", statuses: ["delivered", "completed", "cancelled", "rejected"] },
 ];
+
+/** Generic layout: the initial state, the other active states in machine order, then terminal ones. */
+function columnsFor(states: StateMachine | null): Column[] {
+  if (!states) return RESTAURANT_COLUMNS;
+  const known = new Set(RESTAURANT_COLUMNS.flatMap((c) => c.statuses));
+  if (states.states.every((s) => known.has(s))) return RESTAURANT_COLUMNS;
+  const terminal = new Set(states.terminal);
+  const active = states.states.filter((s) => s !== states.initial && !terminal.has(s));
+  return [
+    { key: "new", title: label(STATUS_LABEL, states.initial), statuses: [states.initial] },
+    ...active.map((s) => ({ key: s, title: label(STATUS_LABEL, s), statuses: [s] })),
+    { key: "done", title: "Done (24 h)", statuses: states.terminal },
+  ];
+}
 
 export function OrdersBoard() {
   const [orders, setOrders] = useState<OrderView[]>([]);
@@ -61,11 +81,12 @@ export function OrdersBoard() {
   }
 
   const columns = useMemo(() => {
-    const known = new Set(COLUMNS.flatMap((c) => c.statuses));
+    const layout = columnsFor(states);
+    const known = new Set(layout.flatMap((c) => c.statuses));
     const other = orders.filter((o) => !known.has(o.status));
-    const cols = COLUMNS.map((c) => ({ ...c, orders: orders.filter((o) => c.statuses.includes(o.status)) }));
+    const cols = layout.map((c) => ({ ...c, orders: orders.filter((o) => c.statuses.includes(o.status)) }));
     return other.length ? [...cols, { key: "other", title: "Other", statuses: [], orders: other }] : cols;
-  }, [orders]);
+  }, [orders, states]);
 
   const current = selected ? orders.find((o) => o.id === selected) ?? null : null;
   void tick; // re-render so the "x min" ages move

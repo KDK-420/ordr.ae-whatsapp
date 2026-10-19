@@ -5,8 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { logout, me, type Me } from "@/lib/api";
 
-const NAV = [
+/** `module` hides the entry unless the tenant's blueprint lists that dashboard module. */
+const NAV: Array<{ href: string; label: string; module?: string }> = [
   { href: "/orders", label: "Orders" },
+  { href: "/calendar", label: "Calendar", module: "calendar" },
   { href: "/inbox", label: "Inbox" },
   { href: "/catalog", label: "Catalog" },
   { href: "/settings", label: "Settings" },
@@ -39,7 +41,7 @@ export function Shell({ children }: { children: ReactNode }) {
               ordr<span className="text-brand">.ae</span>
             </Link>
             <nav className="flex gap-1 text-sm">
-              {NAV.map((item) => {
+              {NAV.filter((item) => !item.module || session?.tenant?.modules.includes(item.module)).map((item) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <Link

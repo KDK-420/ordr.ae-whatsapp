@@ -12,6 +12,10 @@ export interface OrderItem {
 export interface OrderView {
   id: string;
   number: number;
+  kind?: "order" | "booking";
+  scheduledAt?: string;
+  resourceId?: string;
+  durationMinutes?: number;
   status: string;
   fulfillmentType: string;
   source: string;
@@ -46,7 +50,7 @@ export interface OrderList {
 
 export interface Me {
   user: { id: string; email: string; name: string; role: string; tenantId: string };
-  tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string } | null;
+  tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; modules: string[] } | null;
 }
 
 export class ApiError extends Error {
@@ -160,6 +164,7 @@ export interface Offering {
   description?: LocalizedText | null;
   priceMinor: number;
   currency: string;
+  durationMinutes?: number | null;
   sortOrder: number;
   isActive: boolean;
   modifierGroups: ModifierGroup[];
@@ -206,6 +211,32 @@ export const draftReply = (id: string, instruction?: string) =>
   call<{ text: string }>(`/merchant/conversations/${encodeURIComponent(id)}/draft`, { method: "POST", body: JSON.stringify({ instruction }) });
 export const setConversationStatus = (id: string, status: ConversationStatus) =>
   call<ConversationView>(`/merchant/conversations/${encodeURIComponent(id)}/status`, { method: "POST", body: JSON.stringify({ status }) });
+
+export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+export const WEEKDAYS: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+export type WeeklyHours = Partial<Record<Weekday, Array<{ start: string; end: string }>>>;
+export interface Resource {
+  id: string;
+  type: "staff" | "room" | "asset";
+  name: LocalizedText;
+  hours: WeeklyHours;
+  skills: string[];
+  sortOrder: number;
+  isActive: boolean;
+}
+export type ResourceInput = Partial<Omit<Resource, "id" | "name">> & { name: LocalizedText };
+export const listResources = () => call<{ resources: Resource[] }>("/merchant/resources");
+export const createResource = (input: ResourceInput) => call<Resource>("/merchant/resources", { method: "POST", body: JSON.stringify(input) });
+export const updateResource = (id: string, patch: Partial<ResourceInput>) =>
+  call<Resource>(`/merchant/resources/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export interface BookingList {
+  bookings: OrderView[];
+  resources: Resource[];
+  states: StateMachine;
+  timezone: string;
+}
+export const listBookings = (from: string, to: string) => call<BookingList>(`/merchant/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
 export interface DemoCustomer {
   waId: string;

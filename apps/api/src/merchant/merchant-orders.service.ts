@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { type Customer, isTerminal, type Order, type StateMachine } from "@ordr/domain";
+import { type Customer, isTerminal, type Order, type Resource, type StateMachine } from "@ordr/domain";
 import { OrderService } from "../orders/order.service";
-import type { BlueprintRegistry, ConversationRepository, OrderRepository } from "../ports";
+import type { BlueprintRegistry, ConversationRepository, OrderRepository, ResourceRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
 export type OrderScope = "board" | "active" | "all";
@@ -19,6 +19,13 @@ export interface OrderListResult {
   states: StateMachine;
 }
 
+export interface BookingListResult {
+  bookings: OrderView[];
+  resources: Resource[];
+  states: StateMachine;
+  timezone: string;
+}
+
 /** How long finished orders stay on the board. */
 const DONE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -28,8 +35,17 @@ export class MerchantOrdersService {
     @Inject(TOKENS.OrderRepository) private readonly orders: OrderRepository,
     @Inject(TOKENS.ConversationRepository) private readonly conversations: ConversationRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
+    @Inject(TOKENS.ResourceRepository) private readonly resources: ResourceRepository,
     @Inject(OrderService) private readonly orderService: OrderService,
   ) {}
+
+  /** Every booking scheduled in [from, to), any status, plus the resources to lay them out by. */
+  async bookings(tenantId: string, from: Date, to: Date): Promise<BookingListResult> {
+    const settings = await this.orderService.settingsFor(tenantId);
+    const states = await this.machine(tenantId);
+    const [rows, resources] = await Promise.all([this.orders.listBookings(tenantId, { from, to }), this.resources.list(tenantId, { includeInactive: true })]);
+    return { bookings: await this.present(rows, states), resources, states, timezone: settings.tenant.timezone || "Asia/Dubai" };
+  }
 
   async list(tenantId: string, scope: OrderScope = "board", limit = 100): Promise<OrderListResult> {
     const states = await this.machine(tenantId);

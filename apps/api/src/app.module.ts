@@ -32,7 +32,9 @@ import { InboundQueue } from "./conversation/inbound-queue";
 import { OutboxRelay } from "./events/outbox-relay";
 import { HealthController } from "./health.controller";
 import { InboxService } from "./inbox/inbox.service";
+import { MerchantBookingsController } from "./merchant/bookings.controller";
 import { MerchantCatalogController } from "./merchant/catalog.controller";
+import { MerchantResourcesController } from "./merchant/resources.controller";
 import { MerchantConversationsController } from "./merchant/conversations.controller";
 import { MerchantUsersController } from "./merchant/users.controller";
 import { MerchantOrdersService } from "./merchant/merchant-orders.service";
@@ -262,6 +264,8 @@ export class AppModule {
               MerchantTemplatesController,
               MerchantConversationsController,
               MerchantSimulatorController,
+              MerchantBookingsController,
+              MerchantResourcesController,
               MerchantCatalogController,
               MerchantUsersController,
             ]

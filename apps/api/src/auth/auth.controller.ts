@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, Inject, Post, Req
 import type { Request, Response } from "express";
 import { z } from "zod";
 import type { AppConfig } from "../config";
-import type { TenantRepository } from "../ports";
+import type { BlueprintRegistry, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import { AuthGuard, CurrentUser, SESSION_COOKIE } from "./auth.guard";
 import { AuthService, type AuthUser } from "./auth.service";
@@ -17,6 +17,7 @@ export class AuthController {
     @Inject(TOKENS.Config) private readonly config: AppConfig,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(TOKENS.TenantRepository) private readonly tenants: TenantRepository,
+    @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
   ) {}
 
   /** Returns the token in the body and also sets it as an httpOnly cookie for the dashboard. */
@@ -46,10 +47,20 @@ export class AuthController {
   @UseGuards(AuthGuard)
   async me(@CurrentUser() user: AuthUser) {
     const tenant = await this.tenants.findById(user.tenantId);
+    const blueprint = tenant ? this.blueprints.get(tenant.blueprintId) : undefined;
     return {
       user,
       tenant: tenant
-        ? { id: tenant.id, name: tenant.name, slug: tenant.slug, blueprintId: tenant.blueprintId, defaultLanguage: tenant.defaultLanguage, timezone: tenant.timezone }
+        ? {
+            id: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            blueprintId: tenant.blueprintId,
+            defaultLanguage: tenant.defaultLanguage,
+            timezone: tenant.timezone,
+            /** Dashboard sections this vertical uses, from the blueprint (e.g. "calendar", "resources"). */
+            modules: blueprint?.dashboardModules ?? [],
+          }
         : null,
     };
   }

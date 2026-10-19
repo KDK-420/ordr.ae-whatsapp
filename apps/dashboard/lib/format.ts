@@ -25,6 +25,11 @@ export const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
   rejected: "Rejected",
+  requested: "Requested",
+  confirmed: "Confirmed",
+  checked_in: "Checked in",
+  in_progress: "In progress",
+  no_show: "No show",
 };
 
 export const EVENT_LABEL: Record<string, string> = {
@@ -36,11 +41,28 @@ export const EVENT_LABEL: Record<string, string> = {
   dispatch: "Out for delivery",
   deliver: "Delivered",
   complete: "Complete",
+  confirm: "Confirm",
+  check_in: "Check in",
+  no_show: "No show",
 };
 
 /** Events that end an order; rendered as secondary buttons so they are harder to hit by accident. */
-export const DESTRUCTIVE_EVENTS = new Set(["reject", "cancel"]);
+export const DESTRUCTIVE_EVENTS = new Set(["reject", "cancel", "no_show"]);
 
-export const FULFILLMENT_LABEL: Record<string, string> = { delivery: "Delivery", pickup: "Pickup", dine_in: "Dine in" };
+export const FULFILLMENT_LABEL: Record<string, string> = { delivery: "Delivery", pickup: "Pickup", dine_in: "Dine in", in_store: "In store", at_home: "At home" };
+
+/** "Tue 20 Oct, 11:00" in the tenant's zone. */
+export function when(iso: string, timeZone: string): string {
+  const at = new Date(iso);
+  const day = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone }).format(at);
+  return `${day}, ${timeOf(iso, timeZone)}`;
+}
+
+export function timeOf(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(new Date(iso));
+}
 
 export const label = (map: Record<string, string>, key: string): string => map[key] ?? key.replace(/_/g, " ");
+
+/** English first, then Arabic, then whatever the text has. */
+export const localized = (t: Record<string, string> | null | undefined): string => t?.en || t?.ar || Object.values(t ?? {})[0] || "";
