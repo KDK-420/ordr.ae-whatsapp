@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Channel, Tenant } from "@ordr/domain";
-import { demoCatalog } from "../actions/demo-catalog";
-import { demoSalonCatalog } from "../actions/demo-salon";
+import { demoDataFor } from "../actions/demo";
 import { hashPassword } from "../auth/password";
 import { temporaryPassword } from "../merchant/users.controller";
 import type { BlueprintRegistry, CatalogRepository, ChannelInput, NumberPoolRepository, PooledNumber, ResourceRepository, TenantRepository, UserRecord, UserRepository } from "../ports";
@@ -139,7 +138,7 @@ export class AdminService {
 
   /** The same demo data the seed loads, with fresh ids so several tenants can have it. */
   private async seedDemo(tenant: Tenant): Promise<void> {
-    const demo = tenant.blueprintId === "salon" ? demoSalonCatalog(tenant.id) : { ...demoCatalog(tenant.id), resources: [] };
+    const demo = demoDataFor(tenant.blueprintId, tenant.id);
     const categoryIds = new Map<string, string>();
     for (const c of demo.categories) {
       const created = await this.catalog.createCategory(tenant.id, { name: c.name, sortOrder: c.sortOrder, isActive: c.isActive });
@@ -155,6 +154,8 @@ export class AdminService {
         priceMinor: o.priceMinor,
         currency: o.currency,
         durationMinutes: o.durationMinutes ?? null,
+        stock: o.stock ?? null,
+        variants: (o.variants ?? []).map((v) => ({ name: v.name, sku: v.sku, priceMinor: v.priceMinor, stock: v.stock, sortOrder: v.sortOrder, isActive: v.isActive })),
         sortOrder: o.sortOrder,
         isActive: o.isActive,
         modifierGroups: o.modifierGroups.map((g) => ({ name: g.name, minSelect: g.minSelect, maxSelect: g.maxSelect, sortOrder: g.sortOrder, options: g.options.map((op) => ({ name: op.name, priceDeltaMinor: op.priceDeltaMinor, sortOrder: op.sortOrder, isActive: op.isActive })) })),

@@ -1,5 +1,6 @@
 import type { Category, Channel, Customer, DomainEvent, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus, DeliveryLocation, Tenant } from "@ordr/domain";
 import type { LocalizedText, Resource, WeeklyHours } from "@ordr/domain";
+import type { PaymentStatus as OrderPaymentStatus } from "@ordr/domain";
 import type { Blueprint, SessionState } from "@ordr/flow-schema";
 
 export interface TenantContext {
@@ -21,6 +22,8 @@ export interface ChannelInput {
   wabaId: string;
   displayPhone: string;
   accessToken: string;
+  /** Defaults to meta_cloud. */
+  provider?: Channel["provider"];
 }
 
 export interface TenantRepository {
@@ -37,6 +40,7 @@ export interface TenantRepository {
   detachChannel(phoneNumberId: string): Promise<void>;
   /** Merges keys into tenant.settings (a null value removes the key). */
   updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null>;
+  findBySlug(slug: string): Promise<Tenant | null>;
 }
 
 /** A WhatsApp number the platform owns; assigned to at most one tenant at a time. */
@@ -173,6 +177,16 @@ export interface ModifierGroupInput {
   options: ModifierOptionInput[];
 }
 
+export interface VariantInput {
+  id?: string;
+  name: LocalizedText;
+  sku?: string | null;
+  priceMinor?: number | null;
+  stock?: number | null;
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
 export interface OfferingInput {
   categoryId?: string | null;
   type?: "product" | "service";
@@ -182,10 +196,14 @@ export interface OfferingInput {
   currency?: string;
   durationMinutes?: number | null;
   imageUrl?: string | null;
+  /** Units on hand for a product without variants; null means not tracked. */
+  stock?: number | null;
   sortOrder?: number;
   isActive?: boolean;
   /** When present, replaces every modifier group of the offering. */
   modifierGroups?: ModifierGroupInput[];
+  /** When present, replaces every variant (matched by id where given, so stock survives edits). */
+  variants?: VariantInput[];
 }
 
 export interface CatalogRepository {
@@ -201,6 +219,197 @@ export interface CatalogRepository {
   updateCategory(tenantId: string, categoryId: string, patch: Partial<CategoryInput>): Promise<Category | null>;
   createOffering(tenantId: string, input: OfferingInput): Promise<Offering>;
   updateOffering(tenantId: string, offeringId: string, patch: Partial<OfferingInput>): Promise<Offering | null>;
+  /**
+   * Atomically takes units off tracked stock for every line, or none of them. Untracked lines
+   * always succeed. Returns the shortages when it could not reserve.
+   */
+  reserveStock(tenantId: string, lines: StockLine[]): Promise<{ ok: true } | { ok: false; shortages: StockShortage[] }>;
+  releaseStock(tenantId: string, lines: StockLine[]): Promise<void>;
+}
+
+export interface StockLine {
+  offeringId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+export interface StockShortage extends StockLine {
+  available: number;
+}
+
+export interface CartLine {
+  offeringId: string;
+  variantId?: string;
+  title: string;
+  variantTitle?: string;
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+}
+
+export interface CartRecord {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  conversationId?: string;
+  status: "open" | "checked_out" | "expired";
+  currency: string;
+  items: CartLine[];
+  expiresAt?: string;
+  updatedAt: string;
+}
+
+export interface CartRepository {
+  findOpen(tenantId: string, customerId: string): Promise<CartRecord | null>;
+  create(tenantId: string, customerId: string, currency: string, conversationId?: string): Promise<CartRecord>;
+  /** Replaces items and status of an existing cart. */
+  save(cart: CartRecord): Promise<CartRecord>;
+}
+
+export type PaymentIntentStatus = "pending" | "paid" | "failed" | "expired";
+
+export interface PaymentIntentRecord {
+  id: string;
+  tenantId: string;
+  orderId: string;
+  provider: string;
+  amountMinor: number;
+  currency: string;
+  status: PaymentIntentStatus;
+  checkoutUrl: string;
+  providerRef?: string;
+  expiresAt: string;
+  paidAt?: string;
+}
+
+export interface PaymentIntentRepository {
+  create(input: Omit<PaymentIntentRecord, "status" | "paidAt">): Promise<PaymentIntentRecord>;
+  findById(id: string): Promise<PaymentIntentRecord | null>;
+  findByOrder(tenantId: string, orderId: string): Promise<PaymentIntentRecord | null>;
+  setStatus(id: string, status: PaymentIntentStatus, patch?: { providerRef?: string; paidAt?: Date }): Promise<PaymentIntentRecord | null>;
+  /** Pending intents whose deadline passed, for the expiry job. */
+  listExpired(now: Date, limit?: number): Promise<PaymentIntentRecord[]>;
+}
+
+/** Remembers provider webhook ids so a replay changes nothing. */
+export interface WebhookReceiptRepository {
+  /** True the first time an id is seen. */
+  claim(provider: string, eventId: string): Promise<boolean>;
+}
+
+export type HoldStatus = "held" | "confirmed" | "released" | "expired";
+
+export interface BookingHoldRecord {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  conversationId?: string;
+  offeringId: string;
+  resourceId: string;
+  startAt: string;
+  endAt: string;
+  status: HoldStatus;
+  expiresAt: string;
+}
+
+export interface CreateHoldInput {
+  tenantId: string;
+  customerId: string;
+  conversationId?: string;
+  offeringId: string;
+  resourceId: string;
+  startAt: Date;
+  endAt: Date;
+  expiresAt: Date;
+}
+
+export interface BookingHoldRepository {
+  /**
+   * Creates a hold under the resource's row lock after checking it overlaps neither a live hold
+   * nor a booking in `blockingStatuses`. Throws SlotTakenError otherwise.
+   */
+  create(input: CreateHoldInput, blockingStatuses: string[]): Promise<BookingHoldRecord>;
+  findById(tenantId: string, id: string): Promise<BookingHoldRecord | null>;
+  setStatus(id: string, status: HoldStatus): Promise<BookingHoldRecord | null>;
+  /** Live holds (held, not expired) touching [from, to) on a resource, optionally ignoring one hold. */
+  activeOverlapping(tenantId: string, resourceId: string, from: Date, to: Date, now: Date, exceptId?: string): Promise<BookingHoldRecord[]>;
+  /** Marks held holds past their deadline as expired; resolves to the count. */
+  expire(now: Date): Promise<number>;
+}
+
+export interface WebSessionRecord {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  conversationId: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface WebSessionRepository {
+  create(input: { tenantId: string; customerId: string; conversationId: string; tokenHash: string }): Promise<WebSessionRecord>;
+  findByTokenHash(tokenHash: string): Promise<WebSessionRecord | null>;
+  touch(id: string, at: Date): Promise<void>;
+}
+
+export type MemoryKind = "preference" | "fact" | "constraint";
+
+export interface MemoryRecord {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  kind: MemoryKind;
+  key: string;
+  value: unknown;
+  confidence: number;
+  sourceMessageIds: string[];
+  consentPurpose: string;
+  createdAt: string;
+  lastConfirmedAt: string;
+  expiresAt?: string;
+  deletedAt?: string;
+}
+
+export interface ConsentRecord {
+  customerId: string;
+  tenantId: string;
+  memory: boolean;
+  purpose: string;
+  sourceMessageId?: string;
+  updatedAt: string;
+}
+
+export interface MemoryRepository {
+  /** Live memories: not deleted, not expired at `now`, this tenant and customer only. */
+  listActive(tenantId: string, customerId: string, now: Date): Promise<MemoryRecord[]>;
+  /** Insert, or refresh the value and confirmation time of the live memory with the same key. */
+  upsert(input: Omit<MemoryRecord, "id" | "createdAt" | "lastConfirmedAt" | "deletedAt">): Promise<MemoryRecord>;
+  /** Soft-deletes one key, or everything for the customer when no key is given; resolves to the count. */
+  forget(tenantId: string, customerId: string, key?: string): Promise<number>;
+  getConsent(tenantId: string, customerId: string): Promise<ConsentRecord | null>;
+  setConsent(input: Omit<ConsentRecord, "updatedAt">): Promise<ConsentRecord>;
+}
+
+export interface AgentRunRecord {
+  id: string;
+  tenantId: string;
+  conversationId: string;
+  inboundMessageId?: string;
+  channel: string;
+  model: string;
+  tools: Array<{ name: string; input: unknown; ok: boolean; ms: number }>;
+  memoryIds: string[];
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  outcome: "replied" | "handoff" | "error" | "fallback";
+  error?: string;
+  createdAt: string;
+}
+
+export interface AgentRunRepository {
+  record(run: Omit<AgentRunRecord, "id" | "createdAt">): Promise<AgentRunRecord>;
+  listForConversation(tenantId: string, conversationId: string, limit?: number): Promise<AgentRunRecord[]>;
 }
 
 export interface CreateOrderInput {
@@ -226,7 +435,15 @@ export interface CreateOrderInput {
   durationMinutes?: number;
 }
 
-export type CreateBookingInput = CreateOrderInput & { scheduledAt: Date; resourceId: string; durationMinutes: number };
+export type CreateBookingInput = CreateOrderInput & { scheduledAt: Date; resourceId: string; durationMinutes: number; /** The customer's own hold for this slot, ignored by the overlap check. */ holdId?: string };
+
+export interface RescheduleInput {
+  scheduledAt: Date;
+  resourceId: string;
+  durationMinutes: number;
+  /** The customer's own hold for the new slot, ignored by the overlap check. */
+  holdId?: string;
+}
 
 /** Builds the domain event to store in the outbox together with the change, once the saved order is known. */
 export type OutboxFactory = (order: Order) => DomainEvent;
@@ -264,6 +481,10 @@ export interface OrderRepository {
    * `blockingStatuses` overlaps the requested time on the same resource.
    */
   createBooking(input: CreateBookingInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order>;
+  /** Moves a booking to a new slot under the same lock and overlap check; throws SlotTakenError. */
+  reschedule(tenantId: string, orderId: string, input: RescheduleInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order>;
+  /** Payment outcome from a verified provider event: sets payment status and order status together. */
+  updatePayment(tenantId: string, orderId: string, paymentStatus: OrderPaymentStatus, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order>;
   /** Orders scheduled in [from, to), soonest first. */
   listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]>;
 }

@@ -95,6 +95,8 @@ services:
       # "Book a demo" opens a WhatsApp chat with this number (digits, international); falls back to CONTACT_EMAIL.
       CONTACT_WHATSAPP: ${CONTACT_WHATSAPP:-}
       CONTACT_EMAIL: ${CONTACT_EMAIL:-hello@ordr.ae}
+      # Slug of the tenant whose web chat the landing page links to ("Try the demo in web chat"); empty hides the button.
+      DEMO_CHAT_SLUG: ${DEMO_CHAT_SLUG:-}
     depends_on:
       - api
     healthcheck:

@@ -40,7 +40,7 @@ function toContext(channel: ChannelRow): TenantContext {
     channel: {
       id: channel.id,
       tenantId: channel.tenantId,
-      provider: "meta_cloud",
+      provider: channel.provider === "web" ? "web" : "meta_cloud",
       phoneNumberId: channel.phoneNumberId,
       wabaId: channel.wabaId,
       displayPhone: channel.displayPhone,
@@ -86,7 +86,7 @@ export class PrismaTenantRepository implements TenantRepository {
   }
 
   async findContextById(tenantId: string): Promise<TenantContext | null> {
-    const channel = await this.prisma.channel.findFirst({ where: { tenantId, status: "active" }, orderBy: { createdAt: "asc" }, include: { tenant: true } });
+    const channel = await this.prisma.channel.findFirst({ where: { tenantId, status: "active", provider: "meta_cloud" }, orderBy: { createdAt: "asc" }, include: { tenant: true } });
     return channel ? toContext(channel) : null;
   }
 
@@ -112,7 +112,7 @@ export class PrismaTenantRepository implements TenantRepository {
 
   async attachChannel(tenantId: string, input: ChannelInput): Promise<Channel> {
     // Only the channel fields: callers may pass a richer object such as a pooled number.
-    const fields = { wabaId: input.wabaId, displayPhone: input.displayPhone, accessToken: input.accessToken };
+    const fields = { wabaId: input.wabaId, displayPhone: input.displayPhone, accessToken: input.accessToken, provider: input.provider ?? "meta_cloud" };
     const c = await this.prisma.channel.upsert({
       where: { phoneNumberId: input.phoneNumberId },
       update: { tenantId, ...fields, status: "active" },
@@ -126,6 +126,11 @@ export class PrismaTenantRepository implements TenantRepository {
   async detachChannel(phoneNumberId: string): Promise<void> {
     await this.prisma.channel.updateMany({ where: { phoneNumberId }, data: { status: "disabled" } });
     this.cache.delete(phoneNumberId);
+  }
+
+  async findBySlug(slug: string): Promise<Tenant | null> {
+    const t = await this.prisma.tenant.findUnique({ where: { slug } });
+    return t ? toTenant(t) : null;
   }
 
   async updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null> {

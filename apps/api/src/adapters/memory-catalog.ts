@@ -1,4 +1,4 @@
-import { type Category, type DomainEvent, type ModifierGroup, type Offering, type Order, overlaps, type Resource, SlotTakenError } from "@ordr/domain";
+import { type Category, type DomainEvent, type ModifierGroup, type Offering, type Order, overlaps, type PaymentStatus, type ProductVariant, type Resource, SlotTakenError } from "@ordr/domain";
 import type {
   CatalogRepository,
   CategoryInput,
@@ -14,6 +14,11 @@ import type {
   OutboxStore,
   ResourceInput,
   ResourceRepository,
+  BookingHoldRepository,
+  RescheduleInput,
+  StockLine,
+  StockShortage,
+  VariantInput,
 } from "../ports";
 
 export class InMemoryResourceRepository implements ResourceRepository {
@@ -128,9 +133,11 @@ export class InMemoryCatalogRepository implements CatalogRepository {
       currency: input.currency ?? "AED",
       durationMinutes: input.durationMinutes ?? undefined,
       imageUrl: input.imageUrl ?? undefined,
+      stock: input.stock ?? undefined,
       sortOrder: input.sortOrder ?? this.offerings.length,
       isActive: input.isActive ?? true,
       modifierGroups: buildGroups(input.modifierGroups ?? []),
+      variants: buildVariants(input.variants ?? []),
     };
     this.offerings.push(offering);
     return structuredClone(offering);
@@ -149,9 +156,58 @@ export class InMemoryCatalogRepository implements CatalogRepository {
     if (patch.imageUrl !== undefined) o.imageUrl = patch.imageUrl ?? undefined;
     if (patch.sortOrder !== undefined) o.sortOrder = patch.sortOrder;
     if (patch.isActive !== undefined) o.isActive = patch.isActive;
+    if (patch.stock !== undefined) o.stock = patch.stock ?? undefined;
     if (patch.modifierGroups) o.modifierGroups = buildGroups(patch.modifierGroups);
+    if (patch.variants) {
+      const previous = new Map((o.variants ?? []).map((v) => [v.id, v]));
+      o.variants = buildVariants(patch.variants).map((v) => (v.id && previous.has(v.id) && patch.variants!.find((p) => p.id === v.id)?.stock === undefined ? { ...v, stock: previous.get(v.id)!.stock } : v));
+    }
     return structuredClone(o);
   }
+
+  async reserveStock(tenantId: string, lines: StockLine[]): Promise<{ ok: true } | { ok: false; shortages: StockShortage[] }> {
+    const shortages: StockShortage[] = [];
+    const plan: Array<() => void> = [];
+    for (const line of lines) {
+      const o = this.offerings.find((x) => x.tenantId === tenantId && x.id === line.offeringId);
+      if (!o) {
+        shortages.push({ ...line, available: 0 });
+        continue;
+      }
+      if (line.variantId) {
+        const v = (o.variants ?? []).find((x) => x.id === line.variantId);
+        if (!v) {
+          shortages.push({ ...line, available: 0 });
+          continue;
+        }
+        if (v.stock === undefined) continue;
+        if (v.stock < line.quantity) shortages.push({ ...line, available: v.stock });
+        else plan.push(() => void (v.stock = v.stock! - line.quantity));
+      } else {
+        if (o.stock === undefined) continue;
+        if (o.stock < line.quantity) shortages.push({ ...line, available: o.stock });
+        else plan.push(() => void (o.stock = o.stock! - line.quantity));
+      }
+    }
+    if (shortages.length) return { ok: false, shortages };
+    for (const apply of plan) apply();
+    return { ok: true };
+  }
+
+  async releaseStock(tenantId: string, lines: StockLine[]): Promise<void> {
+    for (const line of lines) {
+      const o = this.offerings.find((x) => x.tenantId === tenantId && x.id === line.offeringId);
+      if (!o) continue;
+      if (line.variantId) {
+        const v = (o.variants ?? []).find((x) => x.id === line.variantId);
+        if (v && v.stock !== undefined) v.stock += line.quantity;
+      } else if (o.stock !== undefined) o.stock += line.quantity;
+    }
+  }
+}
+
+function buildVariants(inputs: VariantInput[]): ProductVariant[] {
+  return inputs.map((v, i) => ({ id: v.id ?? catalogId("var"), name: { ...v.name }, sku: v.sku ?? undefined, priceMinor: v.priceMinor ?? undefined, stock: v.stock ?? undefined, sortOrder: v.sortOrder ?? i, isActive: v.isActive ?? true }));
 }
 
 export class InMemoryOrderRepository implements OrderRepository {
@@ -159,7 +215,14 @@ export class InMemoryOrderRepository implements OrderRepository {
   readonly history: Array<{ orderId: string; type: string; payload?: unknown }> = [];
   /** Events that would have gone to the outbox table; tests inspect this. */
   readonly outbox: DomainEvent[] = [];
+  /** Live holds to respect in overlap checks; wired by the module when holds are in use. */
+  holds: BookingHoldRepository | null = null;
   private readonly sequences = new Map<string, number>();
+
+  private async heldByOthers(tenantId: string, resourceId: string, start: Date, end: Date, exceptId?: string): Promise<boolean> {
+    if (!this.holds) return false;
+    return (await this.holds.activeOverlapping(tenantId, resourceId, start, end, new Date(), exceptId)).length > 0;
+  }
 
   async create(input: CreateOrderInput, outbox?: OutboxFactory): Promise<Order> {
     const number = (this.sequences.get(input.tenantId) ?? 0) + 1;
@@ -181,8 +244,42 @@ export class InMemoryOrderRepository implements OrderRepository {
       const s = new Date(o.scheduledAt);
       return overlaps(start, end, s, new Date(s.getTime() + (o.durationMinutes ?? 0) * 60_000));
     });
-    if (clash) throw new SlotTakenError();
-    return this.create(input, outbox);
+    if (clash || (await this.heldByOthers(input.tenantId, input.resourceId, start, end, input.holdId))) throw new SlotTakenError();
+    if (input.holdId && this.holds) await this.holds.setStatus(input.holdId, "confirmed");
+    const { holdId: _h, ...rest } = input;
+    return this.create(rest, outbox);
+  }
+
+  async reschedule(tenantId: string, orderId: string, input: RescheduleInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order> {
+    const o = this.orders.find((x) => x.tenantId === tenantId && x.id === orderId);
+    if (!o) throw new Error(`order ${orderId} not found`);
+    const start = input.scheduledAt;
+    const end = new Date(start.getTime() + input.durationMinutes * 60_000);
+    const clash = this.orders.some((other) => {
+      if (other.id === orderId || other.tenantId !== tenantId || other.resourceId !== input.resourceId || !other.scheduledAt || !blockingStatuses.includes(other.status)) return false;
+      const s = new Date(other.scheduledAt);
+      return overlaps(start, end, s, new Date(s.getTime() + (other.durationMinutes ?? 0) * 60_000));
+    });
+    if (clash || (await this.heldByOthers(tenantId, input.resourceId, start, end, input.holdId))) throw new SlotTakenError();
+    if (input.holdId && this.holds) await this.holds.setStatus(input.holdId, "confirmed");
+    o.scheduledAt = start.toISOString();
+    o.resourceId = input.resourceId;
+    o.durationMinutes = input.durationMinutes;
+    o.updatedAt = new Date().toISOString();
+    this.history.push({ orderId, type: "order.rescheduled", payload: { scheduledAt: o.scheduledAt, resourceId: o.resourceId } });
+    if (outbox) this.outbox.push(outbox(structuredClone(o)));
+    return structuredClone(o);
+  }
+
+  async updatePayment(tenantId: string, orderId: string, paymentStatus: PaymentStatus, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order> {
+    const o = this.orders.find((x) => x.tenantId === tenantId && x.id === orderId);
+    if (!o) throw new Error(`order ${orderId} not found`);
+    o.paymentStatus = paymentStatus;
+    o.status = status;
+    o.updatedAt = new Date().toISOString();
+    this.history.push({ orderId, ...event });
+    if (outbox) this.outbox.push(outbox(structuredClone(o)));
+    return structuredClone(o);
   }
 
   async listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]> {

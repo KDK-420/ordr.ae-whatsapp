@@ -34,6 +34,19 @@ export interface ModifierGroup {
   options: ModifierOption[];
 }
 
+/** A purchasable variant of a product (size, weight, colour) with its own stock and optional price. */
+export interface ProductVariant {
+  id: string;
+  name: LocalizedText;
+  sku?: string;
+  /** Overrides the offering price when set. */
+  priceMinor?: number;
+  /** Units on hand; undefined means not tracked. */
+  stock?: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 /** A product (food item) or a service (salon treatment). Same shape, different blueprint. */
 export interface Offering {
   id: OfferingId;
@@ -46,7 +59,11 @@ export interface Offering {
   currency: string;
   durationMinutes?: number;
   imageUrl?: string;
+  /** Units on hand for products without variants; undefined means not tracked. */
+  stock?: number;
   sortOrder: number;
   isActive: boolean;
   modifierGroups: ModifierGroup[];
+  /** Products with sizes, weights or colours; absent or empty means one plain SKU. */
+  variants?: ProductVariant[];
 }

@@ -102,7 +102,7 @@ export class ConversationService {
       if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
         // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
         // older guided message still goes to its flow; everything else is a conversation.
-        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx);
+        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId });
       } else if (globalFlow) {
         if (conversation.status === "human") await this.conversations.setConversationStatus(conversation.id, "bot");
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
@@ -155,9 +155,10 @@ export class ConversationService {
     language: string,
     baseContext: Record<string, unknown>,
     actionCtx: Omit<ActionContext, "language" | "context">,
+    opts: { channel: "whatsapp" | "web"; inboundMessageId: string },
   ): Promise<RunResult> {
     try {
-      const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language);
+      const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);
       const outbound: OutboundMessage[] = reply.text ? [text(reply.text)] : [];
       if (reply.startFlow) {
         const started = await runner.start(reply.startFlow, { language, context: baseContext }, actionCtx);

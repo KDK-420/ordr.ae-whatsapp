@@ -1,0 +1,11 @@
+{
+  "id": "main_menu",
+  "entry": "handoff",
+  "nodes": [
+    {
+      "id": "handoff",
+      "type": "handoff",
+      "text": { "en": "Our assistant is briefly unavailable. A team member will reply here shortly.", "ar": "مساعدنا غير متاح حالياً. سيرد عليك أحد أعضاء الفريق هنا قريباً." }
+    }
+  ]
+}

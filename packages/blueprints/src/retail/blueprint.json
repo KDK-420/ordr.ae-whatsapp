@@ -1,0 +1,40 @@
+{
+  "id": "retail",
+  "version": 1,
+  "name": "Retail shop",
+  "description": "Products with variants and stock, paid online through a hosted checkout link.",
+  "defaultLanguage": "en",
+  "languages": ["en", "ar"],
+  "offeringType": "product",
+  "fulfillmentTypes": ["delivery", "pickup"],
+  "orderStates": {
+    "initial": "pending_payment",
+    "states": ["pending_payment", "paid", "processing", "fulfilled", "failed", "cancelled", "refunded"],
+    "transitions": [
+      { "from": "pending_payment", "to": "paid", "on": "pay" },
+      { "from": "pending_payment", "to": "failed", "on": "fail" },
+      { "from": "pending_payment", "to": "cancelled", "on": "cancel" },
+      { "from": "paid", "to": "processing", "on": "process" },
+      { "from": "paid", "to": "refunded", "on": "refund" },
+      { "from": "processing", "to": "fulfilled", "on": "fulfill" },
+      { "from": "processing", "to": "refunded", "on": "refund" }
+    ],
+    "terminal": ["fulfilled", "failed", "cancelled", "refunded"]
+  },
+  "entryFlow": "main_menu",
+  "fallbackFlow": "main_menu",
+  "globalCommands": [
+    { "keywords": ["menu", "hi", "hello", "start", "shop", "القائمة", "مرحبا", "السلام عليكم"], "flow": "main_menu" },
+    { "keywords": ["agent", "help", "موظف", "مساعدة"], "flow": "talk_to_us" },
+    { "keywords": ["language", "lang", "اللغة", "لغة"], "flow": "language" }
+  ],
+  "dashboardModules": ["orders", "catalog", "customers", "inbox"],
+  "settings": {
+    "currency": "AED",
+    "vatRate": 0.05,
+    "vatInclusive": true,
+    "paymentMethods": ["online"],
+    "conversationStyle": "natural",
+    "memoryEnabled": true
+  }
+}

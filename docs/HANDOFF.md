@@ -1,19 +1,59 @@
-# Handoff: state of the build as of 2026-10-19 (round 4)
+# Handoff: state of the build as of 2026-10-20 (round 5)
 
 Read docs/PLAN.md first for the architecture and roadmap, docs/DEPLOY.md for the server. This
 note says where the build is and what to do next.
 
-## What exists (all green: 58 package tests, 72 API tests, 13 Postgres integration tests)
+## What exists (all green: 59 package tests, 83 API tests, 16 Postgres integration tests)
 
 ### Deployed
 
 Production runs on one VPS (200.141.6.31) at https://app.ordr.ae, deployed by the `VPS`
 GitHub Actions workflow (Actions tab, Run workflow; `deploy` mode for updates). Six containers:
-Postgres, Redis, API, worker, dashboard, Caddy. Caddy routes `/health`, `/webhooks/*` and
-`/merchant/*` to the API and everything else to the dashboard. SSH is key-only; the workflow
+Postgres, Redis, API, worker, dashboard, Caddy. Caddy routes `/health`, `/webhooks/*`,
+`/merchant/*` and `/v1/*` to the API and everything else to the dashboard. SSH is key-only; the workflow
 logs in with the `VPS_SSH_KEY` secret.
 
-### Round 4 (this round): salon bookings and the Claude assistant
+### Round 5 (this round): PRD phase 1 and 2, web chat, commerce, holds, memory
+
+Source: `docs/PRD/CLAUDE_CODE_PRD.md`; checklist `docs/IMPLEMENTATION_PLAN.md`; decisions in
+`docs/ADRs/0001`–`0004`; how to run and what is mocked in `docs/RUNBOOK.md`.
+
+- **Web chat** (`apps/api/src/webchat`, page `/chat/<slug>`): anonymous sessions per tenant
+  with a hashed bearer token, messages through the same `ConversationService` as WhatsApp on a
+  per-tenant virtual channel (`Channel.provider = "web"`, id `web:<tenantId>`), client message
+  id dedupe, polling only when a person has taken over. Visitors are `web:` customers that never
+  reach Meta.
+- **One tool-calling agent for every vertical** (`apps/api/src/ai/anthropic.agent.ts`): tools
+  chosen by blueprint. Booking: list_services, list_staff, available_days, available_times,
+  hold_slot → confirm_booking (ADR 0002), release_hold, my_bookings, reschedule_booking,
+  cancel_booking. Commerce: search_products, product_details, view_cart, add_to_cart,
+  remove_from_cart, checkout, my_orders. Memory: record_memory_consent, remember, forget,
+  what_you_remember. Always: hand_over_to_human. Every run is traced (`AgentRun`: tools,
+  memory ids, tokens, duration, outcome) by `AssistantService.converse`.
+- **Holds** (`BookingHold`): a held slot is invisible to other customers in availability and
+  blocks bookings under the same resource row lock; the holder confirms through it; holds
+  expire (`HOLD_MINUTES`) and are swept by `MaintenanceService`. Reschedule moves a booking
+  under the same checks and requeues reminders.
+- **Commerce** (`apps/api/src/commerce`): product variants with stock, persistent carts, live
+  repricing at checkout, atomic stock reservation (conditional decrements in a transaction),
+  `pending_payment` order + `PaymentIntent`, and `paid` only on a webhook the provider adapter
+  verified, deduped on the provider's event id (`WebhookReceipt`) and checked against the
+  intent amount. Failed or expired payments release stock (ADR 0004).
+- **Mock payments** (`apps/api/src/payments`): `PaymentProvider` port; the mock's checkout
+  page `/pay/<intent>` posts a signed event through the real webhook endpoint. A gateway
+  adapter replaces one class.
+- **Memory** (`apps/api/src/memory`, ADR 0003): per-customer consent per tenant, tenant switch
+  `settings.memoryEnabled`, structured memories with provenance, confidence, expiry and soft
+  delete, a deny list for sensitive categories, consent withdrawal deletes everything. The
+  prompt gets consented memories and the customer's recent orders from the source of truth.
+- **Retail vertical** (`packages/blueprints/src/retail`, `demo-retail.ts`): natural style,
+  `pending_payment → paid → processing → fulfilled`; `SEED_BLUEPRINT_ID=retail` and the admin
+  console's "New merchant" seed the coffee-and-shoes demo. Landing page links to the demo
+  tenant's web chat (`DEMO_CHAT_SLUG`); the deploy run sends "hi" through it and prints the
+  reply.
+- Migration `20261020090000_commerce_holds_memory_webchat`.
+
+### Round 4: salon bookings and the Claude assistant
 
 - **Scheduling domain** (`packages/domain/src/scheduling.ts`): weekly opening hours per
   resource, timezone helpers (tenants run in `Asia/Dubai` by default), `generateSlots` with
@@ -182,13 +222,17 @@ For a local dashboard login without Postgres, start the API with `STORAGE=memory
 
 ## Next steps, in order
 
+0. PRD phases 3 and 4: customer page with memory controls, agent run viewer in the dashboard,
+   anonymous web → WhatsApp identity linking by OTP, session summaries for long threads,
+   knowledge documents, a real payment gateway behind `PaymentProvider`, Instagram adapter,
+   OpenAPI for `/v1`. See `docs/IMPLEMENTATION_PLAN.md`.
 1. Connect the real WhatsApp number: real `META_APP_SECRET` and `SEED_*` values on the server,
    a fresh `META_VERIFY_TOKEN`, register the webhook in the Meta dashboard, send "hi", then
    Settings › WhatsApp templates › Submit, and wait for approval.
 2. Parse Meta's `message_template_status_update` webhook so template statuses update without
    the sync button, and surface `failed` outbox events in the dashboard.
-3. Payment links behind a PaymentProvider port (Stripe UAE, Telr, Ziina); today paymentMethod is
-   always "cash".
+3. A production payment adapter (Stripe UAE, Telr, Ziina) behind the `PaymentProvider` port;
+   today the mock provider signs its own webhooks.
 4. Multi-select modifier groups in the ordering flow (the catalog editor already stores
    maxSelect > 1), item notes, scheduled orders, delivery zones with per-zone fees.
 5. Onboarding, next: Embedded Signup for merchants who want their own WhatsApp account
@@ -199,8 +243,8 @@ For a local dashboard login without Postgres, start the API with `STORAGE=memory
    in Phase 2.
 8. Salon, remaining: rescheduling from WhatsApp and the calendar (today a move is cancel and
    rebook), a week view, per-resource breaks and days off, and the WhatsApp Flows date picker.
-9. Natural style, next: rescheduling as a tool (today it hands over), restaurant ordering as
-   tools (cart, modifiers, delivery address) instead of opening the guided menu, voice notes
+9. Natural style, next: restaurant ordering as tools (cart with modifiers, delivery address)
+   instead of opening the guided menu, voice notes
    (transcribe then treat as text), per-conversation token cost in the logs, and an eval set of
    real transcripts to tune the prompt.
 

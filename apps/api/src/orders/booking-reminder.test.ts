@@ -3,6 +3,7 @@ import { FakeSender } from "@ordr/whatsapp";
 import { describe, expect, it } from "vitest";
 import { demoSalonCatalog } from "../actions/demo-salon";
 import { InMemoryConversationRepository, InMemoryTenantRepository } from "../adapters/memory";
+import { InMemoryBookingHoldRepository } from "../adapters/memory-commerce";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "../adapters/memory-catalog";
 import { FakeTemplateApi, InMemoryTemplateRepository } from "../adapters/templates";
 import { seedTenantFromConfig } from "../app.module";
@@ -40,7 +41,7 @@ async function setup() {
   const sender = new FakeSender();
   const templates = new TemplateService(new InMemoryTemplateRepository(), new FakeTemplateApi(), tenants);
   const orderService = new OrderService(orders, tenants, { get: getBlueprint }, bus, outbox);
-  const scheduling = new SchedulingService(new InMemoryCatalogRepository(demo.categories, demo.offerings), new InMemoryResourceRepository(demo.resources), orders, { get: getBlueprint }, orderService);
+  const scheduling = new SchedulingService(new InMemoryCatalogRepository(demo.categories, demo.offerings), new InMemoryResourceRepository(demo.resources), orders, { get: getBlueprint }, orderService, new InMemoryBookingHoldRepository(orders), config);
   const notifier = new BookingReminderNotifier(bus, orders, tenants, conversations, sender, templates);
   notifier.onModuleInit();
   const relay = new OutboxRelay(config, outbox, bus);

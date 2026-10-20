@@ -6,6 +6,7 @@ import { config as loadEnv } from "dotenv";
 import { AppModule } from "./app.module";
 import { loadConfig } from "./config";
 import { OutboxRelay } from "./events/outbox-relay";
+import { MaintenanceService } from "./maintenance.service";
 
 loadEnv({ path: [resolve(__dirname, "../../../.env"), resolve(process.cwd(), ".env")] });
 
@@ -23,10 +24,13 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
   const relay = app.get(OutboxRelay);
   relay.start();
+  const maintenance = app.get(MaintenanceService);
+  maintenance.start();
   Logger.log(`worker running (storage=${config.storage}, sender=${config.WHATSAPP_SENDER})`, "Worker");
 
   const shutdown = async (signal: string) => {
     Logger.log(`${signal} received, finishing the current batch`, "Worker");
+    maintenance.stop();
     await relay.stop();
     await app.close();
     process.exit(0);

@@ -182,13 +182,16 @@ model Offering {
   currency        String   @default("AED")
   durationMinutes Int?
   imageUrl        String?
+  /// Units on hand for products without variants; null means not tracked (always available)
+  stock           Int?
   sortOrder       Int      @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  category       Category?       @relation(fields: [categoryId], references: [id])
+  category       Category?        @relation(fields: [categoryId], references: [id])
   modifierGroups ModifierGroup[]
+  variants       ProductVariant[]
   orderItems     OrderItem[]
 
   @@index([tenantId, categoryId, sortOrder])
@@ -279,8 +282,9 @@ model Order {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  items  OrderItem[]
-  events OrderEvent[]
+  items         OrderItem[]
+  events        OrderEvent[]
+  paymentIntent PaymentIntent?
 
   @@unique([tenantId, number])
   @@index([tenantId, status, createdAt])
@@ -289,10 +293,164 @@ model Order {
   @@index([resourceId, scheduledAt])
 }
 
+/// A purchasable variant of a product (size, weight, colour) with its own stock and optional price.
+model ProductVariant {
+  id         String   @id @default(cuid())
+  tenantId   String
+  offeringId String
+  name       Json
+  sku        String?
+  /// Null inherits the offering price
+  priceMinor Int?
+  /// Null means not tracked
+  stock      Int?
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  offering Offering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, offeringId])
+}
+
+/// A customer's open shopping cart; items snapshot title and price, totals are recomputed at checkout.
+model Cart {
+  id             String    @id @default(cuid())
+  tenantId       String
+  customerId     String
+  conversationId String?
+  /// open | checked_out | expired
+  status         String    @default("open")
+  currency       String    @default("AED")
+  items          Json      @default("[]")
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId, customerId, status])
+}
+
+/// Hosted-checkout intent for an order. The order is paid only when the provider's signed webhook says so.
+model PaymentIntent {
+  id          String    @id @default(cuid())
+  tenantId    String
+  orderId     String    @unique
+  provider    String
+  amountMinor Int
+  currency    String
+  /// pending | paid | failed | expired
+  status      String    @default("pending")
+  checkoutUrl String
+  providerRef String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  paidAt      DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+}
+
+/// Provider webhook deliveries already processed, keyed by provider and event id, so replays are no-ops.
+model WebhookReceipt {
+  id         String   @id
+  provider   String
+  receivedAt DateTime @default(now())
+}
+
+/// A slot reserved for a customer while they confirm. Blocks other holds and bookings until it expires.
+model BookingHold {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String
+  conversationId String?
+  offeringId     String
+  resourceId     String
+  startAt        DateTime
+  endAt          DateTime
+  /// held | confirmed | released | expired
+  status         String   @default("held")
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, resourceId, status, startAt])
+  @@index([tenantId, customerId, status])
+}
+
+/// Anonymous web chat session: a bearer token (hashed) bound to one customer and conversation.
+model WebSession {
+  id             String   @id @default(cuid())
+  tenantId       String
+  customerId     String
+  conversationId String
+  tokenHash      String   @unique
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+
+  @@index([tenantId, customerId])
+}
+
+/// Whether a customer allowed this business to remember things about them, and on which message.
+model CustomerConsent {
+  customerId      String   @id
+  tenantId        String
+  memory          Boolean  @default(false)
+  purpose         String   @default("personalization")
+  sourceMessageId String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Consented, evidence-backed facts about a customer, scoped to one tenant. Never a source of transactional truth.
+model Memory {
+  id               String    @id @default(cuid())
+  tenantId         String
+  customerId       String
+  /// preference | fact
+  kind             String
+  key              String
+  value            Json
+  confidence       Float     @default(1)
+  sourceMessageIds Json      @default("[]")
+  consentPurpose   String    @default("personalization")
+  createdAt        DateTime  @default(now())
+  lastConfirmedAt  DateTime  @default(now())
+  expiresAt        DateTime?
+  deletedAt        DateTime?
+
+  @@index([tenantId, customerId, deletedAt])
+}
+
+/// One model turn: which tools ran, tokens, timing and which memories were shown. The audit trail behind every reply.
+model AgentRun {
+  id               String   @id @default(cuid())
+  tenantId         String
+  conversationId   String
+  inboundMessageId String?
+  channel          String
+  model            String
+  tools            Json     @default("[]")
+  memoryIds        Json     @default("[]")
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  durationMs       Int      @default(0)
+  /// replied | handoff | error | fallback
+  outcome          String
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([tenantId, conversationId, createdAt])
+}
+
 model OrderItem {
   id             String  @id @default(cuid())
   orderId        String
   offeringId     String?
+  variantId      String?
+  variantTitle   String?
   title          String
   quantity       Int
   unitPriceMinor Int

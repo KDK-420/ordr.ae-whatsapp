@@ -42,6 +42,8 @@ export interface PlaceBookingInput {
   blockingStatuses: string[];
   notes?: string;
   source?: Order["source"];
+  /** The customer's own hold on this slot, so the overlap check ignores it. */
+  holdId?: string;
 }
 
 export class OrderError extends Error {
@@ -150,6 +152,7 @@ export class OrderService {
         scheduledAt: input.startAt,
         resourceId: input.resourceId,
         durationMinutes: input.durationMinutes,
+        holdId: input.holdId,
       },
       input.blockingStatuses,
       placed,
@@ -157,6 +160,20 @@ export class OrderService {
     await this.publish(placed(order));
     await this.scheduleReminders(order, blueprint.settings, s.tenant.settings);
     this.logger.log(`booking #${order.number} placed for tenant ${order.tenantId} at ${input.startAt.toISOString()} on ${input.resourceId}`);
+    return order;
+  }
+
+  /** Moves a booking to a new slot (overlap-checked by the repository) and queues reminders for the new time. */
+  async rescheduleBooking(tenantId: string, orderId: string, input: { startAt: Date; resourceId: string; durationMinutes: number; holdId?: string; blockingStatuses: string[]; actor?: string }): Promise<Order> {
+    const s = await this.settingsFor(tenantId);
+    const blueprint = this.blueprints.get(s.tenant.blueprintId);
+    if (!blueprint) throw new OrderError(`blueprint ${s.tenant.blueprintId} not found`);
+    const eventId = randomUUID();
+    const moved = (o: Order) => this.event(eventId, "order.rescheduled", o, { scheduledAt: o.scheduledAt, resourceId: o.resourceId, actor: input.actor ?? "customer" });
+    const order = await this.orders.reschedule(tenantId, orderId, { scheduledAt: input.startAt, resourceId: input.resourceId, durationMinutes: input.durationMinutes, holdId: input.holdId }, input.blockingStatuses, moved);
+    await this.publish(moved(order));
+    await this.scheduleReminders(order, blueprint.settings, s.tenant.settings);
+    this.logger.log(`booking #${order.number} moved to ${input.startAt.toISOString()} on ${input.resourceId}`);
     return order;
   }
 

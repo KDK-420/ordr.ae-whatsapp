@@ -2,7 +2,8 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Blueprint } from "@ordr/flow-schema";
 import { type Customer, formatMoney, localized, type Tenant } from "@ordr/domain";
 import { previewOf } from "../conversation/preview";
-import type { BlueprintRegistry, CatalogRepository, ConversationRepository, ResourceRepository, TenantRepository } from "../ports";
+import { MemoryService } from "../memory/memory.service";
+import type { AgentRunRepository, BlueprintRegistry, CatalogRepository, ConversationRepository, OrderRepository, ResourceRepository, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import type { AgentReply, ConversationAgent } from "./agent";
 import type { Assistant, HistoryTurn, Interpretation, PickOptionInput, TenantKnowledge } from "./assistant";
@@ -30,6 +31,9 @@ export class AssistantService {
     @Inject(TOKENS.ResourceRepository) private readonly resources: ResourceRepository,
     @Inject(TOKENS.ConversationRepository) private readonly conversations: ConversationRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
+    @Inject(TOKENS.OrderRepository) private readonly orders: OrderRepository,
+    @Inject(TOKENS.AgentRunRepository) private readonly runs: AgentRunRepository,
+    @Inject(MemoryService) private readonly memory: MemoryService,
   ) {}
 
   get enabled(): boolean {
@@ -40,12 +44,58 @@ export class AssistantService {
     return this.agent.enabled;
   }
 
-  /** Natural style: the agent answers the customer directly, acting through booking tools. Throws when the model fails. */
-  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string): Promise<AgentReply> {
-    const [knowledge, history] = await Promise.all([this.knowledge(tenant, blueprint, language), this.history(conversationId)]);
-    const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, history, knowledge });
-    this.logger.log(`converse "${text.slice(0, 60)}" -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}`);
-    return reply;
+  /**
+   * Natural style: the agent answers the customer directly, acting through tools. Memories are
+   * loaded only with the customer's consent, and every run is recorded for the audit log.
+   * Throws when the model fails so the caller can fall back.
+   */
+  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string, opts: { channel?: "whatsapp" | "web"; inboundMessageId?: string } = {}): Promise<AgentReply> {
+    const started = Date.now();
+    const memoryOn = this.memory.enabledFor(tenant);
+    const [knowledge, history, memories, consent, recent] = await Promise.all([
+      this.knowledge(tenant, blueprint, language),
+      this.history(conversationId),
+      memoryOn ? this.memory.recall(tenant, customer.id) : Promise.resolve([]),
+      memoryOn ? this.memory.consent(tenant.id, customer.id) : Promise.resolve(undefined),
+      this.recentOrders(tenant.id, customer.id),
+    ]);
+    const channel = opts.channel ?? "whatsapp";
+    try {
+      const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, history, knowledge, channel, inboundMessageId: opts.inboundMessageId, memories, consent, recentOrders: recent });
+      this.logger.log(`converse "${text.slice(0, 60)}" -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}${reply.trace ? `, ${reply.trace.tools.length} tool call(s)` : ""}`);
+      await this.recordRun(tenant.id, conversationId, channel, opts.inboundMessageId, reply, started);
+      return reply;
+    } catch (err) {
+      await this.recordRun(tenant.id, conversationId, channel, opts.inboundMessageId, { text: "", handoff: false }, started, err);
+      throw err;
+    }
+  }
+
+  private async recordRun(tenantId: string, conversationId: string, channel: string, inboundMessageId: string | undefined, reply: AgentReply, started: number, err?: unknown): Promise<void> {
+    const t = reply.trace;
+    try {
+      await this.runs.record({
+        tenantId,
+        conversationId,
+        inboundMessageId,
+        channel,
+        model: t?.model ?? "unknown",
+        tools: t?.tools ?? [],
+        memoryIds: t?.memoryIds ?? [],
+        inputTokens: t?.inputTokens ?? 0,
+        outputTokens: t?.outputTokens ?? 0,
+        durationMs: t?.durationMs ?? Date.now() - started,
+        outcome: err ? "error" : reply.handoff ? "handoff" : "replied",
+        error: err ? (err instanceof Error ? err.message : String(err)).slice(0, 500) : undefined,
+      });
+    } catch (e) {
+      this.logger.warn(`agent run not recorded: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  private async recentOrders(tenantId: string, customerId: string) {
+    const rows = await this.orders.listRecent(tenantId, { limit: 100 });
+    return rows.filter((o) => o.customerId === customerId).slice(0, 5);
   }
 
   /** Which flow free text asks for, or a direct reply. Null means "not sure": show the menu as before. */

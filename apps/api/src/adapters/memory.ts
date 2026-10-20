@@ -42,11 +42,11 @@ export class InMemoryTenantRepository implements TenantRepository {
 
   async findById(tenantId: string): Promise<Tenant | null> {
     for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId) return ctx.tenant;
-    return null;
+    return this.tenants.get(tenantId) ?? null;
   }
 
   async findContextById(tenantId: string): Promise<TenantContext | null> {
-    for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active") return ctx;
+    for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active" && ctx.channel.provider === "meta_cloud") return ctx;
     return null;
   }
 
@@ -79,7 +79,7 @@ export class InMemoryTenantRepository implements TenantRepository {
     const channel: Channel = {
       id: existing?.channel.id ?? nextId("channel"),
       tenantId,
-      provider: "meta_cloud",
+      provider: input.provider ?? "meta_cloud",
       phoneNumberId: input.phoneNumberId,
       wabaId: input.wabaId,
       displayPhone: input.displayPhone,
@@ -96,6 +96,11 @@ export class InMemoryTenantRepository implements TenantRepository {
       this.tenants.set(ctx.tenant.id, ctx.tenant);
       this.byPhone.set(phoneNumberId, { tenant: ctx.tenant, channel: { ...ctx.channel, status: "disabled" } });
     }
+  }
+
+  async findBySlug(slug: string): Promise<Tenant | null> {
+    for (const t of await this.list()) if (t.tenant.slug === slug) return t.tenant;
+    return null;
   }
 
   async updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null> {

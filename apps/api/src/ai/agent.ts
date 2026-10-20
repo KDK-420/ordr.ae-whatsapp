@@ -1,5 +1,6 @@
 import type { Blueprint } from "@ordr/flow-schema";
-import type { Customer, Tenant } from "@ordr/domain";
+import type { Customer, Order, Tenant } from "@ordr/domain";
+import type { ConsentRecord, MemoryRecord } from "../ports";
 import type { HistoryTurn, TenantKnowledge } from "./assistant";
 
 /**
@@ -20,6 +21,32 @@ export interface AgentInput {
   text: string;
   history: HistoryTurn[];
   knowledge: TenantKnowledge;
+  /** Where the customer is writing from; changes tone and what links make sense. */
+  channel: "whatsapp" | "web";
+  /** Stored id of the inbound message, for memory provenance. */
+  inboundMessageId?: string;
+  /** Consented memories about this customer at this tenant (empty when off or not consented). */
+  memories: MemoryRecord[];
+  /** Null when the customer was never asked; undefined when the tenant keeps no memory. */
+  consent?: ConsentRecord | null;
+  /** The customer's latest orders and bookings here, newest first. */
+  recentOrders: Order[];
+}
+
+export interface ToolTrace {
+  name: string;
+  input: unknown;
+  ok: boolean;
+  ms: number;
+}
+
+export interface AgentTrace {
+  model: string;
+  tools: ToolTrace[];
+  memoryIds: string[];
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
 }
 
 export interface AgentReply {
@@ -29,6 +56,8 @@ export interface AgentReply {
   handoff: boolean;
   /** A guided flow to start right after the text (e.g. the ordering menu). */
   startFlow?: string;
+  /** What the model did, for the audit log. */
+  trace?: AgentTrace;
 }
 
 export interface ConversationAgent {

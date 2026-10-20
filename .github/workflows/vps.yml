@@ -47,7 +47,7 @@ on:
       seed:
         description: Reseed the demo tenant as this vertical (no = leave data alone; setup mode always seeds)
         type: choice
-        options: ["no", restaurant, salon]
+        options: ["no", restaurant, salon, retail]
         default: "no"
 
 concurrency:
@@ -198,13 +198,17 @@ jobs:
           add SEED_ADMIN_PASSWORD "$SEED_ADMIN_PASSWORD"
           add AUTH_SECRET "$AUTH_SECRET"
           add ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          add PUBLIC_BASE_URL "https://$DOMAIN"
           if [ "$SEED_VERTICAL" != "no" ]; then
             add SEED_BLUEPRINT_ID "$SEED_VERTICAL"
             case "$SEED_VERTICAL" in
               salon) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Salon" ;;
               restaurant) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Restaurant" ;;
+              retail) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Shop" ;;
             esac
           fi
+          # The landing page links to the seeded tenant's web chat unless DEMO_CHAT_SLUG is already set on the server.
+          script+='grep -q "^DEMO_CHAT_SLUG=" .env || setkv DEMO_CHAT_SLUG "$(grep "^SEED_TENANT_NAME=" .env | cut -d= -f2- | tr -d "\"" | tr "[:upper:]" "[:lower:]" | sed "s/[^a-z0-9]\+/-/g")"'$'\n'
           if [ -z "$META_APP_SECRET" ] && [ "$MODE" = "setup" ]; then
             # Placeholder so the stack can start; webhook signatures will not verify until replaced.
             script+='grep -q "^META_APP_SECRET=\"\?replace-me" .env && setkv META_APP_SECRET "not-configured-$(openssl rand -hex 8)" || true'$'\n'
@@ -247,7 +251,23 @@ jobs:
               ai="$($SSH "root@$HOST" 'cd /opt/ordr/deploy && docker compose logs --no-log-prefix api 2>/dev/null | grep -o "AI assistant[^\"]*" | tail -1' 2>/dev/null || true)"
               tenant="$($SSH "root@$HOST" 'cd /opt/ordr/deploy && docker compose exec -T postgres psql -U ordr ordr -Atc "select name || '"'"' ('"'"' || \"blueprintId\" || '"'"')'"'"' from \"Tenant\" order by \"createdAt\" desc limit 1"' 2>/dev/null || true)"
               echo "assistant: ${ai:-unknown}; newest tenant: ${tenant:-unknown}"
-              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- Assistant: ${ai:-unknown}"; echo "- Newest tenant: ${tenant:-unknown}"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
+              # Web chat smoke test against the seeded tenant: start a session and say hi; prints the assistant's first reply.
+              slug="$($SSH "root@$HOST" 'cd /opt/ordr/deploy && grep "^DEMO_CHAT_SLUG=" .env | cut -d= -f2- | tr -d "\""' 2>/dev/null || true)"
+              chat="not tried"
+              if [ -n "$slug" ]; then
+                session="$(curl -s --max-time 20 -H 'content-type: application/json' -d "{\"slug\":\"$slug\"}" "https://$DOMAIN/v1/chat/sessions" || true)"
+                sid="$(printf '%s' "$session" | sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p')"
+                tok="$(printf '%s' "$session" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+                if [ -n "$sid" ] && [ -n "$tok" ]; then
+                  reply="$(curl -s --max-time 90 -H 'content-type: application/json' -H "authorization: Bearer $tok" -d '{"text":"hi"}' "https://$DOMAIN/v1/chat/sessions/$sid/messages" || true)"
+                  chat="$(printf '%s' "$reply" | sed -n 's/.*"role":"assistant","text":"\([^"]*\)".*/\1/p' | tail -c 160)"
+                  [ -n "$chat" ] || chat="no assistant reply (response: $(printf '%s' "$reply" | head -c 200))"
+                else
+                  chat="session not created for slug '$slug' (response: $(printf '%s' "$session" | head -c 200))"
+                fi
+              fi
+              echo "web chat ($slug): $chat"
+              { echo "### VPS ready"; echo "- Dashboard: https://$DOMAIN/login"; echo "- Web chat: https://$DOMAIN/chat/${slug:-<tenant-slug>}"; echo "- Health: https://$DOMAIN/health"; echo "- Webhook callback URL: https://$DOMAIN/webhooks/whatsapp"; echo "- Assistant: ${ai:-unknown}"; echo "- Newest tenant: ${tenant:-unknown}"; echo "- Web chat smoke test: ${chat}"; echo "- SSH: ssh root@$HOST (auth this run: $AUTH)"; } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 6

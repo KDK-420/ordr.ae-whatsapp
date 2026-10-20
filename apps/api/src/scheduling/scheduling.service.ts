@@ -17,7 +17,8 @@ import {
   zonedToUtc,
 } from "@ordr/domain";
 import { OrderService } from "../orders/order.service";
-import type { BlueprintRegistry, CatalogRepository, OrderRepository, ResourceRepository } from "../ports";
+import type { AppConfig } from "../config";
+import type { BlueprintRegistry, BookingHoldRecord, BookingHoldRepository, CatalogRepository, OrderRepository, ResourceRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
 /** Pseudo resource id meaning "whoever is free". */
@@ -66,7 +67,102 @@ export class SchedulingService {
     @Inject(TOKENS.OrderRepository) private readonly orders: OrderRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(OrderService) private readonly orderService: OrderService,
+    @Inject(TOKENS.BookingHoldRepository) private readonly holds: BookingHoldRepository,
+    @Inject(TOKENS.Config) private readonly config: AppConfig,
   ) {}
+
+  /**
+   * Reserves a free slot for the customer while they confirm (ADR 0002). Picks the first free
+   * person when `resourceId` is "any". Throws slot_taken when nothing is free at that time.
+   */
+  async hold(input: { tenantId: string; customerId: string; conversationId?: string; offeringId: string; resourceId: string; startAt: Date }): Promise<{ hold: BookingHoldRecord; offering: Offering; resource: Resource; settings: SchedulingSettings }> {
+    const settings = await this.settings(input.tenantId);
+    const offering = await this.service(input.tenantId, input.offeringId);
+    const date = localDateKey(input.startAt, settings.tz);
+    const free = await this.slots(input.tenantId, input.offeringId, input.resourceId, date, { forCustomerId: input.customerId });
+    const match = free.find((s) => s.startAt.getTime() === input.startAt.getTime());
+    if (!match) throw new BookingError("slot_taken", "that time is not available");
+    const duration = offering.durationMinutes ?? settings.slotStepMinutes;
+    const endAt = new Date(input.startAt.getTime() + (duration + settings.bufferMinutes) * 60_000);
+    // A customer re-holding the same time (or changing their mind) replaces their earlier hold.
+    for (const own of await this.holds.activeOverlapping(input.tenantId, match.resource.id, input.startAt, endAt, this.now())) {
+      if (own.customerId === input.customerId) await this.holds.setStatus(own.id, "released");
+    }
+    try {
+      const hold = await this.holds.create(
+        { tenantId: input.tenantId, customerId: input.customerId, conversationId: input.conversationId, offeringId: offering.id, resourceId: match.resource.id, startAt: input.startAt, endAt, expiresAt: new Date(this.now().getTime() + this.config.HOLD_MINUTES * 60_000) },
+        settings.blocking,
+      );
+      return { hold, offering, resource: match.resource, settings };
+    } catch (err) {
+      if (err instanceof SlotTakenError) throw new BookingError("slot_taken", "that time was just taken");
+      throw err;
+    }
+  }
+
+  /** Turns the customer's own live hold into a booking. */
+  async confirmHold(input: { tenantId: string; customerId: string; holdId: string; language: string; notes?: string; source?: Order["source"] }): Promise<{ order: Order; offering: Offering; resource: Resource; settings: SchedulingSettings }> {
+    const settings = await this.settings(input.tenantId);
+    const hold = await this.holds.findById(input.tenantId, input.holdId);
+    if (!hold || hold.customerId !== input.customerId) throw new BookingError("not_found", "no such hold");
+    if (hold.status !== "held" || new Date(hold.expiresAt) <= this.now()) throw new BookingError("slot_taken", "the hold has expired; check the time again");
+    const offering = await this.service(input.tenantId, hold.offeringId);
+    const resource = await this.resources.get(input.tenantId, hold.resourceId);
+    if (!resource) throw new BookingError("unavailable", "that team member is no longer available");
+    try {
+      const order = await this.orderService.placeBooking({
+        tenantId: input.tenantId,
+        customerId: input.customerId,
+        conversationId: hold.conversationId,
+        offering,
+        title: localized(offering.name, input.language, settings.defaultLanguage),
+        resourceId: hold.resourceId,
+        startAt: new Date(hold.startAt),
+        durationMinutes: offering.durationMinutes ?? settings.slotStepMinutes,
+        fulfillmentType: settings.fulfillmentType,
+        blockingStatuses: settings.blocking,
+        notes: input.notes,
+        source: input.source,
+        holdId: hold.id,
+      });
+      return { order, offering, resource, settings };
+    } catch (err) {
+      if (err instanceof SlotTakenError) throw new BookingError("slot_taken", "that time was just taken");
+      throw err;
+    }
+  }
+
+  /** Marks lapsed holds expired. The overlap checks already ignore them; this keeps the table tidy. Run by the worker. */
+  expireHolds(now = this.now()): Promise<number> {
+    return this.holds.expire(now);
+  }
+
+  async releaseHold(tenantId: string, customerId: string, holdId: string): Promise<void> {
+    const hold = await this.holds.findById(tenantId, holdId);
+    if (hold && hold.customerId === customerId && hold.status === "held") await this.holds.setStatus(holdId, "released");
+  }
+
+  /** Moves the customer's own booking to a free time, atomically against other bookings and holds. */
+  async reschedule(input: { tenantId: string; customerId: string; orderId: string; resourceId: string; startAt: Date }): Promise<{ order: Order; resource: Resource; settings: SchedulingSettings }> {
+    const settings = await this.settings(input.tenantId);
+    const order = await this.orders.findById(input.tenantId, input.orderId);
+    if (!order || order.customerId !== input.customerId || order.kind !== "booking") throw new BookingError("not_found", "booking not found");
+    if (!settings.blocking.includes(order.status) || !canTransition(settings.machine, order.status, "cancel")) throw new BookingError("not_allowed", `a ${order.status} booking cannot be moved here`);
+    const offeringId = order.items[0]?.offeringId;
+    if (!offeringId) throw new BookingError("unavailable", "booking has no service");
+    const date = localDateKey(input.startAt, settings.tz);
+    // The booking's own slot is busy in the slot list; a move to a different time must be free.
+    const free = await this.slots(input.tenantId, offeringId, input.resourceId, date, { forCustomerId: input.customerId });
+    const match = free.find((s) => s.startAt.getTime() === input.startAt.getTime());
+    if (!match) throw new BookingError("slot_taken", "that time is not available");
+    try {
+      const moved = await this.orderService.rescheduleBooking(input.tenantId, order.id, { startAt: input.startAt, resourceId: match.resource.id, durationMinutes: order.durationMinutes ?? settings.slotStepMinutes, blockingStatuses: settings.blocking, actor: `customer:${input.customerId}` });
+      return { order: moved, resource: match.resource, settings };
+    } catch (err) {
+      if (err instanceof SlotTakenError) throw new BookingError("slot_taken", "that time was just taken");
+      throw err;
+    }
+  }
 
   async settings(tenantId: string): Promise<SchedulingSettings> {
     const s = await this.orderService.settingsFor(tenantId);
@@ -108,7 +204,7 @@ export class SchedulingService {
   }
 
   /** The next `count` calendar days (tenant zone) with at least one free slot. */
-  async availableDays(tenantId: string, offeringId: string, resourceId: string, opts: { count?: number } = {}): Promise<string[]> {
+  async availableDays(tenantId: string, offeringId: string, resourceId: string, opts: { count?: number; forCustomerId?: string } = {}): Promise<string[]> {
     const settings = await this.settings(tenantId);
     const offering = await this.service(tenantId, offeringId);
     const candidates = await this.candidates(tenantId, offeringId, resourceId);
@@ -117,18 +213,18 @@ export class SchedulingService {
     const out: string[] = [];
     for (let d = 0; d <= settings.maxAdvanceDays && out.length < (opts.count ?? 7); d++) {
       const date = addDays(today, d);
-      const slots = await this.slotsFor(settings, offering, candidates, date, now);
+      const slots = await this.slotsFor(settings, offering, candidates, date, now, opts.forCustomerId);
       if (slots.length > 0) out.push(date);
     }
     return out;
   }
 
   /** Free slots on a day for the service, with the resource that would take each one. */
-  async slots(tenantId: string, offeringId: string, resourceId: string, date: string, opts: { period?: Period } = {}): Promise<Slot[]> {
+  async slots(tenantId: string, offeringId: string, resourceId: string, date: string, opts: { period?: Period; forCustomerId?: string } = {}): Promise<Slot[]> {
     const settings = await this.settings(tenantId);
     const offering = await this.service(tenantId, offeringId);
     const candidates = await this.candidates(tenantId, offeringId, resourceId);
-    const all = await this.slotsFor(settings, offering, candidates, date, this.now());
+    const all = await this.slotsFor(settings, offering, candidates, date, this.now(), opts.forCustomerId);
     if (!opts.period) return all;
     const [from, to] = PERIODS[opts.period];
     return all.filter((s) => {
@@ -198,7 +294,8 @@ export class SchedulingService {
     return r && canServe(r, offeringId) ? [r] : [];
   }
 
-  private async slotsFor(settings: SchedulingSettings, offering: Offering, candidates: Resource[], date: string, now: Date): Promise<Slot[]> {
+  /** Free slots: working hours minus bookings in blocking statuses minus other customers' live holds. */
+  private async slotsFor(settings: SchedulingSettings, offering: Offering, candidates: Resource[], date: string, now: Date, forCustomerId?: string): Promise<Slot[]> {
     const duration = offering.durationMinutes ?? settings.slotStepMinutes;
     const dayStart = zonedToUtc(date, "00:00", settings.tz);
     const dayEnd = new Date(zonedToUtc(addDays(date, 1), "00:00", settings.tz).getTime() + 6 * 60 * 60_000);
@@ -211,6 +308,12 @@ export class SchedulingService {
         const start = new Date(b.scheduledAt!);
         return { start, end: new Date(start.getTime() + (b.durationMinutes ?? duration) * 60_000) };
       });
+      const held = await this.holds.activeOverlapping(offering.tenantId, resource.id, new Date(dayStart.getTime() - 6 * 60 * 60_000), dayEnd, now);
+      for (const h of held) {
+        if (forCustomerId && h.customerId === forCustomerId) continue;
+        // A hold already includes the buffer in its end time; generateSlots adds the buffer again, so take it back out.
+        busy.push({ start: new Date(h.startAt), end: new Date(new Date(h.endAt).getTime() - settings.bufferMinutes * 60_000) });
+      }
       for (const startAt of generateSlots({ date, tz: settings.tz, hours, stepMinutes: settings.slotStepMinutes, durationMinutes: duration, bufferMinutes: settings.bufferMinutes, busy, now, leadMinutes: settings.leadMinutes })) {
         if (!byStart.has(startAt.getTime())) byStart.set(startAt.getTime(), { startAt, resource });
       }

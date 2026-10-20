@@ -26,6 +26,10 @@ import type {
   OutboxFactory,
   ResourceInput,
   ResourceRepository,
+  RescheduleInput,
+  StockLine,
+  StockShortage,
+  VariantInput,
 } from "../ports";
 import { toOutboxRow } from "./outbox";
 
@@ -89,7 +93,7 @@ export class PrismaResourceRepository implements ResourceRepository {
   }
 }
 
-const OFFERING_INCLUDE = { modifierGroups: { include: { options: true } } } as const;
+const OFFERING_INCLUDE = { modifierGroups: { include: { options: true } }, variants: true } as const;
 
 const toCategory = (r: { id: string; tenantId: string; name: Prisma.JsonValue; sortOrder: number; isActive: boolean }): Category => ({
   id: r.id,
@@ -118,7 +122,7 @@ function groupsCreate(tenantId: string, groups: ModifierGroupInput[]): Prisma.Mo
   }));
 }
 
-type OfferingRow = Prisma.OfferingGetPayload<{ include: { modifierGroups: { include: { options: true } } } }>;
+type OfferingRow = Prisma.OfferingGetPayload<{ include: { modifierGroups: { include: { options: true } }; variants: true } }>;
 type OrderRow = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
 const asText = (v: Prisma.JsonValue | null): LocalizedText | undefined => (v && typeof v === "object" && !Array.isArray(v) ? (v as LocalizedText) : undefined);
@@ -148,10 +152,28 @@ function toOffering(row: OfferingRow, includeInactiveOptions = false): Offering 
     currency: row.currency,
     durationMinutes: row.durationMinutes ?? undefined,
     imageUrl: row.imageUrl ?? undefined,
+    stock: row.stock ?? undefined,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
     modifierGroups: groups,
+    variants: row.variants
+      .filter((v) => includeInactiveOptions || v.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((v) => ({ id: v.id, name: asText(v.name) ?? {}, sku: v.sku ?? undefined, priceMinor: v.priceMinor ?? undefined, stock: v.stock ?? undefined, sortOrder: v.sortOrder, isActive: v.isActive })),
   };
+}
+
+function variantsCreate(tenantId: string, variants: VariantInput[]): Prisma.ProductVariantCreateWithoutOfferingInput[] {
+  return variants.map((v, i) => ({
+    ...(v.id ? { id: v.id } : {}),
+    tenantId,
+    name: v.name as Prisma.InputJsonValue,
+    sku: v.sku ?? null,
+    priceMinor: v.priceMinor ?? null,
+    stock: v.stock ?? null,
+    sortOrder: v.sortOrder ?? i,
+    isActive: v.isActive ?? true,
+  }));
 }
 
 export class PrismaCatalogRepository implements CatalogRepository {
@@ -216,8 +238,10 @@ export class PrismaCatalogRepository implements CatalogRepository {
         durationMinutes: input.durationMinutes ?? null,
         imageUrl: input.imageUrl ?? null,
         sortOrder,
+        stock: input.stock ?? null,
         isActive: input.isActive ?? true,
         modifierGroups: { create: groupsCreate(tenantId, input.modifierGroups ?? []) },
+        variants: { create: variantsCreate(tenantId, input.variants ?? []) },
       },
       include: OFFERING_INCLUDE,
     });
@@ -229,6 +253,16 @@ export class PrismaCatalogRepository implements CatalogRepository {
     if (!existing) return null;
     const row = await this.prisma.$transaction(async (tx) => {
       if (patch.modifierGroups) await tx.modifierGroup.deleteMany({ where: { offeringId } });
+      if (patch.variants) {
+        // Keep rows whose id the patch names (stock survives an edit); replace the rest.
+        const keep = patch.variants.map((v) => v.id).filter((id): id is string => !!id);
+        await tx.productVariant.deleteMany({ where: { offeringId, id: { notIn: keep } } });
+        for (const [i, v] of patch.variants.entries()) {
+          const data = { name: v.name as Prisma.InputJsonValue, sku: v.sku ?? null, priceMinor: v.priceMinor ?? null, sortOrder: v.sortOrder ?? i, isActive: v.isActive ?? true, ...(v.stock !== undefined ? { stock: v.stock } : {}) };
+          if (v.id && (await tx.productVariant.findFirst({ where: { id: v.id, offeringId } }))) await tx.productVariant.update({ where: { id: v.id }, data });
+          else await tx.productVariant.create({ data: { ...data, ...(v.id ? { id: v.id } : {}), tenantId, offeringId, stock: v.stock ?? null } });
+        }
+      }
       return tx.offering.update({
         where: { id: offeringId },
         data: {
@@ -242,12 +276,62 @@ export class PrismaCatalogRepository implements CatalogRepository {
           ...(patch.imageUrl !== undefined ? { imageUrl: patch.imageUrl } : {}),
           ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
           ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
+          ...(patch.stock !== undefined ? { stock: patch.stock } : {}),
           ...(patch.modifierGroups ? { modifierGroups: { create: groupsCreate(tenantId, patch.modifierGroups) } } : {}),
         },
         include: OFFERING_INCLUDE,
       });
     });
     return toOffering(row, true);
+  }
+
+  /** All lines or none: conditional decrements inside one transaction; a zero-row update means a shortage. */
+  async reserveStock(tenantId: string, lines: StockLine[]): Promise<{ ok: true } | { ok: false; shortages: StockShortage[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const shortages: StockShortage[] = [];
+      for (const line of lines) {
+        if (line.variantId) {
+          const v = await tx.productVariant.findFirst({ where: { id: line.variantId, tenantId, offeringId: line.offeringId } });
+          if (!v) {
+            shortages.push({ ...line, available: 0 });
+            continue;
+          }
+          if (v.stock === null) continue;
+          const res = await tx.productVariant.updateMany({ where: { id: v.id, stock: { gte: line.quantity } }, data: { stock: { decrement: line.quantity } } });
+          if (res.count === 0) shortages.push({ ...line, available: v.stock });
+        } else {
+          const o = await tx.offering.findFirst({ where: { id: line.offeringId, tenantId } });
+          if (!o) {
+            shortages.push({ ...line, available: 0 });
+            continue;
+          }
+          if (o.stock === null) continue;
+          const res = await tx.offering.updateMany({ where: { id: o.id, stock: { gte: line.quantity } }, data: { stock: { decrement: line.quantity } } });
+          if (res.count === 0) shortages.push({ ...line, available: o.stock });
+        }
+      }
+      if (shortages.length) throw new StockShortageSignal(shortages);
+      return { ok: true as const };
+    }).catch((err) => {
+      if (err instanceof StockShortageSignal) return { ok: false as const, shortages: err.shortages };
+      throw err;
+    });
+  }
+
+  async releaseStock(tenantId: string, lines: StockLine[]): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of lines) {
+        if (line.variantId) await tx.productVariant.updateMany({ where: { id: line.variantId, tenantId, stock: { not: null } }, data: { stock: { increment: line.quantity } } });
+        else await tx.offering.updateMany({ where: { id: line.offeringId, tenantId, stock: { not: null } }, data: { stock: { increment: line.quantity } } });
+      }
+    });
+  }
+}
+
+/** Rolls the reservation transaction back and carries the shortages out. */
+class StockShortageSignal extends Error {
+  constructor(public readonly shortages: StockShortage[]) {
+    super("stock shortage");
   }
 }
 
@@ -266,6 +350,8 @@ function toOrder(row: OrderRow): Order {
       (i): OrderItem => ({
         id: i.id,
         offeringId: i.offeringId ?? "",
+        variantId: i.variantId ?? undefined,
+        variantTitle: i.variantTitle ?? undefined,
         title: i.title,
         quantity: i.quantity,
         unitPriceMinor: i.unitPriceMinor,
@@ -322,6 +408,8 @@ export class PrismaOrderRepository implements OrderRepository {
           items: {
             create: input.items.map((i) => ({
               offeringId: i.offeringId || null,
+              variantId: i.variantId ?? null,
+              variantTitle: i.variantTitle ?? null,
               title: i.title,
               quantity: i.quantity,
               unitPriceMinor: i.unitPriceMinor,
@@ -385,6 +473,10 @@ export class PrismaOrderRepository implements OrderRepository {
       });
       const clash = candidates.some((c) => c.scheduledAt && overlaps(start, end, c.scheduledAt, new Date(c.scheduledAt.getTime() + (c.durationMinutes ?? 0) * 60_000)));
       if (clash) throw new SlotTakenError();
+      // Someone else's live hold on the slot counts as taken; the customer's own hold does not.
+      const heldByOthers = await tx.bookingHold.count({ where: { tenantId: input.tenantId, resourceId: input.resourceId, status: "held", expiresAt: { gt: new Date() }, startAt: { lt: end }, endAt: { gt: start }, ...(input.holdId ? { id: { not: input.holdId } } : {}) } });
+      if (heldByOthers > 0) throw new SlotTakenError();
+      if (input.holdId) await tx.bookingHold.updateMany({ where: { id: input.holdId, tenantId: input.tenantId }, data: { status: "confirmed" } });
       const tenant = await tx.tenant.update({ where: { id: input.tenantId }, data: { orderSeq: { increment: 1 } }, select: { orderSeq: true } });
       const row = await tx.order.create({
         data: {
@@ -410,6 +502,8 @@ export class PrismaOrderRepository implements OrderRepository {
           items: {
             create: input.items.map((i) => ({
               offeringId: i.offeringId || null,
+              variantId: i.variantId ?? null,
+              variantTitle: i.variantTitle ?? null,
               title: i.title,
               quantity: i.quantity,
               unitPriceMinor: i.unitPriceMinor,
@@ -420,6 +514,46 @@ export class PrismaOrderRepository implements OrderRepository {
           },
           events: { create: { tenantId: input.tenantId, type: "order.placed", payload: {} } },
         },
+        include: { items: true },
+      });
+      const order = toOrder(row);
+      if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
+      return order;
+    });
+  }
+
+  async reschedule(tenantId: string, orderId: string, input: RescheduleInput, blockingStatuses: string[], outbox?: OutboxFactory): Promise<Order> {
+    const start = input.scheduledAt;
+    const end = new Date(start.getTime() + input.durationMinutes * 60_000);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Resource" WHERE id = ${input.resourceId} FOR UPDATE`;
+      const candidates = await tx.order.findMany({
+        where: { tenantId, resourceId: input.resourceId, status: { in: blockingStatuses }, id: { not: orderId }, scheduledAt: { gte: new Date(start.getTime() - 24 * 60 * 60_000), lt: end } },
+        select: { scheduledAt: true, durationMinutes: true },
+      });
+      if (candidates.some((c) => c.scheduledAt && overlaps(start, end, c.scheduledAt, new Date(c.scheduledAt.getTime() + (c.durationMinutes ?? 0) * 60_000)))) throw new SlotTakenError();
+      const heldByOthers = await tx.bookingHold.count({ where: { tenantId, resourceId: input.resourceId, status: "held", expiresAt: { gt: new Date() }, startAt: { lt: end }, endAt: { gt: start }, ...(input.holdId ? { id: { not: input.holdId } } : {}) } });
+      if (heldByOthers > 0) throw new SlotTakenError();
+      if (input.holdId) await tx.bookingHold.updateMany({ where: { id: input.holdId, tenantId }, data: { status: "confirmed" } });
+      const row = await tx.order.update({
+        where: { id: orderId },
+        data: { scheduledAt: start, resourceId: input.resourceId, durationMinutes: input.durationMinutes, events: { create: { tenantId, type: "order.rescheduled", payload: { scheduledAt: start.toISOString(), resourceId: input.resourceId } } } },
+        include: { items: true },
+      });
+      if (row.tenantId !== tenantId) throw new Error("order belongs to another tenant");
+      const order = toOrder(row);
+      if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
+      return order;
+    });
+  }
+
+  async updatePayment(tenantId: string, orderId: string, paymentStatus: PaymentStatus, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findFirst({ where: { tenantId, id: orderId } });
+      if (!existing) throw new Error(`order ${orderId} not found`);
+      const row = await tx.order.update({
+        where: { id: orderId },
+        data: { paymentStatus, status, events: { create: { tenantId, type: event.type, payload: (event.payload ?? {}) as Prisma.InputJsonValue } } },
         include: { items: true },
       });
       const order = toOrder(row);

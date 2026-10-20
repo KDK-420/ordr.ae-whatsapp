@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { demoCatalog } from "../src/actions/demo-catalog";
-import { demoSalonCatalog } from "../src/actions/demo-salon";
+import { demoDataFor } from "../src/actions/demo";
 import { hashPassword } from "../src/auth/password";
 
 const prisma = new PrismaClient();
@@ -43,7 +42,7 @@ async function main() {
     console.log("SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set: no dashboard user created");
   }
   const blueprintId = env.SEED_BLUEPRINT_ID ?? "restaurant";
-  const demo = blueprintId === "salon" ? demoSalonCatalog(tenant.id) : { ...demoCatalog(tenant.id), resources: [] };
+  const demo = demoDataFor(blueprintId, tenant.id);
   for (const c of demo.categories) {
     await prisma.category.upsert({
       where: { id: c.id },
@@ -60,6 +59,7 @@ async function main() {
         type: o.type,
         priceMinor: o.priceMinor,
         durationMinutes: o.durationMinutes ?? null,
+        stock: o.stock ?? null,
         sortOrder: o.sortOrder,
         isActive: o.isActive,
         categoryId: o.categoryId,
@@ -74,10 +74,18 @@ async function main() {
         priceMinor: o.priceMinor,
         currency: o.currency,
         durationMinutes: o.durationMinutes ?? null,
+        stock: o.stock ?? null,
         sortOrder: o.sortOrder,
         isActive: o.isActive,
       },
     });
+    for (const v of o.variants ?? []) {
+      await prisma.productVariant.upsert({
+        where: { id: v.id },
+        update: { name: v.name, sku: v.sku ?? null, priceMinor: v.priceMinor ?? null, stock: v.stock ?? null, sortOrder: v.sortOrder, isActive: v.isActive },
+        create: { id: v.id, tenantId: tenant.id, offeringId: o.id, name: v.name, sku: v.sku ?? null, priceMinor: v.priceMinor ?? null, stock: v.stock ?? null, sortOrder: v.sortOrder, isActive: v.isActive },
+      });
+    }
     await prisma.modifierGroup.deleteMany({ where: { offeringId: o.id } });
     for (const g of o.modifierGroups) {
       await prisma.modifierGroup.create({

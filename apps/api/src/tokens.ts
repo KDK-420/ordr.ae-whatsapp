@@ -19,4 +19,12 @@ export const TOKENS = {
   Assistant: Symbol("Assistant"),
   Agent: Symbol("Agent"),
   NumberPoolRepository: Symbol("NumberPoolRepository"),
+  CartRepository: Symbol("CartRepository"),
+  PaymentIntentRepository: Symbol("PaymentIntentRepository"),
+  WebhookReceiptRepository: Symbol("WebhookReceiptRepository"),
+  BookingHoldRepository: Symbol("BookingHoldRepository"),
+  WebSessionRepository: Symbol("WebSessionRepository"),
+  MemoryRepository: Symbol("MemoryRepository"),
+  AgentRunRepository: Symbol("AgentRunRepository"),
+  PaymentProvider: Symbol("PaymentProvider"),
 } as const;

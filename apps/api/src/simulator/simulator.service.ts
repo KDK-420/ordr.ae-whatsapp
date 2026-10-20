@@ -18,18 +18,25 @@ export function isDemoWaId(waId: string): boolean {
   return waId.startsWith(DEMO_WA_PREFIX);
 }
 
+/** Web chat visitors are identified by an opaque id that is not a phone number. */
+export const WEB_WA_PREFIX = "web:";
+
+export function isWebWaId(waId: string): boolean {
+  return waId.startsWith(WEB_WA_PREFIX);
+}
+
 /** Wraps the real sender: demo numbers are recorded in the thread but never reach Meta. */
 export class DemoAwareSender implements MessageSender {
   private counter = 0;
   constructor(private readonly inner: MessageSender) {}
 
   async send(target: SendTarget, message: OutboundMessage): Promise<SendResult> {
-    if (isDemoWaId(target.to)) return { providerMessageId: `wamid.demo.${Date.now()}.${++this.counter}` };
+    if (isDemoWaId(target.to) || isWebWaId(target.to)) return { providerMessageId: `wamid.demo.${Date.now()}.${++this.counter}` };
     return this.inner.send(target, message);
   }
 
   async markRead(target: Omit<SendTarget, "to">, messageId: string): Promise<void> {
-    if (messageId.startsWith("wamid.demo.")) return;
+    if (messageId.startsWith("wamid.demo.") || messageId.startsWith(WEB_WA_PREFIX)) return;
     await this.inner.markRead?.(target, messageId);
   }
 }

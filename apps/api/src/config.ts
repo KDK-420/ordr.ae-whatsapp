@@ -28,6 +28,17 @@ const EnvSchema = z.object({
   /** Claude assistant for free text, option matching and agent drafts. Off when the key is missing. */
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
+  /** Where the dashboard (web chat, mock checkout page) is reachable by customers. */
+  PUBLIC_BASE_URL: z.string().url().default("http://localhost:3001"),
+  /** "mock" ships a hosted-looking checkout page that signs its own webhook; real providers plug in behind the same port. */
+  PAYMENT_PROVIDER: z.enum(["mock"]).default("mock"),
+  /** Signs and verifies payment webhooks. Falls back to AUTH_SECRET / META_APP_SECRET. */
+  PAYMENT_WEBHOOK_SECRET: z.string().min(16).optional(),
+  /** How long a held slot or a checkout stays reserved. */
+  HOLD_MINUTES: z.coerce.number().int().positive().default(10),
+  CHECKOUT_MINUTES: z.coerce.number().int().positive().default(30),
+  /** Default retention for remembered preferences. */
+  MEMORY_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
   /** Worker: how often to look for outbox events, how many to take, and when to give up on one. */
   OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1000),
   OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(25),

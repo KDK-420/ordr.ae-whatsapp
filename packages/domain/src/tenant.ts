@@ -1,6 +1,7 @@
 import type { ChannelId, TenantId } from "./ids";
 
-export type ChannelProvider = "meta_cloud";
+/** meta_cloud: a WhatsApp number; web: the tenant's web chat (one virtual channel per tenant). */
+export type ChannelProvider = "meta_cloud" | "web";
 
 export interface Tenant {
   id: TenantId;

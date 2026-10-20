@@ -1,10 +1,10 @@
 # Caddy terminates TLS (automatic Let's Encrypt certificate for DOMAIN) and routes:
-#   /health, /webhooks/*, /merchant/*  -> the API
-#   everything else                    -> the dashboard (landing page, login, orders board)
+#   /health, /webhooks/*, /merchant/*, /v1/*  -> the API
+#   everything else                           -> the dashboard (landing page, web chat, checkout, login, orders board)
 {$DOMAIN} {
 	encode gzip
 
-	@api path /health /webhooks/* /merchant/*
+	@api path /health /webhooks/* /merchant/* /v1/*
 	handle @api {
 		reverse_proxy api:3000
 	}

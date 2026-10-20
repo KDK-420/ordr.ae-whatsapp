@@ -31,10 +31,15 @@ just menu-driven. The model is `ANTHROPIC_MODEL` in `deploy/.env` (default `clau
 
 Actions tab > VPS > Run workflow. Inputs: `host`, `domain` (default `app.ordr.ae`; the run fails
 early if its A record does not point at the server), `mode` (`setup` the first time, `deploy` for
-updates), `seed` (`salon` or `restaurant` reseeds the demo tenant as that vertical and moves the
-WhatsApp number and the owner login to it; `no` leaves data alone), `ssh_public_key`,
-`disable_password_auth`. The run summary prints the health and webhook URLs, whether the
-assistant is on, and the newest tenant.
+updates), `seed` (`salon`, `restaurant` or `retail` reseeds the demo tenant as that vertical and
+moves the WhatsApp number and the owner login to it; `no` leaves data alone), `ssh_public_key`,
+`disable_password_auth`. The run summary prints the health, web chat and webhook URLs, whether
+the assistant is on, the newest tenant, and the assistant's reply to a "hi" sent through the
+public web chat of the seeded tenant (`DEMO_CHAT_SLUG`, derived from `SEED_TENANT_NAME`).
+
+Web chat lives at `https://<domain>/chat/<tenant-slug>` for every tenant and needs no WhatsApp
+number; payment links point at `https://<domain>/pay/<intent>` (`PUBLIC_BASE_URL`, set by the
+workflow). Payments run on the mock provider until a gateway is chosen; see `docs/RUNBOOK.md`.
 
 **Credentials.** The runner logs in with the `VPS_SSH_KEY` secret (a private key) when it is
 set and authorized, otherwise with the `VPS_PASSWORD` secret (root password). To move to keys:

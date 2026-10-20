@@ -7,11 +7,13 @@ import type { OfferingId, OrderId, ResourceId, TenantId } from "./ids";
  */
 export type OrderKind = "order" | "booking" | "appointment";
 export type OrderSource = "whatsapp" | "pos" | "web";
-export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded";
+export type PaymentStatus = "unpaid" | "pending" | "paid" | "failed" | "refunded";
 
 export interface OrderItem {
   id?: string;
   offeringId: OfferingId;
+  variantId?: string;
+  variantTitle?: string;
   title: string;
   quantity: number;
   unitPriceMinor: number;

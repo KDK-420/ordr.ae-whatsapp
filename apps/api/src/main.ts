@@ -7,6 +7,7 @@ import { config as loadEnv } from "dotenv";
 import { AppModule } from "./app.module";
 import { loadConfig } from "./config";
 import { InboundQueue } from "./conversation/inbound-queue";
+import { MaintenanceService } from "./maintenance.service";
 
 loadEnv({ path: [resolve(__dirname, "../../../.env"), resolve(process.cwd(), ".env")] });
 
@@ -16,6 +17,8 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const queue = app.get(InboundQueue);
+  // Without a worker process (memory mode) the API does its own housekeeping.
+  if (config.storage === "memory") app.get(MaintenanceService).start();
   const shutdown = async (signal: string) => {
     Logger.log(`${signal} received, draining inbound queue`, "Bootstrap");
     await queue.whenIdle();

@@ -2,8 +2,7 @@ import { type DynamicModule, Logger, Module, type Provider } from "@nestjs/commo
 import { getBlueprint } from "@ordr/blueprints";
 import type { ActionRegistry } from "@ordr/flow-schema";
 import { CloudApiClient, LoggingSender, type MessageSender } from "@ordr/whatsapp";
-import { demoCatalog } from "./actions/demo-catalog";
-import { demoSalonCatalog } from "./actions/demo-salon";
+import { demoDataFor } from "./actions/demo";
 import { createActionRegistry } from "./actions";
 import { AdminController } from "./admin/admin.controller";
 import { AdminService } from "./admin/admin.service";
@@ -14,6 +13,31 @@ import { type Assistant, NoopAssistant } from "./ai/assistant";
 import { AssistantService } from "./ai/assistant.service";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryNumberPoolRepository, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
+import {
+  InMemoryAgentRunRepository,
+  InMemoryBookingHoldRepository,
+  InMemoryCartRepository,
+  InMemoryMemoryRepository,
+  InMemoryPaymentIntentRepository,
+  InMemoryWebhookReceiptRepository,
+  InMemoryWebSessionRepository,
+} from "./adapters/memory-commerce";
+import {
+  PrismaAgentRunRepository,
+  PrismaBookingHoldRepository,
+  PrismaCartRepository,
+  PrismaMemoryRepository,
+  PrismaPaymentIntentRepository,
+  PrismaWebhookReceiptRepository,
+  PrismaWebSessionRepository,
+} from "./adapters/prisma-commerce";
+import { CommerceService } from "./commerce/commerce.service";
+import { MaintenanceService } from "./maintenance.service";
+import { MemoryService } from "./memory/memory.service";
+import { MockPaymentProvider, type PaymentProvider } from "./payments/payment-provider";
+import { PaymentsController } from "./payments/payments.controller";
+import { WebChatController } from "./webchat/webchat.controller";
+import { WebChatService } from "./webchat/webchat.service";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
 import { FakeTemplateApi, InMemoryTemplateRepository, PrismaTemplateRepository } from "./adapters/templates";
 import { PrismaCatalogRepository, PrismaOrderRepository, PrismaResourceRepository } from "./adapters/prisma-catalog";
@@ -101,6 +125,7 @@ export interface AppOptions {
     assistant: Assistant;
     agent: ConversationAgent;
     numbers: NumberPoolRepository;
+    paymentProvider: PaymentProvider;
   }>;
 }
 
@@ -149,7 +174,20 @@ export class AppModule {
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
       OrderService,
       SchedulingService,
+      CommerceService,
+      MemoryService,
+      WebChatService,
+      MaintenanceService,
       OutboxRelay,
+      {
+        provide: TOKENS.PaymentProvider,
+        useFactory: (): PaymentProvider => {
+          if (overrides.paymentProvider) return overrides.paymentProvider;
+          const secret = config.PAYMENT_WEBHOOK_SECRET ?? config.AUTH_SECRET ?? config.META_APP_SECRET;
+          logger.log(`payments: ${config.PAYMENT_PROVIDER} provider, checkout pages at ${config.PUBLIC_BASE_URL}/pay/<intent>`);
+          return new MockPaymentProvider(secret, config.PUBLIC_BASE_URL);
+        },
+      },
       overrides.actions
         ? { provide: TOKENS.ActionRegistry, useValue: overrides.actions }
         : {
@@ -182,12 +220,12 @@ export class AppModule {
       },
       {
         provide: TOKENS.Agent,
-        useFactory: (scheduling: SchedulingService): ConversationAgent => {
+        useFactory: (scheduling: SchedulingService, commerce: CommerceService, memory: MemoryService): ConversationAgent => {
           if (overrides.agent) return overrides.agent;
           if (!config.ANTHROPIC_API_KEY) return new NoopAgent();
-          return new AnthropicAgent(scheduling, { apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
+          return new AnthropicAgent({ scheduling, commerce, memory }, { apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
         },
-        inject: [SchedulingService],
+        inject: [SchedulingService, CommerceService, MemoryService],
       },
       OrderNotifier,
       BookingReminderNotifier,
@@ -201,14 +239,24 @@ export class AppModule {
     if (config.storage === "memory") {
       logger.log("storage=memory: tenants, catalog, orders, conversations, sessions and dedupe live in process; events are handled in process");
       const seed = seedTenantFromConfig(config);
-      const demo = config.SEED_BLUEPRINT_ID === "salon" ? demoSalonCatalog(seed.tenant.id) : { ...demoCatalog(seed.tenant.id), resources: [] };
+      const demo = demoDataFor(config.SEED_BLUEPRINT_ID, seed.tenant.id);
+      const orders = overrides.orders ?? new InMemoryOrderRepository();
+      const holds = new InMemoryBookingHoldRepository(orders);
+      if (orders instanceof InMemoryOrderRepository) orders.holds = holds;
       providers.push(
+        { provide: TOKENS.BookingHoldRepository, useValue: holds },
+        { provide: TOKENS.CartRepository, useValue: new InMemoryCartRepository() },
+        { provide: TOKENS.PaymentIntentRepository, useValue: new InMemoryPaymentIntentRepository() },
+        { provide: TOKENS.WebhookReceiptRepository, useValue: new InMemoryWebhookReceiptRepository() },
+        { provide: TOKENS.WebSessionRepository, useValue: new InMemoryWebSessionRepository() },
+        { provide: TOKENS.MemoryRepository, useValue: new InMemoryMemoryRepository() },
+        { provide: TOKENS.AgentRunRepository, useValue: new InMemoryAgentRunRepository() },
         { provide: TOKENS.ResourceRepository, useValue: overrides.resources ?? new InMemoryResourceRepository(demo.resources) },
         { provide: TOKENS.EventBus, useValue: overrides.eventBus ?? new InMemoryEventBus() },
         { provide: TOKENS.OutboxStore, useValue: overrides.outbox ?? new InMemoryOutboxStore() },
         { provide: TOKENS.TemplateRepository, useValue: overrides.templates ?? new InMemoryTemplateRepository() },
         { provide: TOKENS.CatalogRepository, useValue: overrides.catalog ?? new InMemoryCatalogRepository(demo.categories, demo.offerings) },
-        { provide: TOKENS.OrderRepository, useValue: overrides.orders ?? new InMemoryOrderRepository() },
+        { provide: TOKENS.OrderRepository, useValue: orders },
         { provide: TOKENS.TenantRepository, useValue: overrides.tenants ?? new InMemoryTenantRepository([seed]) },
         { provide: TOKENS.ConversationRepository, useValue: overrides.conversations ?? new InMemoryConversationRepository() },
         { provide: TOKENS.SessionStore, useValue: overrides.sessions ?? new InMemorySessionStore() },
@@ -255,6 +303,13 @@ export class AppModule {
         overrides.numbers
           ? { provide: TOKENS.NumberPoolRepository, useValue: overrides.numbers }
           : { provide: TOKENS.NumberPoolRepository, useFactory: (p: PrismaService) => new PrismaNumberPoolRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.BookingHoldRepository, useFactory: (p: PrismaService) => new PrismaBookingHoldRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.CartRepository, useFactory: (p: PrismaService) => new PrismaCartRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.PaymentIntentRepository, useFactory: (p: PrismaService) => new PrismaPaymentIntentRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.WebhookReceiptRepository, useFactory: (p: PrismaService) => new PrismaWebhookReceiptRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.WebSessionRepository, useFactory: (p: PrismaService) => new PrismaWebSessionRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.MemoryRepository, useFactory: (p: PrismaService) => new PrismaMemoryRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.AgentRunRepository, useFactory: (p: PrismaService) => new PrismaAgentRunRepository(p), inject: [PrismaService] },
       );
       if (config.REDIS_URL) {
         logger.log("storage=prisma with Redis for sessions and dedupe");
@@ -295,10 +350,12 @@ export class AppModule {
               MerchantSettingsController,
               MerchantCatalogController,
               MerchantUsersController,
+              WebChatController,
+              PaymentsController,
             ]
           : [],
       providers,
-      exports: [ConversationService, InboundQueue, OrderService],
+      exports: [ConversationService, InboundQueue, OrderService, MaintenanceService],
     };
   }
 }

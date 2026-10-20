@@ -8,7 +8,9 @@ export function contactLinks() {
   const contact = digits(process.env.CONTACT_WHATSAPP);
   const demo = digits(process.env.WHATSAPP_NUMBER);
   const email = process.env.CONTACT_EMAIL || "hello@ordr.ae";
+  const chatSlug = process.env.DEMO_CHAT_SLUG || "";
   return {
+    tryWebChat: chatSlug ? `/chat/${chatSlug}` : null,
     bookDemo: contact ? `https://wa.me/${contact}?text=${encodeURIComponent("Hi, I'd like a demo of ordr.ae for my business")}` : `mailto:${email}?subject=${encodeURIComponent("ordr.ae demo")}`,
     tryDemo: demo ? `https://wa.me/${demo}?text=${encodeURIComponent("hi")}` : null,
     email,
@@ -142,7 +144,7 @@ export function Faq({ items = FAQ }: { items?: Array<{ q: string; a: string }> }
 }
 
 export function CallToAction({ title = "See it answer your customers.", body = "Twenty minutes on a call. We set up a test number with your services and you message it from your phone." }: { title?: string; body?: string }) {
-  const { bookDemo, tryDemo, email } = contactLinks();
+  const { bookDemo, tryDemo, tryWebChat, email } = contactLinks();
   return (
     <section className="mx-auto max-w-6xl px-5 pb-20">
       <div className="rounded-3xl bg-brand px-6 py-12 text-white sm:px-12">
@@ -152,6 +154,11 @@ export function CallToAction({ title = "See it answer your customers.", body = "
           <a href={bookDemo} className="rounded-md bg-white px-5 py-3 text-sm font-semibold text-brand-dark hover:bg-green-50">
             Book a demo
           </a>
+          {tryWebChat ? (
+            <Link href={tryWebChat} className="rounded-md border border-white/60 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
+              Try the demo in web chat
+            </Link>
+          ) : null}
           {tryDemo ? (
             <a href={tryDemo} className="rounded-md border border-white/60 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">
               Try the demo salon on WhatsApp

@@ -3,6 +3,7 @@ import { localTime } from "@ordr/domain";
 import { describe, expect, it } from "vitest";
 import { demoSalonCatalog } from "../actions/demo-salon";
 import { InMemoryTenantRepository } from "../adapters/memory";
+import { InMemoryBookingHoldRepository } from "../adapters/memory-commerce";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "../adapters/memory-catalog";
 import { seedTenantFromConfig } from "../app.module";
 import { loadConfig } from "../config";
@@ -21,7 +22,7 @@ function setup() {
   const bus = new InMemoryEventBus();
   const outbox = new InMemoryOutboxStore();
   const orderService = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus, outbox);
-  const scheduling = new SchedulingService(new InMemoryCatalogRepository(demo.categories, demo.offerings), new InMemoryResourceRepository(demo.resources), orders, { get: getBlueprint }, orderService);
+  const scheduling = new SchedulingService(new InMemoryCatalogRepository(demo.categories, demo.offerings), new InMemoryResourceRepository(demo.resources), orders, { get: getBlueprint }, orderService, new InMemoryBookingHoldRepository(orders), config);
   scheduling.now = () => NOW;
   return { scheduling, orders, bus, outbox, tenantId: seed.tenant.id };
 }
