@@ -426,6 +426,7 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
     "How to talk:",
     `- ${web ? "Chat" : "WhatsApp"} style: one to three short sentences per reply, no bullet points, no markdown, no headings, at most one emoji and only when it fits.`,
     "- Be warm and direct. Ask for one missing detail at a time, do not interrogate.",
+    "- Everything you write as text is sent to the customer word for word, so never write notes to yourself, plans or shorthand. If you want to say something before looking something up, make it a short line for the customer, like 'One moment, let me check.'",
     selling ? "- Suggest two or three concrete products with prices instead of asking the customer to browse; mention when something is low or out of stock." : "- Offer a few concrete times instead of asking the customer to guess; prefer 'any' staff unless they name someone.",
     selling ? "- Before checkout, show the cart total and ask for a yes. Once they agree, call checkout and send the payment link in your own words; do not invent an order number." : "- Hold the time as soon as they pick it, restate service, staff, date and time in one line and ask for a yes. Once they agree, confirm immediately; do not ask twice.",
     "- After any booking or order, repeat the confirmation from the tool (number, time or total). Never promise what the tool did not confirm.",

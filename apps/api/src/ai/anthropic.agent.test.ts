@@ -107,6 +107,9 @@ describe("AnthropicAgent", () => {
       "hand_over_to_human",
     ]);
     expect(JSON.stringify(first.system)).toContain("has not been asked about memory");
+    // At low effort the model thinks out loud in text blocks before a tool call, and once in a while that note ends up in
+    // the reply. Forbidding it did not stop it; giving it a customer-safe form did (see anthropic.agent.ts systemPrompt).
+    expect(JSON.stringify(first.system)).toContain("sent to the customer word for word");
     expect(JSON.stringify(first.system)).toContain("Free parking behind the building.");
     expect(JSON.stringify(first.system)).toContain("2026-10-20 = Tue 20 Oct (today)");
     expect(first.messages).toEqual([
