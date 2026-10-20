@@ -47,8 +47,13 @@ const EnvSchema = z.object({
 
 export type AppConfig = z.infer<typeof EnvSchema> & { storage: "memory" | "prisma" };
 
+/** Env files often ship `KEY=` for optional values; an empty string means "not set", not "set to nothing". */
+function withoutEmptyValues(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([, value]) => value !== undefined && value.trim() !== ""));
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const parsed = EnvSchema.parse(env);
+  const parsed = EnvSchema.parse(withoutEmptyValues(env));
   const storage = parsed.STORAGE ?? (parsed.DATABASE_URL ? "prisma" : "memory");
   return { ...parsed, storage };
 }

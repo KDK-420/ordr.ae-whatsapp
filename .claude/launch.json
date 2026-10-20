@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@ordr/api", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@ordr/dashboard", "dev"],
+      "port": 3001
+    }
+  ]
+}
