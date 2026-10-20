@@ -8,6 +8,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "dev": "turbo run dev --filter=@ordr/api",
+    "dev:web": "pnpm --filter @ordr/dashboard dev",
+    "dev:memory": "cd apps/api && STORAGE=memory tsx watch src/main.ts",
     "simulate": "pnpm --filter @ordr/api simulate",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
