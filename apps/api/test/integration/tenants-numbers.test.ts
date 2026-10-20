@@ -51,6 +51,12 @@ describe("Prisma tenants, channels and the number pool", () => {
     expect(mine.map((t) => t.tenant.slug)).toEqual([`pool-b-${suffix}`, `pool-a-${suffix}`]);
     expect(mine.every((t) => t.channel === null)).toBe(true);
 
+    const withSettings = await tenants.updateSettings(a.id, { conversationStyle: "natural", facts: ["Free parking"] });
+    expect(withSettings?.settings).toEqual({ conversationStyle: "natural", facts: ["Free parking"] });
+    expect((await tenants.updateSettings(a.id, { facts: null }))?.settings).toEqual({ conversationStyle: "natural" });
+    expect((await tenants.findById(a.id))?.settings).toEqual({ conversationStyle: "natural" });
+    expect(await tenants.updateSettings("nope", {})).toBeNull();
+
     const admin = await users.create({ tenantId: a.id, email: `ops-${suffix}@x.test`, name: "Ops", role: "owner", passwordHash: "h", isPlatformAdmin: true });
     expect(admin.isPlatformAdmin).toBe(true);
     expect((await users.findById(admin.id))?.isPlatformAdmin).toBe(true);

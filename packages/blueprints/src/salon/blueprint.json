@@ -41,6 +41,7 @@
     "bufferMinutes": 10,
     "leadMinutes": 60,
     "maxAdvanceDays": 14,
-    "reminderMinutes": [1440, 120]
+    "reminderMinutes": [1440, 120],
+    "conversationStyle": "natural"
   }
 }

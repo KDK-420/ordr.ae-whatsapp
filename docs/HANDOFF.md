@@ -3,7 +3,7 @@
 Read docs/PLAN.md first for the architecture and roadmap, docs/DEPLOY.md for the server. This
 note says where the build is and what to do next.
 
-## What exists (all green: 58 package tests, 66 API tests, 13 Postgres integration tests)
+## What exists (all green: 58 package tests, 72 API tests, 13 Postgres integration tests)
 
 ### Deployed
 
@@ -46,6 +46,21 @@ logs in with the `VPS_SSH_KEY` secret.
   model failure degrades to the menu. `ScriptedAssistant` in `test/salon.e2e.test.ts` shows how
   to test flows that lean on it; `src/ai/anthropic.assistant.test.ts` pins the request shape.
 
+- **Natural conversation style** (`apps/api/src/ai/agent.ts`, `anthropic.agent.ts`). Per tenant,
+  `settings.conversationStyle` is `natural` or `guided` (blueprint default: salon natural,
+  restaurant guided; owners switch it under Settings › Conversation, where they also keep the
+  `facts` the bot may share). In natural style every customer message goes to Claude through
+  the SDK tool runner with tools bound to the tenant and customer: list_services, list_staff,
+  available_days, available_times, book_appointment, my_bookings, cancel_booking,
+  hand_over_to_human, and open_ordering_menu for non-salon verticals (it sends the guided menu
+  after the reply). The system prompt carries the business facts, today's date and the next
+  week's dates in the tenant timezone, and WhatsApp-style rules (short, no markdown, confirm
+  once, book immediately on a yes). The model never writes data itself: bookings go through
+  `SchedulingService.book`, which re-checks the slot. A tapped button from an older guided
+  message still resumes its flow; a model failure falls back to the guided menu; a handoff
+  pauses the bot until the inbox hands it back. Without `ANTHROPIC_API_KEY` the tenant runs
+  guided. Tests: `src/ai/anthropic.agent.test.ts` (scripted API, real scheduling engine) and
+  `test/natural.e2e.test.ts` (scripted agent through ConversationService).
 - **Salon dashboard.** `GET /merchant/bookings?from&to` and `/merchant/resources` (owner-only
   writes); Calendar (day view per team member, off-hours shaded, booking drawer with the
   blueprint's transitions), Settings › Team and hours, kind and duration on catalog items, and
@@ -184,9 +199,10 @@ For a local dashboard login without Postgres, start the API with `STORAGE=memory
    in Phase 2.
 8. Salon, remaining: rescheduling from WhatsApp and the calendar (today a move is cancel and
    rebook), a week view, per-resource breaks and days off, and the WhatsApp Flows date picker.
-9. Assistant: let merchants edit `facts` in Settings, pass slot preferences the model extracts
-   ("tomorrow afternoon") into the booking flow as prefilled answers, and keep an eye on token
-   cost per conversation in the logs.
+9. Natural style, next: rescheduling as a tool (today it hands over), restaurant ordering as
+   tools (cart, modifiers, delivery address) instead of opening the guided menu, voice notes
+   (transcribe then treat as text), per-conversation token cost in the logs, and an eval set of
+   real transcripts to tune the prompt.
 
 ## Open decisions still waiting on the owner
 

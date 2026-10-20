@@ -35,6 +35,8 @@ export interface TenantRepository {
   attachChannel(tenantId: string, input: ChannelInput): Promise<Channel>;
   /** Stops routing for a number (status inactive); conversation history stays. */
   detachChannel(phoneNumberId: string): Promise<void>;
+  /** Merges keys into tenant.settings (a null value removes the key). */
+  updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null>;
 }
 
 /** A WhatsApp number the platform owns; assigned to at most one tenant at a time. */

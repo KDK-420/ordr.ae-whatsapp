@@ -1,5 +1,6 @@
 /** Small localized strings used by action handlers when composing text for the customer. */
 export const COPY = {
+  handoff: { en: "One of our team will reply here shortly.", ar: "سيرد عليك أحد أعضاء فريقنا هنا قريباً." },
   cartTitle: { en: "Your cart:", ar: "سلتك:" },
   cartEmpty: { en: "Your cart is empty.", ar: "سلتك فارغة." },
   subtotal: { en: "Subtotal", ar: "المجموع الفرعي" },

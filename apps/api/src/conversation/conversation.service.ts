@@ -1,6 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult, type SessionState } from "@ordr/flow-schema";
-import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, text } from "@ordr/whatsapp";
+import { type ActionContext, type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult, type SessionState } from "@ordr/flow-schema";
+import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, type OutboundMessage, text } from "@ordr/whatsapp";
+import type { Customer } from "@ordr/domain";
+import { COPY, t } from "../actions/copy";
+import { conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
 import type { BlueprintRegistry, ConversationRepository, DedupeStore, SessionStore, TenantContext, TenantRepository } from "../ports";
@@ -91,9 +94,16 @@ export class ConversationService {
     };
     const actionCtx = { tenantId: tenant.id, customer: { id: customer.id, waId: customer.waId, name: customer.name }, conversationId: conversation.id };
 
+    const natural = conversationStyle(tenant, blueprint) === "natural" && this.assistant.conversational;
+    const asText = natural ? textOf(event.content) : null;
+
     let result: RunResult;
     try {
-      if (globalFlow) {
+      if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
+        // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
+        // older guided message still goes to its flow; everything else is a conversation.
+        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx);
+      } else if (globalFlow) {
         if (conversation.status === "human") await this.conversations.setConversationStatus(conversation.id, "bot");
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
         const carried = session?.context.cart ? { cart: session.context.cart } : {};
@@ -132,6 +142,33 @@ export class ConversationService {
 
     if (result.session) await this.sessions.set(tenant.id, event.from, result.session, this.config.SESSION_TTL_SECONDS);
     else await this.sessions.delete(tenant.id, event.from);
+  }
+
+  /** One natural-style turn; falls back to the guided menu when the model is unavailable. */
+  private async converse(
+    runner: FlowRunner,
+    blueprint: Blueprint,
+    tenant: TenantContext["tenant"],
+    customer: Customer,
+    conversationId: string,
+    text_: string,
+    language: string,
+    baseContext: Record<string, unknown>,
+    actionCtx: Omit<ActionContext, "language" | "context">,
+  ): Promise<RunResult> {
+    try {
+      const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language);
+      const outbound: OutboundMessage[] = reply.text ? [text(reply.text)] : [];
+      if (reply.startFlow) {
+        const started = await runner.start(reply.startFlow, { language, context: baseContext }, actionCtx);
+        return { ...started, outbound: [...outbound, ...started.outbound], handoff: started.handoff || reply.handoff };
+      }
+      if (reply.handoff && !reply.text) outbound.push(text(t(COPY.handoff, language)));
+      return { outbound, session: null, handoff: reply.handoff, completed: true };
+    } catch (err) {
+      this.logger.warn(`natural conversation failed for ${customer.waId}, showing the menu instead: ${err instanceof Error ? err.message : String(err)}`);
+      return runner.start(blueprint.fallbackFlow ?? blueprint.entryFlow, { language, context: baseContext }, actionCtx);
+    }
   }
 
   /** Turns free text into the button or list reply it means, when the assistant is confident; otherwise the input as sent. */
@@ -181,5 +218,20 @@ export class ConversationService {
       this.runners.set(key, runner);
     }
     return runner;
+  }
+}
+
+/** What the customer said, as text the agent can read; null for content with no words (media, reactions). */
+function textOf(content: InboundContent): string | null {
+  switch (content.kind) {
+    case "text":
+      return content.text;
+    case "button":
+    case "list":
+      return content.title;
+    case "location":
+      return `[shared location: ${content.name ?? ""} ${content.address ?? ""} (${content.latitude}, ${content.longitude})]`.replace(/\s+/g, " ");
+    default:
+      return null;
   }
 }

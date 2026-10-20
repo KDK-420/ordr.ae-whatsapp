@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Blueprint } from "@ordr/flow-schema";
-import { formatMoney, localized, type Tenant } from "@ordr/domain";
+import { type Customer, formatMoney, localized, type Tenant } from "@ordr/domain";
 import { previewOf } from "../conversation/preview";
 import type { BlueprintRegistry, CatalogRepository, ConversationRepository, ResourceRepository, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
+import type { AgentReply, ConversationAgent } from "./agent";
 import type { Assistant, HistoryTurn, Interpretation, PickOptionInput, TenantKnowledge } from "./assistant";
 
 /** How much of the thread the model sees. Enough for "the same as last time", small enough to stay cheap. */
@@ -23,6 +24,7 @@ export class AssistantService {
 
   constructor(
     @Inject(TOKENS.Assistant) private readonly assistant: Assistant,
+    @Inject(TOKENS.Agent) private readonly agent: ConversationAgent,
     @Inject(TOKENS.TenantRepository) private readonly tenants: TenantRepository,
     @Inject(TOKENS.CatalogRepository) private readonly catalog: CatalogRepository,
     @Inject(TOKENS.ResourceRepository) private readonly resources: ResourceRepository,
@@ -32,6 +34,18 @@ export class AssistantService {
 
   get enabled(): boolean {
     return this.assistant.enabled;
+  }
+
+  get conversational(): boolean {
+    return this.agent.enabled;
+  }
+
+  /** Natural style: the agent answers the customer directly, acting through booking tools. Throws when the model fails. */
+  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string): Promise<AgentReply> {
+    const [knowledge, history] = await Promise.all([this.knowledge(tenant, blueprint, language), this.history(conversationId)]);
+    const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, history, knowledge });
+    this.logger.log(`converse "${text.slice(0, 60)}" -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}`);
+    return reply;
   }
 
   /** Which flow free text asks for, or a direct reply. Null means "not sure": show the menu as before. */

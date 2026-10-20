@@ -127,6 +127,19 @@ export class PrismaTenantRepository implements TenantRepository {
     await this.prisma.channel.updateMany({ where: { phoneNumberId }, data: { status: "disabled" } });
     this.cache.delete(phoneNumberId);
   }
+
+  async updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null> {
+    const t = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!t) return null;
+    const settings = { ...((t.settings as Record<string, unknown>) ?? {}) };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null || v === undefined) delete settings[k];
+      else settings[k] = v;
+    }
+    const updated = await this.prisma.tenant.update({ where: { id: tenantId }, data: { settings: settings as Prisma.InputJsonValue } });
+    this.cache.clear(); // contexts carry settings; routing must see the change on the next message
+    return toTenant(updated);
+  }
 }
 
 const toTenant = (t: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; settings: unknown }): Tenant => ({

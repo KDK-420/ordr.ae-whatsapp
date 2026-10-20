@@ -171,10 +171,9 @@ export function DemoSimulator() {
         <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500">
           <p className="font-medium text-slate-700">Try</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            <li>“hi” to get the menu, then tap the buttons and list rows</li>
-            <li>“bookings” to see and cancel appointments</li>
-            <li>“agent” to hand the chat to a human; reply from the Inbox and it shows up here</li>
-            <li>With the AI key set, plain sentences like “can I get a haircut tomorrow afternoon?” work too</li>
+            <li>Natural style (Settings › Conversation): just talk, e.g. “can I get a haircut tomorrow afternoon?”, “what do you charge for colour?”, “cancel my booking”</li>
+            <li>Guided style: “hi” shows the menu; tap the buttons and list rows</li>
+            <li>“I want to talk to someone” hands the chat to a human; reply from the Inbox and it shows up here</li>
           </ul>
         </div>
         {error ? <p className="text-xs text-red-600">{error}</p> : null}

@@ -7,6 +7,8 @@ import { demoSalonCatalog } from "./actions/demo-salon";
 import { createActionRegistry } from "./actions";
 import { AdminController } from "./admin/admin.controller";
 import { AdminService } from "./admin/admin.service";
+import { type ConversationAgent, NoopAgent } from "./ai/agent";
+import { AnthropicAgent } from "./ai/anthropic.agent";
 import { AnthropicAssistant } from "./ai/anthropic.assistant";
 import { type Assistant, NoopAssistant } from "./ai/assistant";
 import { AssistantService } from "./ai/assistant.service";
@@ -38,6 +40,7 @@ import { InboxService } from "./inbox/inbox.service";
 import { MerchantBookingsController } from "./merchant/bookings.controller";
 import { MerchantCatalogController } from "./merchant/catalog.controller";
 import { MerchantResourcesController } from "./merchant/resources.controller";
+import { MerchantSettingsController } from "./merchant/settings.controller";
 import { MerchantConversationsController } from "./merchant/conversations.controller";
 import { MerchantUsersController } from "./merchant/users.controller";
 import { MerchantOrdersService } from "./merchant/merchant-orders.service";
@@ -96,6 +99,7 @@ export interface AppOptions {
     templateApi: TemplateApi;
     resources: ResourceRepository;
     assistant: Assistant;
+    agent: ConversationAgent;
     numbers: NumberPoolRepository;
   }>;
 }
@@ -175,6 +179,15 @@ export class AppModule {
           logger.log(`AI assistant on (${config.ANTHROPIC_MODEL})`);
           return new AnthropicAssistant({ apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
         },
+      },
+      {
+        provide: TOKENS.Agent,
+        useFactory: (scheduling: SchedulingService): ConversationAgent => {
+          if (overrides.agent) return overrides.agent;
+          if (!config.ANTHROPIC_API_KEY) return new NoopAgent();
+          return new AnthropicAgent(scheduling, { apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
+        },
+        inject: [SchedulingService],
       },
       OrderNotifier,
       BookingReminderNotifier,
@@ -279,6 +292,7 @@ export class AppModule {
               AdminController,
               MerchantBookingsController,
               MerchantResourcesController,
+              MerchantSettingsController,
               MerchantCatalogController,
               MerchantUsersController,
             ]

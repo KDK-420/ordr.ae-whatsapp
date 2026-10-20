@@ -97,6 +97,18 @@ export class InMemoryTenantRepository implements TenantRepository {
       this.byPhone.set(phoneNumberId, { tenant: ctx.tenant, channel: { ...ctx.channel, status: "disabled" } });
     }
   }
+
+  async updateSettings(tenantId: string, patch: Record<string, unknown>): Promise<Tenant | null> {
+    const tenant = this.tenants.get(tenantId) ?? (await this.findById(tenantId));
+    if (!tenant) return null;
+    const settings = { ...tenant.settings };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null || v === undefined) delete settings[k];
+      else settings[k] = v;
+    }
+    tenant.settings = settings; // the same object is referenced from every context, so routing sees it at once
+    return tenant;
+  }
 }
 
 export class InMemoryNumberPoolRepository implements NumberPoolRepository {
