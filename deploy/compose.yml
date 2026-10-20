@@ -92,6 +92,9 @@ services:
       PORT: "3001"
       # Shown as the "try the demo" button on the landing page.
       WHATSAPP_NUMBER: ${SEED_DISPLAY_PHONE:-}
+      # "Book a demo" opens a WhatsApp chat with this number (digits, international); falls back to CONTACT_EMAIL.
+      CONTACT_WHATSAPP: ${CONTACT_WHATSAPP:-}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-hello@ordr.ae}
     depends_on:
       - api
     healthcheck:

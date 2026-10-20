@@ -1,58 +1,56 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { ChatDemo } from "@/components/marketing/chat-demo";
+import { CallToAction, contactLinks, Faq, Features, HowItWorks, Industries, SiteFooter, SiteNav, Stats } from "@/components/marketing/site";
+import { VERTICALS } from "@/lib/marketing";
 
-// Read WHATSAPP_NUMBER at request time so the deployed container can set it without a rebuild.
+// Contact links come from the environment at request time so the container can set them without a rebuild.
 export const dynamic = "force-dynamic";
 
-const FEATURES = [
-  { title: "Orders on WhatsApp", body: "Customers browse the menu, build a cart and check out without installing anything." },
-  { title: "Arabic and English", body: "Every message and menu item is bilingual. The bot follows the language the customer writes in." },
-  { title: "Live order board", body: "Accept, prepare and hand over orders from one screen. Customers get a WhatsApp update at each step." },
-];
+export const metadata: Metadata = {
+  title: "ordr.ae · AI receptionist for WhatsApp",
+  description: "Bookings and orders handled on WhatsApp by an AI that talks like your staff, in Arabic and English. For salons, restaurants and clinics in the UAE.",
+  openGraph: { title: "ordr.ae · AI receptionist for WhatsApp", description: "Bookings and orders handled on WhatsApp, in Arabic and English.", type: "website" },
+};
 
 export default function LandingPage() {
-  const number = (process.env.WHATSAPP_NUMBER ?? "").replace(/[^0-9]/g, "");
-  const waLink = number ? `https://wa.me/${number}?text=${encodeURIComponent("hi")}` : null;
+  const { bookDemo, tryDemo } = contactLinks();
+  const salon = VERTICALS[0]!;
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
-      <header className="flex items-center justify-between">
-        <span className="text-xl font-semibold tracking-tight">
-          ordr<span className="text-brand">.ae</span>
-        </span>
-        <Link href="/login" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:border-slate-400">
-          Merchant sign in
-        </Link>
-      </header>
+    <main className="bg-white">
+      <SiteNav />
 
-      <section className="flex flex-1 flex-col justify-center py-20">
-        <h1 className="max-w-2xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-          Take orders where your customers already are: WhatsApp.
-        </h1>
-        <p className="mt-6 max-w-xl text-lg text-slate-600">
-          ordr.ae turns your WhatsApp number into a menu, a checkout and an order desk. Built for restaurants, cafes and
-          cloud kitchens in the UAE.
-        </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          {waLink ? (
-            <a href={waLink} className="rounded-md bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark">
-              Try the demo on WhatsApp
+      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 md:grid-cols-[1.15fr_1fr] md:pb-24 md:pt-20">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-brand">WhatsApp · Arabic and English · UAE</p>
+          <h1 className="mt-3 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">
+            An AI receptionist that books and sells on WhatsApp, like your best staff would.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg text-slate-600">
+            Customers message your number and get a real answer in seconds: free times, prices, a booking, an order. No menus to tap, no app to install, and a person steps in whenever it
+            matters.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href={bookDemo} className="rounded-md bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark">
+              Book a demo
             </a>
-          ) : null}
-          <Link href="/login" className="rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-semibold hover:border-slate-400">
-            Open the dashboard
-          </Link>
-        </div>
-      </section>
-
-      <section className="grid gap-6 border-t border-slate-200 py-12 sm:grid-cols-3">
-        {FEATURES.map((f) => (
-          <div key={f.title}>
-            <h2 className="font-semibold">{f.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{f.body}</p>
+            {tryDemo ? (
+              <a href={tryDemo} className="rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-semibold hover:border-slate-400">
+                Message the demo salon
+              </a>
+            ) : null}
           </div>
-        ))}
+          <p className="mt-4 text-xs text-slate-500">Built on the WhatsApp Cloud API. Your number, your brand, our setup.</p>
+        </div>
+        <ChatDemo lines={salon.conversation} title="Glow Salon" />
       </section>
 
-      <footer className="border-t border-slate-200 py-6 text-xs text-slate-500">ordr.ae · Dubai, UAE</footer>
+      <Stats />
+      <HowItWorks />
+      <Industries />
+      <Features />
+      <Faq />
+      <CallToAction />
+      <SiteFooter />
     </main>
   );
 }
