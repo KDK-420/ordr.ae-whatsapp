@@ -4,6 +4,12 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
 import { age } from "@/lib/format";
 
+/** An inbound photo: the API serves its bytes at /media/:messageId, the session cookie travels along. */
+function isImage(payload: unknown): boolean {
+  const p = payload as { kind?: unknown; mediaType?: unknown } | null;
+  return !!p && typeof p === "object" && p.kind === "media" && p.mediaType === "image";
+}
+
 const LIST_POLL_MS = 8000;
 const THREAD_POLL_MS = 4000;
 
@@ -214,6 +220,10 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
                 m.direction === "out" ? "rounded-br-sm bg-green-100 text-green-950" : "rounded-bl-sm bg-white text-slate-900"
               }`}
             >
+              {m.direction === "in" && isImage(m.payload) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/merchant/conversations/${encodeURIComponent(conversation.id)}/media/${encodeURIComponent(m.id)}`} alt={m.preview} className="mb-1 max-h-64 rounded-lg" loading="lazy" />
+              ) : null}
               {m.preview || <span className="italic text-slate-400">[{m.kind}]</span>}
               <div className={`mt-1 text-[10px] ${m.direction === "out" ? "text-green-700/70" : "text-slate-400"}`}>
                 {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}

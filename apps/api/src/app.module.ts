@@ -11,6 +11,7 @@ import { AnthropicAgent } from "./ai/anthropic.agent";
 import { AnthropicAssistant } from "./ai/anthropic.assistant";
 import { type Assistant, NoopAssistant } from "./ai/assistant";
 import { AssistantService } from "./ai/assistant.service";
+import { createTranscriber, type Transcriber } from "./ai/transcriber";
 import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryNumberPoolRepository, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
 import {
@@ -57,6 +58,7 @@ import { AuthService } from "./auth/auth.service";
 import { hashPassword } from "./auth/password";
 import type { AppConfig } from "./config";
 import { ConversationService } from "./conversation/conversation.service";
+import { InboundMediaService } from "./conversation/inbound-media.service";
 import { InboundQueue } from "./conversation/inbound-queue";
 import { OutboxRelay } from "./events/outbox-relay";
 import { HealthController } from "./health.controller";
@@ -124,6 +126,7 @@ export interface AppOptions {
     resources: ResourceRepository;
     assistant: Assistant;
     agent: ConversationAgent;
+    transcriber: Transcriber;
     numbers: NumberPoolRepository;
     paymentProvider: PaymentProvider;
   }>;
@@ -227,6 +230,16 @@ export class AppModule {
         },
         inject: [SchedulingService, CommerceService, MemoryService],
       },
+      {
+        provide: TOKENS.Transcriber,
+        useFactory: (): Transcriber => {
+          if (overrides.transcriber) return overrides.transcriber;
+          const transcriber = createTranscriber(config);
+          if (!transcriber.enabled) logger.log("TRANSCRIPTION_PROVIDER=none: voice notes are described to the agent, not transcribed");
+          return transcriber;
+        },
+      },
+      InboundMediaService,
       OrderNotifier,
       BookingReminderNotifier,
       {

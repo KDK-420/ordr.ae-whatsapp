@@ -72,6 +72,49 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
 - **Housekeeping.** Expired holds and unpaid checkouts are released by `MaintenanceService`
   (worker process on Postgres; the API itself in memory mode), every minute.
 
+## Inbound media (images, voice notes, documents)
+
+What a customer sends besides text now reaches the conversation engine instead of silently
+dropping them into the guided menu.
+
+| Sent | Natural style | Guided style | Stored payload (`handling`) |
+| --- | --- | --- | --- |
+| Image with caption | Caption is the message text; the photo goes to Claude as an image block (JPEG, PNG, GIF, WebP, up to 5 MB) | Caption ignored, flow continues | `image_attached`, `too_large`, `download_failed` or `skipped` |
+| Image, no caption | `[sent an image]` plus the image block | Flow continues | as above |
+| Voice note | Transcribed when `TRANSCRIPTION_PROVIDER` is set, else the agent reads `[sent a voice note]` and asks the customer to type | Flow continues | `transcribed` (with `transcript`) or `not_transcribed` |
+| Video, sticker, document | Caption, or `[sent a video]`, `[sent a sticker]`, `[sent a document: name]`; nothing downloaded | Flow continues | `skipped` |
+
+The pieces:
+
+- `textOf` / `describeMedia` (`apps/api/src/conversation/inbound-text.ts`) turn content into the
+  words the agent sees. The system prompt tells the agent what a bracketed note means.
+- `InboundMediaService` (`apps/api/src/conversation/inbound-media.service.ts`) downloads and
+  transcribes before the message is stored; it never throws, a failed fetch degrades to the
+  caption or note so the customer still gets an answer.
+- `downloadMedia(mediaId, accessToken)` on the `MessageSender` port (`@ordr/whatsapp`). The Cloud
+  API client does Meta's two steps (`GET /{media-id}` for a short-lived URL, then the URL with the
+  same bearer token) and enforces `maxBytes` before and after fetching. `WHATSAPP_SENDER=log`
+  refuses with `MediaError("unavailable")`; `FakeSender.media` serves bytes in tests.
+- The stored inbound payload is the parsed content plus `text` (what the engine read), `handling`,
+  `transcript`, `sizeBytes` and `error`. The inbox preview reads "Image: <caption>",
+  "Voice note: <transcript>", "<filename>"; agent history uses `text`, so a photo turn stays
+  meaningful in later messages.
+- `GET /merchant/conversations/:id/media/:messageId` streams the bytes of an inbound media message
+  (fetched from Meta on demand, nothing stored on our side; Meta keeps media about 30 days). The
+  inbox renders inbound images through it.
+
+Still mocked or missing:
+
+- **Transcription.** Claude's API has no audio input (`@anthropic-ai/sdk` 0.135.0 has no audio
+  content block), so voice notes need a speech-to-text provider. Only `TRANSCRIPTION_PROVIDER=none`
+  exists; a real adapter implements `Transcriber` (`apps/api/src/ai/transcriber.ts`), adds its name
+  to the enum in `config.ts` and the switch in `createTranscriber`, and reads `TRANSCRIPTION_API_KEY`.
+  `FakeTranscriber` stands in for it in `test/media.e2e.test.ts`.
+- **Documents** are described, not read. PDFs could go to Claude as document blocks behind the same
+  service once there is a reason to.
+- **Images in guided style** are never downloaded; the flows cannot use them.
+- Media is downloaded even when a human owns the thread, so the inbox shows the transcript.
+
 ## Configuration added this round
 
 | Variable | Default | Meaning |
@@ -82,6 +125,8 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
 | `HOLD_MINUTES` | 10 | How long a held slot stays reserved |
 | `CHECKOUT_MINUTES` | 30 | How long a payment link stays valid and stock stays reserved |
 | `MEMORY_RETENTION_DAYS` | 365 | Expiry of remembered preferences |
+| `TRANSCRIPTION_PROVIDER` | `none` | Speech to text for voice notes; `none` describes them to the agent instead |
+| `TRANSCRIPTION_API_KEY` | empty | Key for the transcription provider, unused with `none` |
 | `DEMO_CHAT_SLUG` (dashboard) | empty | Tenant slug behind the landing page's "Try the demo in web chat" button |
 
 Per tenant, in `tenant.settings`: `memoryEnabled` (default true; false disables memory tools

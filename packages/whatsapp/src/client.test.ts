@@ -59,4 +59,27 @@ describe("CloudApiClient", () => {
     expect(calls[1]!.init.method).toBe("GET");
     expect(calls[2]!.url).toContain("after=abc");
   });
+
+  it("downloads media in two steps, both with the bearer token, and refuses files over the limit", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init: init ?? {} });
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({ url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=m1", mime_type: "image/jpeg", sha256: "abc", file_size: 3, id: "m1" }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return new Response(Buffer.from([1, 2, 3]), { status: 200, headers: { "content-type": "image/jpeg" } });
+    }) as typeof fetch;
+    const client = new CloudApiClient({ fetchImpl: impl, graphVersion: "v23.0" });
+    const media = await client.downloadMedia("m1", "tok", { maxBytes: 10 });
+    expect(media).toMatchObject({ mimeType: "image/jpeg", sha256: "abc" });
+    expect([...media.data]).toEqual([1, 2, 3]);
+    expect(calls[0]!.url).toBe("https://graph.facebook.com/v23.0/m1");
+    expect(calls[1]!.url).toBe("https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=m1");
+    expect((calls[1]!.init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+
+    // Meta's reported size stops the second request before any bytes are fetched.
+    calls.length = 0;
+    await expect(client.downloadMedia("m1", "tok", { maxBytes: 2 })).rejects.toMatchObject({ name: "MediaError", code: "too_large" });
+    expect(calls).toHaveLength(1);
+  });
 });

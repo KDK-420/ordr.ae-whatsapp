@@ -169,6 +169,15 @@ describe("ConversationService", () => {
     expect(bodies[2]).toBe("Please tap one of the buttons, or type 1, 2 or 3.");
   });
 
+  it("stores what a guided-style customer sent as media, and the flow carries on as before", async () => {
+    await send(fixtures.mediaMessageWebhook("audio", { id: "media_1", mimeType: "audio/ogg; codecs=opus" }, h.base));
+    const stored = h.conversations.messages.find((m) => m.direction === "in");
+    expect(stored).toMatchObject({ kind: "media", payload: { mediaType: "audio", mediaId: "media_1", text: "[sent a voice note]", handling: "not_transcribed" } });
+    expect(bodyOf(h.sender.to("971500000001")[0])).toBe("Welcome to Demo Restaurant! How can we help you today?");
+    // Guided style never fetches media: the flows cannot use it.
+    expect(h.sender.downloads).toEqual([]);
+  });
+
   it("records delivery statuses", async () => {
     await send(fixtures.textMessageWebhook("hi", h.base));
     const outId = h.sender.sent[0]!.providerMessageId;

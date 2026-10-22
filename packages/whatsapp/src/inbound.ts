@@ -47,6 +47,9 @@ export interface InboundStatus {
 
 export type InboundEvent = InboundMessage | InboundStatus;
 
+/** A received image, video, voice note, document or sticker, before anything is downloaded. */
+export type InboundMedia = Extract<InboundContent, { kind: "media" }>;
+
 export function normalizeContent(raw: RawMessage): InboundContent {
   switch (raw.type) {
     case "text":

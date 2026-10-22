@@ -9,7 +9,7 @@ import { CommerceError, type CommerceService } from "../commerce/commerce.servic
 import { MemoryError, type MemoryService } from "../memory/memory.service";
 import { formatDay, formatTime, formatWhen } from "../scheduling/format";
 import { ANY_RESOURCE, BookingError, type Period, type SchedulingService } from "../scheduling/scheduling.service";
-import type { AgentInput, AgentReply, ConversationAgent, ToolTrace } from "./agent";
+import type { AgentAttachment, AgentInput, AgentReply, ConversationAgent, ToolTrace } from "./agent";
 import type { HistoryTurn } from "./assistant";
 
 export interface AnthropicAgentOptions {
@@ -66,8 +66,9 @@ export class AnthropicAgent implements ConversationAgent {
     if (this.deps.memory && input.consent !== undefined) tools.push(...memoryTools(ctx, this.deps.memory));
     tools.push(handoffTool(ctx));
 
-    const messages = toMessages(input.history, input.text);
-    const system = systemPrompt(input, tz, new Date(), this.deps.memory !== undefined && input.consent !== undefined);
+    const messages = toMessages(input.history, input.text, input.attachments ?? []);
+    // The same clock the booking tools use, so "today" in the prompt and in the slots agree (and tests can pin it).
+    const system = systemPrompt(input, tz, this.deps.scheduling.now(), this.deps.memory !== undefined && input.consent !== undefined);
     let inputTokens = 0;
     let outputTokens = 0;
     try {
@@ -427,6 +428,7 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
     `- ${web ? "Chat" : "WhatsApp"} style: one to three short sentences per reply, no bullet points, no markdown, no headings, at most one emoji and only when it fits.`,
     "- Be warm and direct. Ask for one missing detail at a time, do not interrogate.",
     "- Everything you write as text is sent to the customer word for word, so never write notes to yourself, plans or shorthand. If you want to say something before looking something up, make it a short line for the customer, like 'One moment, let me check.'",
+    "- A note in square brackets like [sent a voice note] or [sent a document] means the customer sent something you cannot read. Say in one line that you cannot listen to or open it here and ask them to type it. When a photo is attached you can see it: describe or use what is in it, but prices, stock and availability still come only from the tools.",
     selling ? "- Suggest two or three concrete products with prices instead of asking the customer to browse; mention when something is low or out of stock." : "- Offer a few concrete times instead of asking the customer to guess; prefer 'any' staff unless they name someone.",
     selling ? "- Before checkout, show the cart total and ask for a yes. Once they agree, call checkout and send the payment link in your own words; do not invent an order number." : "- Hold the time as soon as they pick it, restate service, staff, date and time in one line and ask for a yes. Once they agree, confirm immediately; do not ask twice.",
     "- After any booking or order, repeat the confirmation from the tool (number, time or total). Never promise what the tool did not confirm.",
@@ -450,14 +452,18 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
   return lines.join("\n");
 }
 
-/** Thread history as turns, oldest first, ending with the new customer message. */
-function toMessages(history: HistoryTurn[], text: string): Anthropic.Beta.BetaMessageParam[] {
+/** Thread history as turns, oldest first, ending with the new customer message (with its images, if any). */
+function toMessages(history: HistoryTurn[], text: string, attachments: AgentAttachment[]): Anthropic.Beta.BetaMessageParam[] {
   const turns: Anthropic.Beta.BetaMessageParam[] = history
     .filter((h) => h.text.trim())
     .map((h) => ({ role: h.role === "customer" ? "user" : "assistant", content: h.text }));
   while (turns.length && turns[0]!.role !== "user") turns.shift();
-  // The new message is already the last stored turn when history includes it; avoid sending it twice.
+  const content: Anthropic.Beta.BetaMessageParam["content"] = attachments.length
+    ? [...attachments.map((a): Anthropic.Beta.BetaImageBlockParam => ({ type: "image", source: { type: "base64", media_type: a.mimeType, data: a.data } })), { type: "text", text }]
+    : text;
+  // The new message is already the last stored turn when history includes it; replace it rather than sending it twice.
   const last = turns.at(-1);
-  if (!(last && last.role === "user" && last.content === text)) turns.push({ role: "user", content: text });
+  if (last && last.role === "user" && last.content === text) turns[turns.length - 1] = { role: "user", content };
+  else turns.push({ role: "user", content });
   return turns;
 }
