@@ -28,6 +28,12 @@ const EnvSchema = z.object({
   /** Claude assistant for free text, option matching and agent drafts. Off when the key is missing. */
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
+  /**
+   * Speech to text for WhatsApp voice notes. "none" (the only value today) leaves them untranscribed;
+   * the agent then asks the customer to type. A provider adapter adds its name here and reads TRANSCRIPTION_API_KEY.
+   */
+  TRANSCRIPTION_PROVIDER: z.enum(["none"]).default("none"),
+  TRANSCRIPTION_API_KEY: z.string().min(1).optional(),
   /** Where the dashboard (web chat, mock checkout page) is reachable by customers. */
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:3001"),
   /** "mock" ships a hosted-looking checkout page that signs its own webhook; real providers plug in behind the same port. */

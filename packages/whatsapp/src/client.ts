@@ -1,5 +1,5 @@
 import type { OutboundMessage } from "./outbound";
-import type { MessageSender, SendResult, SendTarget } from "./sender";
+import { type DownloadedMedia, type DownloadMediaOptions, MediaError, type MessageSender, type SendResult, type SendTarget } from "./sender";
 
 export interface CloudApiClientOptions {
   graphVersion?: string;
@@ -63,6 +63,30 @@ export class CloudApiClient implements MessageSender {
       status: "read",
       message_id: messageId,
     });
+  }
+
+  /**
+   * Fetches a received media file. Meta answers GET /{media-id} with a short-lived URL and the file's
+   * size, then the URL itself needs the same bearer token. The size is checked before the second
+   * request when Meta reports it, and again on the bytes that arrive.
+   */
+  async downloadMedia(mediaId: string, accessToken: string, opts: DownloadMediaOptions = {}): Promise<DownloadedMedia> {
+    const info = await this.request<{ url?: string; mime_type?: string; sha256?: string; file_size?: number }>("GET", encodeURIComponent(mediaId), accessToken);
+    if (!info.url) throw new MediaError("unavailable", `Meta returned no download URL for media ${mediaId}`);
+    if (opts.maxBytes !== undefined && typeof info.file_size === "number" && info.file_size > opts.maxBytes) {
+      throw new MediaError("too_large", `media ${mediaId} is ${info.file_size} bytes, limit ${opts.maxBytes}`);
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(this.timeoutMs, 30_000));
+    try {
+      const res = await this.fetchImpl(info.url, { method: "GET", headers: { authorization: `Bearer ${accessToken}` }, signal: controller.signal });
+      if (!res.ok) throw new CloudApiError(res.status, undefined, undefined, `media download failed: HTTP ${res.status}`);
+      const data = Buffer.from(await res.arrayBuffer());
+      if (opts.maxBytes !== undefined && data.length > opts.maxBytes) throw new MediaError("too_large", `media ${mediaId} is ${data.length} bytes, limit ${opts.maxBytes}`);
+      return { data, mimeType: info.mime_type ?? res.headers.get("content-type") ?? "application/octet-stream", sha256: info.sha256 };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**

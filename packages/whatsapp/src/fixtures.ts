@@ -65,6 +65,19 @@ export function listReplyWebhook(id: string, title: string, base: FixtureBase = 
   } as RawMessage);
 }
 
+/** An image, video, voice note, document or sticker as Meta announces it: an id to download later, never the bytes. */
+export function mediaMessageWebhook(
+  mediaType: "image" | "video" | "audio" | "document" | "sticker",
+  media: { id: string; mimeType: string; caption?: string; filename?: string },
+  base: FixtureBase = {},
+): WebhookPayload {
+  const body: Record<string, unknown> = { id: media.id, mime_type: media.mimeType, sha256: "fixture" };
+  if (media.caption !== undefined) body.caption = media.caption;
+  if (media.filename !== undefined) body.filename = media.filename;
+  if (mediaType === "audio") body.voice = true;
+  return envelope(base, { type: mediaType, [mediaType]: body } as unknown as RawMessage);
+}
+
 export function locationWebhook(latitude: number, longitude: number, base: FixtureBase = {}): WebhookPayload {
   return envelope(base, { type: "location", location: { latitude, longitude } } as RawMessage);
 }

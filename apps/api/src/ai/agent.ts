@@ -17,8 +17,10 @@ export interface AgentInput {
   conversationId: string;
   /** Language the customer seems to write in: a hint, the model follows the customer. */
   language: string;
-  /** The message that just arrived, as text (a tapped button is passed as its title). */
+  /** The message that just arrived, as text (a tapped button is passed as its title, a voice note as its transcript). */
   text: string;
+  /** Images the customer sent with this message, already downloaded and within the model's limits. */
+  attachments?: AgentAttachment[];
   history: HistoryTurn[];
   knowledge: TenantKnowledge;
   /** Where the customer is writing from; changes tone and what links make sense. */
@@ -31,6 +33,14 @@ export interface AgentInput {
   consent?: ConsentRecord | null;
   /** The customer's latest orders and bookings here, newest first. */
   recentOrders: Order[];
+}
+
+/** A picture the customer sent, ready for the model: Claude accepts these four formats inline. */
+export interface AgentAttachment {
+  kind: "image";
+  mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  /** Base64, no newlines. */
+  data: string;
 }
 
 export interface ToolTrace {

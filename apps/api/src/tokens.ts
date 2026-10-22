@@ -18,6 +18,7 @@ export const TOKENS = {
   ResourceRepository: Symbol("ResourceRepository"),
   Assistant: Symbol("Assistant"),
   Agent: Symbol("Agent"),
+  Transcriber: Symbol("Transcriber"),
   NumberPoolRepository: Symbol("NumberPoolRepository"),
   CartRepository: Symbol("CartRepository"),
   PaymentIntentRepository: Symbol("PaymentIntentRepository"),

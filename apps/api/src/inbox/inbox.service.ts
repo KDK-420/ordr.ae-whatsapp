@@ -1,11 +1,14 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { type MessageSender, text } from "@ordr/whatsapp";
+import { type DownloadedMedia, MediaError, type MessageSender, text } from "@ordr/whatsapp";
 import { previewOf } from "../conversation/preview";
 import type { ConversationRepository, ConversationStatus, ConversationSummary, StoredMessage, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
 /** Meta allows free-form replies only within 24 hours of the customer's last message. */
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Largest file the inbox will proxy from Meta (its own cap for images, video and audio). */
+const MAX_INBOX_MEDIA_BYTES = 16 * 1024 * 1024;
 
 export interface ConversationView {
   id: string;
@@ -31,7 +34,7 @@ export interface MessageView {
 
 export class InboxError extends Error {
   constructor(
-    public readonly code: "not_found" | "window_closed" | "no_channel" | "no_customer",
+    public readonly code: "not_found" | "window_closed" | "no_channel" | "no_customer" | "media_unavailable",
     message: string,
   ) {
     super(message);
@@ -87,6 +90,28 @@ export class InboxService {
     if (conversation.status !== "human") await this.conversations.setConversationStatus(conversationId, "human");
     this.logger.log(`${actor} replied to ${customer.waId} in conversation ${conversationId}`);
     return toMessageView(record);
+  }
+
+  /**
+   * The bytes of a media message the customer sent, fetched from Meta on demand with the channel's
+   * token. Nothing is stored on our side; Meta keeps media for about 30 days.
+   */
+  async media(tenantId: string, conversationId: string, messageId: string): Promise<DownloadedMedia> {
+    await this.summary(tenantId, conversationId);
+    const messages = await this.conversations.listMessages(conversationId, { limit: 1000 });
+    const message = messages.find((m) => m.id === messageId && m.direction === "in");
+    const payload = message?.payload as { kind?: unknown; mediaId?: unknown; mimeType?: unknown } | undefined;
+    if (!payload || payload.kind !== "media" || typeof payload.mediaId !== "string") throw new InboxError("not_found", "no media on that message");
+    const ctx = await this.tenants.findContextById(tenantId);
+    if (!ctx) throw new InboxError("no_channel", "tenant has no active WhatsApp channel");
+    if (!this.sender.downloadMedia) throw new InboxError("media_unavailable", "media download is not available with this sender");
+    try {
+      const fetched = await this.sender.downloadMedia(payload.mediaId, ctx.channel.accessToken, { maxBytes: MAX_INBOX_MEDIA_BYTES });
+      return { ...fetched, mimeType: fetched.mimeType || (typeof payload.mimeType === "string" ? payload.mimeType : "application/octet-stream") };
+    } catch (err) {
+      if (err instanceof MediaError) throw new InboxError("media_unavailable", err.message);
+      throw err;
+    }
   }
 
   async setStatus(tenantId: string, conversationId: string, status: ConversationStatus): Promise<ConversationView> {

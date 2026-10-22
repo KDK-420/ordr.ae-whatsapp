@@ -159,6 +159,25 @@ describe("AnthropicAgent", () => {
     expect(stale.trace?.tools[0]).toMatchObject({ name: "confirm_booking", ok: false });
   });
 
+  it("puts a sent photo on the user turn as an image block, with the caption as text", async () => {
+    const h = setup();
+    const api = fakeApi([{ text: "That is our balayage, AED 350. Want a time?" }]);
+    const agent = new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
+    const data = Buffer.from("not really a jpeg").toString("base64");
+    await agent.reply({ ...h.input, text: "can you do this?", attachments: [{ kind: "image", mimeType: "image/jpeg", data }], history: [{ role: "customer", text: "hi" }, { role: "bot", text: "Hi Noor!" }, { role: "customer", text: "can you do this?" }] });
+    const messages = api.requests[0]!.messages as Array<{ role: string; content: unknown }>;
+    // The stored turn for this message is replaced, not duplicated.
+    expect(messages).toHaveLength(3);
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },
+        { type: "text", text: "can you do this?" },
+      ],
+    });
+    expect(JSON.stringify(api.requests[0]!.system)).toContain("[sent a voice note]");
+  });
+
   it("sells through commerce tools on a retail tenant: search, cart, checkout link, and stock is checked", async () => {
     const h = setupShop();
     const api = fakeApi([

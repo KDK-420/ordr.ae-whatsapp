@@ -1,4 +1,5 @@
-import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query, ServiceUnavailableException, UseGuards } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Body, ConflictException, Controller, Get, HttpCode, Inject, NotFoundException, Param, Post, Query, Res, ServiceUnavailableException, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { z } from "zod";
 import { AssistantUnavailableError } from "../ai/assistant";
 import { AssistantService } from "../ai/assistant.service";
@@ -38,6 +39,15 @@ export class MerchantConversationsController {
   @Get(":id")
   thread(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.inbox.thread(user.tenantId, id).catch(rethrow);
+  }
+
+  /** The image, voice note or file behind an inbound media message, for the inbox to show. */
+  @Get(":id/media/:messageId")
+  async media(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("messageId") messageId: string, @Res() res: Response) {
+    const media = await this.inbox.media(user.tenantId, id, messageId).catch(rethrow);
+    res.setHeader("content-type", media.mimeType);
+    res.setHeader("cache-control", "private, max-age=3600");
+    res.send(media.data);
   }
 
   @Post(":id/messages")

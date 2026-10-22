@@ -3,11 +3,13 @@ import { type ActionContext, type ActionRegistry, type Blueprint, detectLanguage
 import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, type OutboundMessage, text } from "@ordr/whatsapp";
 import type { Customer } from "@ordr/domain";
 import { COPY, t } from "../actions/copy";
-import { conversationStyle } from "../ai/agent";
+import { type AgentAttachment, conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
 import type { BlueprintRegistry, ConversationRepository, DedupeStore, SessionStore, TenantContext, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
+import { InboundMediaService } from "./inbound-media.service";
+import { textOf } from "./inbound-text";
 
 const APOLOGY: Record<string, string> = {
   en: "Sorry, something went wrong on our side. Please send \"menu\" to try again.",
@@ -29,6 +31,7 @@ export class ConversationService {
     @Inject(TOKENS.ActionRegistry) private readonly actions: ActionRegistry,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(AssistantService) private readonly assistant: AssistantService,
+    @Inject(InboundMediaService) private readonly media: InboundMediaService,
   ) {}
 
   async handleEvent(event: InboundEvent): Promise<void> {
@@ -61,13 +64,16 @@ export class ConversationService {
     const customer = await this.conversations.upsertCustomer(tenant.id, event.from, event.profileName);
     const conversation = await this.conversations.getOrCreateOpenConversation(tenant.id, customer.id, channel.id);
     const receivedAt = new Date(event.timestamp * 1000);
+    const natural = conversationStyle(tenant, blueprint) === "natural" && this.assistant.conversational;
+    // Media is fetched and transcribed before anything is stored, so the thread shows what arrived.
+    const received = event.content.kind === "media" ? await this.media.receive(ctx, event.content, { attachImages: natural, language: customer.language ?? tenant.defaultLanguage }) : null;
     await this.conversations.recordMessage({
       tenantId: tenant.id,
       conversationId: conversation.id,
       direction: "in",
       providerMessageId: event.messageId,
       kind: event.content.kind,
-      payload: event.content,
+      payload: received?.payload ?? event.content,
       createdAt: receivedAt,
     });
     await this.conversations.touchInbound(conversation.id, receivedAt);
@@ -82,27 +88,22 @@ export class ConversationService {
       return;
     }
 
-    const language =
-      session?.language ??
-      customer.language ??
-      (event.content.kind === "text"
-        ? detectLanguage(event.content.text, blueprint.languages, tenant.defaultLanguage)
-        : tenant.defaultLanguage);
+    const spoken = event.content.kind === "text" ? event.content.text : (received?.payload.transcript ?? received?.payload.caption);
+    const language = session?.language ?? customer.language ?? (spoken ? detectLanguage(spoken, blueprint.languages, tenant.defaultLanguage) : tenant.defaultLanguage);
     const baseContext = {
       tenant: { id: tenant.id, name: tenant.name },
       customer: { id: customer.id, waId: customer.waId, name: customer.name ?? "" },
     };
     const actionCtx = { tenantId: tenant.id, customer: { id: customer.id, waId: customer.waId, name: customer.name }, conversationId: conversation.id };
 
-    const natural = conversationStyle(tenant, blueprint) === "natural" && this.assistant.conversational;
-    const asText = natural ? textOf(event.content) : null;
+    const asText = natural ? (received ? received.text : textOf(event.content)) : null;
 
     let result: RunResult;
     try {
       if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
         // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
         // older guided message still goes to its flow; everything else is a conversation.
-        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId });
+        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments });
       } else if (globalFlow) {
         if (conversation.status === "human") await this.conversations.setConversationStatus(conversation.id, "bot");
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
@@ -155,7 +156,7 @@ export class ConversationService {
     language: string,
     baseContext: Record<string, unknown>,
     actionCtx: Omit<ActionContext, "language" | "context">,
-    opts: { channel: "whatsapp" | "web"; inboundMessageId: string },
+    opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[] },
   ): Promise<RunResult> {
     try {
       const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);
@@ -222,17 +223,3 @@ export class ConversationService {
   }
 }
 
-/** What the customer said, as text the agent can read; null for content with no words (media, reactions). */
-function textOf(content: InboundContent): string | null {
-  switch (content.kind) {
-    case "text":
-      return content.text;
-    case "button":
-    case "list":
-      return content.title;
-    case "location":
-      return `[shared location: ${content.name ?? ""} ${content.address ?? ""} (${content.latitude}, ${content.longitude})]`.replace(/\s+/g, " ");
-    default:
-      return null;
-  }
-}

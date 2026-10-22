@@ -1,11 +1,11 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Blueprint } from "@ordr/flow-schema";
 import { type Customer, formatMoney, localized, type Tenant } from "@ordr/domain";
-import { previewOf } from "../conversation/preview";
+import { agentTextOf } from "../conversation/preview";
 import { MemoryService } from "../memory/memory.service";
 import type { AgentRunRepository, BlueprintRegistry, CatalogRepository, ConversationRepository, OrderRepository, ResourceRepository, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
-import type { AgentReply, ConversationAgent } from "./agent";
+import type { AgentAttachment, AgentReply, ConversationAgent } from "./agent";
 import type { Assistant, HistoryTurn, Interpretation, PickOptionInput, TenantKnowledge } from "./assistant";
 
 /** How much of the thread the model sees. Enough for "the same as last time", small enough to stay cheap. */
@@ -49,7 +49,7 @@ export class AssistantService {
    * loaded only with the customer's consent, and every run is recorded for the audit log.
    * Throws when the model fails so the caller can fall back.
    */
-  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string, opts: { channel?: "whatsapp" | "web"; inboundMessageId?: string } = {}): Promise<AgentReply> {
+  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string, opts: { channel?: "whatsapp" | "web"; inboundMessageId?: string; attachments?: AgentAttachment[] } = {}): Promise<AgentReply> {
     const started = Date.now();
     const memoryOn = this.memory.enabledFor(tenant);
     const [knowledge, history, memories, consent, recent] = await Promise.all([
@@ -61,8 +61,8 @@ export class AssistantService {
     ]);
     const channel = opts.channel ?? "whatsapp";
     try {
-      const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, history, knowledge, channel, inboundMessageId: opts.inboundMessageId, memories, consent, recentOrders: recent });
-      this.logger.log(`converse "${text.slice(0, 60)}" -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}${reply.trace ? `, ${reply.trace.tools.length} tool call(s)` : ""}`);
+      const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, attachments: opts.attachments, history, knowledge, channel, inboundMessageId: opts.inboundMessageId, memories, consent, recentOrders: recent });
+      this.logger.log(`converse "${text.slice(0, 60)}"${opts.attachments?.length ? ` +${opts.attachments.length} image(s)` : ""} -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}${reply.trace ? `, ${reply.trace.tools.length} tool call(s)` : ""}`);
       await this.recordRun(tenant.id, conversationId, channel, opts.inboundMessageId, reply, started);
       return reply;
     } catch (err) {
@@ -161,6 +161,6 @@ export class AssistantService {
 
   private async history(conversationId: string): Promise<HistoryTurn[]> {
     const messages = await this.conversations.listMessages(conversationId, { limit: HISTORY_TURNS });
-    return messages.map((m) => ({ role: m.direction === "in" ? "customer" : "bot", text: previewOf(m.payload) }));
+    return messages.map((m) => ({ role: m.direction === "in" ? "customer" : "bot", text: agentTextOf(m.payload) }));
   }
 }
