@@ -13,9 +13,9 @@ export const COPY = {
   payCashDelivery: { en: "Please pay {{total}} in cash on delivery.", ar: "يرجى دفع {{total}} نقداً عند التوصيل." },
   payCashPickup: { en: "Please pay {{total}} when you collect your order.", ar: "يرجى دفع {{total}} عند استلام طلبك." },
   weWillUpdate: { en: "We will message you here as your order progresses.", ar: "سنرسل لك التحديثات هنا مع تقدم طلبك." },
-  orderStatus: { en: "Order #{{number}} is {{status}}. Total {{total}}.", ar: "الطلب رقم {{number}} حالته: {{status}}. الإجمالي {{total}}." },
-  bookingStatus: { en: "Your booking on {{when}} is {{status}}.", ar: "حجزك في {{when}} حالته: {{status}}." },
-  bookingReminder: { en: "Reminder: your booking at {{tenant}} is on {{when}}. Reply here if you need to change it.", ar: "تذكير: حجزك في {{tenant}} في {{when}}. راسلنا هنا إذا أردت تغييره." },
+  orderStatus: { en: "Order #{{number}} is *{{status}}*. Total {{total}}.", ar: "الطلب رقم {{number}} حالته: *{{status}}*. الإجمالي {{total}}." },
+  bookingStatus: { en: "Your booking on *{{when}}* is *{{status}}*.", ar: "حجزك في *{{when}}* حالته: *{{status}}*." },
+  bookingReminder: { en: "Reminder: your booking at {{tenant}} is on *{{when}}*. Reply here if you need to change it.", ar: "تذكير: حجزك في {{tenant}} في *{{when}}*. راسلنا هنا إذا أردت تغييره." },
   minutes: { en: "min", ar: "دقيقة" },
   anyone: { en: "Anyone available", ar: "أي موظف متاح" },
   bookingPlaced: {

@@ -112,7 +112,7 @@ describe("ConversationService", () => {
     await send(fixtures.buttonReplyWebhook("confirm", "Confirm order", h.base));
     await send(fixtures.textMessageWebhook("menu", h.base));
     await send(fixtures.buttonReplyWebhook("track_order", "Track my order", h.base));
-    expect(bodyOf(h.sender.to("971500000001").at(-1))).toBe("Order #1 is received and waiting for confirmation. Total AED 15.00.");
+    expect(bodyOf(h.sender.to("971500000001").at(-1))).toBe("Order #1 is *received and waiting for confirmation*. Total AED 15.00.");
   });
 
   it("cancelling at confirmation clears the cart", async () => {

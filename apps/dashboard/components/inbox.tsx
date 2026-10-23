@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
 import { age } from "@/lib/format";
+import { waFormat } from "@/lib/wa-format";
 
 /** An inbound photo: the API serves its bytes at /media/:messageId, the session cookie travels along. */
 function isImage(payload: unknown): boolean {
@@ -224,7 +225,7 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={`/merchant/conversations/${encodeURIComponent(conversation.id)}/media/${encodeURIComponent(m.id)}`} alt={m.preview} className="mb-1 max-h-64 rounded-lg" loading="lazy" />
               ) : null}
-              {m.preview || <span className="italic text-slate-400">[{m.kind}]</span>}
+              {m.preview ? waFormat(m.preview, m.id) : <span className="italic text-slate-400">[{m.kind}]</span>}
               <div className={`mt-1 text-[10px] ${m.direction === "out" ? "text-green-700/70" : "text-slate-400"}`}>
                 {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 {m.direction === "out" && m.status ? ` · ${m.status}` : ""}

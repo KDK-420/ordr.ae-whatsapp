@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { waFormat } from "@/lib/wa-format";
 import {
   createDemoCustomer,
   type DemoCustomer,
@@ -311,7 +312,7 @@ function BotBubble({ message, active, onSend, onOpenList }: { message: MessageVi
         <div dir="auto" className="whitespace-pre-wrap rounded-lg rounded-tl-none bg-white px-3 py-1.5 text-sm text-slate-900 shadow-sm">
           {i?.header ? <div className="mb-0.5 font-semibold">{i.header.text}</div> : null}
           {p.type === "template" ? <div className="mb-0.5 text-[10px] uppercase text-slate-400">template · {p.template?.name}</div> : null}
-          {body}
+          {typeof body === "string" ? waFormat(body, message.id) : body}
           {i?.footer ? <div className="mt-0.5 text-xs text-slate-500">{i.footer.text}</div> : null}
           <Time at={message.createdAt} />
         </div>

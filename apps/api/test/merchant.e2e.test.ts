@@ -152,7 +152,7 @@ describe("merchant API", () => {
     const sent = h.sender.to("971500000001");
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ type: "text" });
-    expect(JSON.stringify(sent[0])).toContain("Order #1 is confirmed");
+    expect(JSON.stringify(sent[0])).toContain("Order #1 is *confirmed*");
     const outbound = h.conversations.messages.filter((m) => m.direction === "out");
     expect(outbound).toHaveLength(1);
   });

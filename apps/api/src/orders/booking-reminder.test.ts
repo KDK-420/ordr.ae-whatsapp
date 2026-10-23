@@ -85,7 +85,7 @@ describe("booking reminders", () => {
     await h.conversations.touchInbound(h.conversation.id, new Date(Date.now() - HOUR));
     expect(await h.relay.tick(new Date(h.appointment.getTime() - DAY))).toBe(1);
     const first = h.sender.to("971500000001").at(-1);
-    expect(first && first.type === "text" ? first.text.body : first).toBe(`Reminder: your booking at Demo Salon is on ${when}. Reply here if you need to change it.`);
+    expect(first && first.type === "text" ? first.text.body : first).toBe(`Reminder: your booking at Demo Salon is on *${when}*. Reply here if you need to change it.`);
     expect((await h.conversations.listMessages(h.conversation.id)).at(-1)).toMatchObject({ direction: "out", kind: "text" });
 
     // 2h reminder: the customer's last message is older than a day and no template is approved, so nothing goes out.

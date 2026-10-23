@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { getSession, PAY_LINK, sendMessage, startSession, type WebMessage, type WebSession } from "@/lib/webchat";
+import { waFormat } from "@/lib/wa-format";
 
 const STORAGE = (slug: string) => `ordr.chat.${slug}`;
 
@@ -166,7 +167,7 @@ function Bubble({ message }: { message: WebMessage }) {
               Pay securely
             </a>
           ) : (
-            <span key={`${message.id}-${i}`}>{p.text}</span>
+            <span key={`${message.id}-${i}`}>{waFormat(p.text, `${message.id}-${i}`)}</span>
           ),
         )}
       </div>
