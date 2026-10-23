@@ -238,14 +238,21 @@ export interface BookingList {
 }
 export const listBookings = (from: string, to: string) => call<BookingList>(`/merchant/bookings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
+export interface BusinessProfile {
+  address?: string;
+  mapsUrl?: string;
+  phone?: string;
+  hours?: string;
+}
 export interface ConversationSettings {
   conversationStyle: "guided" | "natural";
   defaultStyle: "guided" | "natural";
   facts: string[];
+  profile: BusinessProfile;
   assistantAvailable: boolean;
 }
 export const getConversationSettings = () => call<ConversationSettings>("/merchant/settings");
-export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[] }) =>
+export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile }) =>
   call<ConversationSettings>("/merchant/settings", { method: "PATCH", body: JSON.stringify(patch) });
 
 export interface PooledNumber {

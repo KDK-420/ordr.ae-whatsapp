@@ -32,7 +32,7 @@ function setup() {
   scheduling.now = () => NOW;
   const memories = new InMemoryMemoryRepository();
   const memory = new MemoryService(config, memories);
-  const knowledge: TenantKnowledge = { tenantName: "Demo Salon", blueprintId: "salon", timezone: "Asia/Dubai", services: [], staff: [], intents: [], facts: ["Free parking behind the building."] };
+  const knowledge: TenantKnowledge = { tenantName: "Demo Salon", blueprintId: "salon", timezone: "Asia/Dubai", services: [], staff: [], intents: [], facts: ["Free parking behind the building."], profile: { address: "Indigo Tower, Cluster D, JLT", mapsUrl: "https://maps.app.goo.gl/demo", phone: "+971 4 000 0000", hours: "Sat–Thu 10:00–21:00" } };
   const input = { tenant: seed.tenant, blueprint: salon, customer: { id: "c1", tenantId: seed.tenant.id, waId: "971500000001", name: "Noor" }, conversationId: "conv1", language: "en", knowledge, channel: "whatsapp" as const, memories: [], consent: null, recentOrders: [] };
   const deps = { scheduling, memory };
   return { scheduling, orders, holds, memory, memories, deps, input, tenantId: seed.tenant.id };
@@ -111,6 +111,8 @@ describe("AnthropicAgent", () => {
     // the reply. Forbidding it did not stop it; giving it a customer-safe form did (see anthropic.agent.ts systemPrompt).
     expect(JSON.stringify(first.system)).toContain("sent to the customer word for word");
     expect(JSON.stringify(first.system)).toContain("Free parking behind the building.");
+    expect(JSON.stringify(first.system)).toContain("- Address: Indigo Tower, Cluster D, JLT");
+    expect(JSON.stringify(first.system)).toContain("- Phone: +971 4 000 0000");
     expect(JSON.stringify(first.system)).toContain("2026-10-20 = Tue 20 Oct (today)");
     expect(first.messages).toEqual([
       { role: "user", content: "hi" },

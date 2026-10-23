@@ -5,12 +5,24 @@ import { AssistantService } from "../ai/assistant.service";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
 import type { BlueprintRegistry, TenantRepository } from "../ports";
+import { businessProfile } from "../tenant-profile";
 import { TOKENS } from "../tokens";
+
+const optionalText = (max: number) => z.string().trim().max(max).optional();
 
 const PatchSchema = z.object({
   conversationStyle: z.enum(["guided", "natural"]).optional(),
-  /** Short facts the assistant may share: address, parking, policies. */
+  /** Short facts the assistant may share: parking, policies, anything else customers ask. */
   facts: z.array(z.string().trim().min(1).max(300)).max(30).optional(),
+  /** Where the branch is and how to reach it; shared by the agent and added to confirmations. Empty strings clear a field. */
+  profile: z
+    .object({
+      address: optionalText(300),
+      mapsUrl: z.union([z.string().trim().url().max(500), z.literal("")]).optional(),
+      phone: optionalText(40),
+      hours: optionalText(300),
+    })
+    .optional(),
 });
 
 /** Tenant-level settings an owner can change: how the bot talks and what it knows. */
@@ -36,6 +48,7 @@ export class MerchantSettingsController {
     const patch: Record<string, unknown> = {};
     if (parsed.data.conversationStyle) patch.conversationStyle = parsed.data.conversationStyle;
     if (parsed.data.facts) patch.facts = parsed.data.facts;
+    if (parsed.data.profile) patch.profile = businessProfile({ profile: parsed.data.profile });
     if (!(await this.tenants.updateSettings(user.tenantId, patch))) throw new NotFoundException("tenant not found");
     return this.view(user.tenantId);
   }
@@ -50,6 +63,7 @@ export class MerchantSettingsController {
       /** What the vertical uses when the tenant has not chosen. */
       defaultStyle: blueprint && (blueprint.settings as Record<string, unknown>).conversationStyle === "natural" ? "natural" : "guided",
       facts,
+      profile: businessProfile(tenant.settings),
       /** Natural style needs the model; without the key it silently runs guided. */
       assistantAvailable: this.assistant.conversational,
     };

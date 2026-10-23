@@ -31,6 +31,7 @@ function upcomingAppointment(): Date {
 async function setup() {
   const config = loadConfig({ META_APP_SECRET: "s", META_VERIFY_TOKEN: "v", STORAGE: "memory", SEED_BLUEPRINT_ID: "salon", SEED_TENANT_NAME: "Demo Salon", SEED_PHONE_NUMBER_ID: "000000000000000", SEED_ACCESS_TOKEN: "replace-me" });
   const seed = seedTenantFromConfig(config);
+  seed.tenant.settings.profile = { address: "Indigo Tower, Cluster D, JLT", mapsUrl: "https://maps.app.goo.gl/demo" };
   const demo = demoSalonCatalog(seed.tenant.id);
   const tenants = new InMemoryTenantRepository([seed]);
   const real = { ...seed.channel, id: "ch_real", phoneNumberId: "1445158248675072", displayPhone: "+971 50 939 7420", accessToken: "EAA-system-user-token" };
@@ -65,7 +66,11 @@ describe("OrderNotifier", () => {
     expect(h.sender.sent).toHaveLength(1);
     const sent = h.sender.sent.at(-1);
     expect(sent?.target).toEqual({ phoneNumberId: "1445158248675072", accessToken: "EAA-system-user-token", to: "971585884950" });
-    expect(sent?.message.type === "text" ? sent.message.text.body : sent?.message).toContain("confirmed");
+    const body = sent?.message.type === "text" ? sent.message.text.body : "";
+    expect(body).toContain("*confirmed*");
+    // The confirmation tells the customer where to come.
+    expect(body).toContain("📍 Indigo Tower, Cluster D, JLT");
+    expect(body).toContain("https://maps.app.goo.gl/demo");
   });
 
   it("falls back to the tenant's newest active channel when the order has no thread", async () => {

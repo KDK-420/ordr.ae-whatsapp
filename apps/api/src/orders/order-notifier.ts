@@ -5,6 +5,7 @@ import { COPY, statusLabel, t } from "../actions/copy";
 import type { ConversationRepository, EventBus, OrderRepository, TenantRepository } from "../ports";
 import { formatWhen } from "../scheduling/format";
 import { ORDER_STATUS_PURPOSE, TemplateService } from "../templates/template.service";
+import { businessProfile, locationLines } from "../tenant-profile";
 import { TOKENS } from "../tokens";
 
 /** Meta allows free-form messages only within 24 hours of the customer's last message. */
@@ -57,9 +58,12 @@ export class OrderNotifier implements OnModuleInit {
     let message;
     let kind: string;
     if (inWindow) {
-      message = booking
-        ? text(t(COPY.bookingStatus, language, { ...values, when: formatWhen(new Date(order.scheduledAt!), ctx.tenant.timezone || "Asia/Dubai", language) }))
-        : text(t(COPY.orderStatus, language, values));
+      let body = booking
+        ? t(COPY.bookingStatus, language, { ...values, when: formatWhen(new Date(order.scheduledAt!), ctx.tenant.timezone || "Asia/Dubai", language) })
+        : t(COPY.orderStatus, language, values);
+      // A confirmed booking is when the customer needs the address: add it with the map link once the merchant has filled them in.
+      if (booking && order.status === "confirmed") body = [body, ...locationLines(businessProfile(ctx.tenant.settings))].join("\n");
+      message = text(body);
       kind = "text";
     } else {
       const tpl = await this.templates.approved(order.tenantId, ORDER_STATUS_PURPOSE, language, [ctx.tenant.defaultLanguage, "en"]);

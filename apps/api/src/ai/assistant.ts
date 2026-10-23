@@ -1,3 +1,4 @@
+import type { BusinessProfile } from "../tenant-profile";
 /**
  * The LLM is an assistant to the deterministic flows, never a replacement for them (ADR-002):
  * it maps free text onto a flow or onto one of the options a question is already showing, answers
@@ -28,8 +29,10 @@ export interface TenantKnowledge {
   services: KnowledgeService[];
   staff: { id: string; title: string }[];
   intents: KnowledgeIntent[];
-  /** Short free-text facts a merchant wants the bot to know: address, parking, policies. */
+  /** Short free-text facts a merchant wants the bot to know: parking, policies. */
   facts: string[];
+  /** Address, map link, phone and opening hours from Settings › Conversation. */
+  profile?: BusinessProfile;
 }
 
 export interface HistoryTurn {

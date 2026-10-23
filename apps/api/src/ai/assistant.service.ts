@@ -3,6 +3,7 @@ import type { Blueprint } from "@ordr/flow-schema";
 import { type Customer, formatMoney, localized, type Tenant } from "@ordr/domain";
 import { agentTextOf } from "../conversation/preview";
 import { MemoryService } from "../memory/memory.service";
+import { businessProfile } from "../tenant-profile";
 import type { AgentRunRepository, BlueprintRegistry, CatalogRepository, ConversationRepository, OrderRepository, ResourceRepository, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import type { AgentAttachment, AgentReply, ConversationAgent } from "./agent";
@@ -156,6 +157,7 @@ export class AssistantService {
         .filter((f) => !HIDDEN_FLOWS.has(f.id))
         .map((f) => ({ flow: f.id, description: f.description ?? f.id.replace(/_/g, " "), keywords: keywordsByFlow.get(f.id) ?? [] })),
       facts,
+      profile: businessProfile(tenant.settings),
     };
   }
 

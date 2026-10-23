@@ -5,6 +5,7 @@ import { COPY, t } from "../actions/copy";
 import type { ConversationRepository, EventBus, OrderRepository, TenantRepository } from "../ports";
 import { formatWhen } from "../scheduling/format";
 import { BOOKING_REMINDER_PURPOSE, TemplateService } from "../templates/template.service";
+import { businessProfile, locationLines } from "../tenant-profile";
 import { TOKENS } from "../tokens";
 
 /** Meta allows free-form messages only within 24 hours of the customer's last message. */
@@ -80,7 +81,7 @@ export class BookingReminderNotifier implements OnModuleInit {
     let message;
     let kind: string;
     if (inWindow) {
-      message = text(t(COPY.bookingReminder, language, { tenant: ctx.tenant.name, when }));
+      message = text([t(COPY.bookingReminder, language, { tenant: ctx.tenant.name, when }), ...locationLines(businessProfile(ctx.tenant.settings))].join("\n"));
       kind = "text";
     } else {
       const tpl = await this.templates.approved(order.tenantId, BOOKING_REMINDER_PURPOSE, language, [ctx.tenant.defaultLanguage, "en"]);

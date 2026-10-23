@@ -11,6 +11,7 @@ import { formatDay, formatTime, formatWhen } from "../scheduling/format";
 import { ANY_RESOURCE, BookingError, type Period, type SchedulingService } from "../scheduling/scheduling.service";
 import type { AgentAttachment, AgentInput, AgentReply, ConversationAgent, ToolTrace } from "./agent";
 import type { HistoryTurn } from "./assistant";
+import { locationLines, profilePromptLines } from "../tenant-profile";
 
 export interface AnthropicAgentOptions {
   apiKey: string;
@@ -206,7 +207,8 @@ function bookingTools(ctx: ToolContext): Tool[] {
       inputSchema: z.object({ hold_id: z.string(), notes: z.string().max(300).optional().describe("Anything the customer asked for, in their words") }),
       run: traced(ctx, "confirm_booking", async ({ hold_id, notes }) => {
         const { order, resource } = await scheduling.confirmHold({ tenantId, customerId, holdId: hold_id, language: lang, notes, source: ctx.input.channel === "web" ? "web" : "whatsapp" });
-        return `Booked. Booking number ${order.number}, ${order.items[0]?.title ?? "service"} with ${localized(resource.name, lang)} on ${formatWhen(new Date(order.scheduledAt!), tz, lang)}, total ${formatMoney(order.totalMinor, order.currency)}. Status: ${statusLabel(order.status, lang)}.`;
+        const where = locationLines(ctx.input.knowledge.profile ?? {});
+        return `Booked. Booking number ${order.number}, ${order.items[0]?.title ?? "service"} with ${localized(resource.name, lang)} on ${formatWhen(new Date(order.scheduledAt!), tz, lang)}, total ${formatMoney(order.totalMinor, order.currency)}. Status: ${statusLabel(order.status, lang)}.${where.length ? ` Tell the customer where to come: ${where.join(" ")}` : ""}`;
       }),
     }),
     betaZodTool({
@@ -449,6 +451,8 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
     if (input.memories.length) lines.push("", "What you remember about this customer (with their consent):", ...input.memories.map((m) => `- ${m.key}: ${typeof m.value === "string" ? m.value : JSON.stringify(m.value)}`));
   }
   if (input.recentOrders.length) lines.push("", "Their recent history here:", ...input.recentOrders.slice(0, 5).map((o) => `- #${o.number} ${o.kind === "booking" && o.scheduledAt ? formatWhen(new Date(o.scheduledAt), tz, "en") : o.createdAt.slice(0, 10)}: ${o.items.map((i) => `${i.quantity > 1 ? `${i.quantity} x ` : ""}${i.title}`).join(", ")} (${o.status})`));
+  const profile = profilePromptLines(k.profile ?? {});
+  if (profile.length) lines.push("", "Business details you may share (give the address with the map link when asked where you are; the phone when asked how to call):", ...profile);
   if (k.facts.length) lines.push("", "Business facts you may share:", ...k.facts.map((f) => `- ${f}`));
   return lines.join("\n");
 }
