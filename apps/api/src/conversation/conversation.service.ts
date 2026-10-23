@@ -77,16 +77,18 @@ export class ConversationService {
       createdAt: receivedAt,
     });
     await this.conversations.touchInbound(conversation.id, receivedAt);
-    this.markRead(ctx, event.messageId);
 
     const runner = this.runnerFor(blueprint);
     const session = await this.sessions.get(tenant.id, event.from);
     const globalFlow = runner.matchGlobalCommand(event.content);
 
     if (!globalFlow && conversation.status === "human") {
-      // An agent owns this thread. The bot stays quiet until the customer asks for the menu.
+      // An agent owns this thread. The bot stays quiet until the customer asks for the menu: read receipt only, no typing.
+      this.markRead(ctx, event.messageId, false);
       return;
     }
+    // The bot will answer: show "typing…" while the flow or the model works on it.
+    this.markRead(ctx, event.messageId, true);
 
     const spoken = event.content.kind === "text" ? event.content.text : (received?.payload.transcript ?? received?.payload.caption);
     const language = session?.language ?? customer.language ?? (spoken ? detectLanguage(spoken, blueprint.languages, tenant.defaultLanguage) : tenant.defaultLanguage);
@@ -205,10 +207,10 @@ export class ConversationService {
     }
   }
 
-  private markRead(ctx: TenantContext, messageId: string): void {
+  private markRead(ctx: TenantContext, messageId: string, typing: boolean): void {
     if (!this.sender.markRead) return;
     this.sender
-      .markRead({ phoneNumberId: ctx.channel.phoneNumberId, accessToken: ctx.channel.accessToken }, messageId)
+      .markRead({ phoneNumberId: ctx.channel.phoneNumberId, accessToken: ctx.channel.accessToken }, messageId, { typing })
       .catch((err) => this.logger.debug(`markRead failed: ${err instanceof Error ? err.message : String(err)}`));
   }
 

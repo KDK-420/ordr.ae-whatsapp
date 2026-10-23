@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Customer } from "@ordr/domain";
-import type { DownloadedMedia, DownloadMediaOptions, InboundContent, InboundMessage, MessageSender, OutboundMessage, SendResult, SendTarget } from "@ordr/whatsapp";
+import type { DownloadedMedia, DownloadMediaOptions, InboundContent, InboundMessage, MarkReadOptions, MessageSender, OutboundMessage, SendResult, SendTarget } from "@ordr/whatsapp";
 import { ConversationService } from "../conversation/conversation.service";
 import { InboundQueue } from "../conversation/inbound-queue";
 import { type ConversationView, InboxError, InboxService, type MessageView } from "../inbox/inbox.service";
@@ -35,9 +35,9 @@ export class DemoAwareSender implements MessageSender {
     return this.inner.send(target, message);
   }
 
-  async markRead(target: Omit<SendTarget, "to">, messageId: string): Promise<void> {
+  async markRead(target: Omit<SendTarget, "to">, messageId: string, opts?: MarkReadOptions): Promise<void> {
     if (messageId.startsWith("wamid.demo.") || messageId.startsWith(WEB_WA_PREFIX)) return;
-    await this.inner.markRead?.(target, messageId);
+    await this.inner.markRead?.(target, messageId, opts);
   }
 
   /** Demo and web customers never send real media ids, so there is nothing to filter here. */

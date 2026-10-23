@@ -39,9 +39,15 @@ export class MediaError extends Error {
  * Media download rides on the same port because it needs the same per-channel token and the same
  * "never reach Meta" guarantee in tests and with WHATSAPP_SENDER=log.
  */
+export interface MarkReadOptions {
+  /** Show the typing indicator: only when a reply is coming, as Meta asks. */
+  typing?: boolean;
+}
+
 export interface MessageSender {
   send(target: SendTarget, message: OutboundMessage): Promise<SendResult>;
-  markRead?(target: Omit<SendTarget, "to">, messageId: string): Promise<void>;
+  /** Read receipt for an inbound message; with `typing` the customer also sees "typing…" until a reply arrives or 25 seconds pass. */
+  markRead?(target: Omit<SendTarget, "to">, messageId: string, opts?: MarkReadOptions): Promise<void>;
   /** Fetches a received media file by the id from the webhook. Throws MediaError when it cannot. */
   downloadMedia?(mediaId: string, accessToken: string, opts?: DownloadMediaOptions): Promise<DownloadedMedia>;
 }

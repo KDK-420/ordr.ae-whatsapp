@@ -1,5 +1,5 @@
 import type { OutboundMessage } from "./outbound";
-import { type DownloadedMedia, type DownloadMediaOptions, MediaError, type MessageSender, type SendResult, type SendTarget } from "./sender";
+import { type DownloadedMedia, type DownloadMediaOptions, type MarkReadOptions, MediaError, type MessageSender, type SendResult, type SendTarget } from "./sender";
 
 export interface CloudApiClientOptions {
   graphVersion?: string;
@@ -57,11 +57,16 @@ export class CloudApiClient implements MessageSender {
     return { providerMessageId: id };
   }
 
-  async markRead(target: Omit<SendTarget, "to">, messageId: string): Promise<void> {
+  /**
+   * Marks the message read and, when a reply is on its way, shows the typing indicator. Meta dismisses
+   * the indicator when the reply is sent or after 25 seconds.
+   */
+  async markRead(target: Omit<SendTarget, "to">, messageId: string, opts: MarkReadOptions = {}): Promise<void> {
     await this.post(target.phoneNumberId, target.accessToken, {
       messaging_product: "whatsapp",
       status: "read",
       message_id: messageId,
+      ...(opts.typing ? { typing_indicator: { type: "text" } } : {}),
     });
   }
 

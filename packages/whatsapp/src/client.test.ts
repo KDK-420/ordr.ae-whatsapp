@@ -25,6 +25,16 @@ describe("CloudApiClient", () => {
     expect(JSON.parse(calls[0]!.init.body as string)).toMatchObject({ messaging_product: "whatsapp", to: "9715", type: "text" });
   });
 
+  it("marks a message read, with the typing indicator only when a reply is coming", async () => {
+    const { impl, calls } = fakeFetch([{ body: { success: true } }, { body: { success: true } }]);
+    const client = new CloudApiClient({ fetchImpl: impl, graphVersion: "v23.0" });
+    await client.markRead({ phoneNumberId: "123", accessToken: "tok" }, "wamid.in", { typing: true });
+    await client.markRead({ phoneNumberId: "123", accessToken: "tok" }, "wamid.in");
+    expect(calls[0]!.url).toBe("https://graph.facebook.com/v23.0/123/messages");
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ messaging_product: "whatsapp", status: "read", message_id: "wamid.in", typing_indicator: { type: "text" } });
+    expect(JSON.parse(calls[1]!.init.body as string)).toEqual({ messaging_product: "whatsapp", status: "read", message_id: "wamid.in" });
+  });
+
   it("surfaces Meta errors with code and subcode", async () => {
     const { impl } = fakeFetch([{ status: 400, body: { error: { message: "Invalid parameter", code: 100, error_subcode: 33, fbtrace_id: "tr" } } }]);
     const client = new CloudApiClient({ fetchImpl: impl });
