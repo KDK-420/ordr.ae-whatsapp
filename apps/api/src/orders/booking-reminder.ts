@@ -64,14 +64,14 @@ export class BookingReminderNotifier implements OnModuleInit {
       this.logger.log(`booking #${order.number} was moved; reminder for the old time skipped`);
       return;
     }
-    const ctx = await this.tenants.findContextById(order.tenantId);
+    const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
+    const ctx = (conversation ? await this.tenants.findContextByChannelId(conversation.channelId) : null) ?? (await this.tenants.findContextById(order.tenantId));
     if (!ctx) {
       this.logger.warn(`booking #${order.number}: tenant ${order.tenantId} has no active channel; reminder skipped`);
       return;
     }
     const customer = await this.conversations.findCustomerById(order.customerId);
     if (!customer) return;
-    const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
     const lastInbound = conversation?.lastInboundAt;
     const inWindow = !!lastInbound && now.getTime() - lastInbound.getTime() <= SERVICE_WINDOW_MS;
 

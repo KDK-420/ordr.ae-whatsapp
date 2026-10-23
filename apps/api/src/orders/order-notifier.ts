@@ -39,14 +39,15 @@ export class OrderNotifier implements OnModuleInit {
 
     const order = await this.orders.findById(event.tenantId, event.subject.id);
     if (!order) return;
-    const ctx = await this.tenants.findContextById(order.tenantId);
+    const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
+    // Answer on the number the customer wrote to; the tenant's newest channel only when there is no thread.
+    const ctx = (conversation ? await this.tenants.findContextByChannelId(conversation.channelId) : null) ?? (await this.tenants.findContextById(order.tenantId));
     if (!ctx) {
       this.logger.warn(`order #${order.number}: tenant ${order.tenantId} has no active channel; notification skipped`);
       return;
     }
     const customer = await this.conversations.findCustomerById(order.customerId);
     if (!customer) return;
-    const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
     const lastInbound = conversation?.lastInboundAt;
     const inWindow = !!lastInbound && Date.now() - lastInbound.getTime() <= SERVICE_WINDOW_MS;
 

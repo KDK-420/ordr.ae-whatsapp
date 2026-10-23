@@ -65,7 +65,11 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
   scripted fake that speaks the same wire format (`fakeApi` in the agent test) or a
   `ScriptedAgent` implementing `ConversationAgent`.
 - **WhatsApp.** Real adapter; `WHATSAPP_SENDER=log` prints instead of sending. Web chat
-  customers (`web:` ids) and demo customers (`000` ids) never reach Meta.
+  customers (`web:` ids) and demo customers (`000` ids) never reach Meta. Every inbound message
+  is marked read; when the bot is going to answer, the read receipt carries Meta's typing
+  indicator, so the customer sees "typing…" until the reply lands (Meta clears it after 25 s).
+  Outbound notifications, reminders and inbox replies go out on the channel the customer's
+  conversation is on; a tenant's newest active number is used only when there is no thread.
 - **Identity linking.** Web visitors are anonymous (`web:<random>` per session). Linking a web
   visitor to a verified WhatsApp identity is Phase 2 (OTP); until then memories consented in
   web chat belong to that anonymous identity only.

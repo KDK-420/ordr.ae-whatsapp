@@ -29,8 +29,10 @@ export interface ChannelInput {
 export interface TenantRepository {
   findByPhoneNumberId(phoneNumberId: string): Promise<TenantContext | null>;
   findById(tenantId: string): Promise<Tenant | null>;
-  /** Tenant with its active channel, for outbound messages that start on our side. */
+  /** Tenant with its newest active WhatsApp channel, for outbound messages with no conversation to follow. */
   findContextById(tenantId: string): Promise<TenantContext | null>;
+  /** Tenant with one specific channel, if that channel is still active: notifications follow the channel the customer wrote on. */
+  findContextByChannelId(channelId: string): Promise<TenantContext | null>;
   /** Every tenant with its active channel, if any; newest first. Platform admin only. */
   list(): Promise<Array<{ tenant: Tenant; channel: Channel | null }>>;
   create(input: CreateTenantInput): Promise<Tenant>;

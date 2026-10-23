@@ -69,7 +69,7 @@ export class InboxService {
     if (!this.windowOpen(conversation.lastInboundAt)) {
       throw new InboxError("window_closed", "the customer last wrote more than 24 hours ago; WhatsApp only allows template messages now");
     }
-    const ctx = await this.tenants.findContextById(tenantId);
+    const ctx = (await this.tenants.findContextByChannelId(conversation.channelId)) ?? (await this.tenants.findContextById(tenantId));
     if (!ctx) throw new InboxError("no_channel", "tenant has no active WhatsApp channel");
     const customer = conversation.customer;
     if (!customer) throw new InboxError("no_customer", "conversation has no customer");
@@ -97,12 +97,12 @@ export class InboxService {
    * token. Nothing is stored on our side; Meta keeps media for about 30 days.
    */
   async media(tenantId: string, conversationId: string, messageId: string): Promise<DownloadedMedia> {
-    await this.summary(tenantId, conversationId);
     const messages = await this.conversations.listMessages(conversationId, { limit: 1000 });
     const message = messages.find((m) => m.id === messageId && m.direction === "in");
     const payload = message?.payload as { kind?: unknown; mediaId?: unknown; mimeType?: unknown } | undefined;
     if (!payload || payload.kind !== "media" || typeof payload.mediaId !== "string") throw new InboxError("not_found", "no media on that message");
-    const ctx = await this.tenants.findContextById(tenantId);
+    const conversation = await this.summary(tenantId, conversationId);
+    const ctx = (await this.tenants.findContextByChannelId(conversation.channelId)) ?? (await this.tenants.findContextById(tenantId));
     if (!ctx) throw new InboxError("no_channel", "tenant has no active WhatsApp channel");
     if (!this.sender.downloadMedia) throw new InboxError("media_unavailable", "media download is not available with this sender");
     try {

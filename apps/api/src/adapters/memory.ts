@@ -46,7 +46,14 @@ export class InMemoryTenantRepository implements TenantRepository {
   }
 
   async findContextById(tenantId: string): Promise<TenantContext | null> {
-    for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active" && ctx.channel.provider === "meta_cloud") return ctx;
+    // Newest first, like the Prisma adapter: the last channel attached wins.
+    let found: TenantContext | null = null;
+    for (const ctx of this.byPhone.values()) if (ctx.tenant.id === tenantId && ctx.channel.status === "active" && ctx.channel.provider === "meta_cloud") found = ctx;
+    return found;
+  }
+
+  async findContextByChannelId(channelId: string): Promise<TenantContext | null> {
+    for (const ctx of this.byPhone.values()) if (ctx.channel.id === channelId && ctx.channel.status === "active") return ctx;
     return null;
   }
 

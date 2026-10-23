@@ -86,7 +86,13 @@ export class PrismaTenantRepository implements TenantRepository {
   }
 
   async findContextById(tenantId: string): Promise<TenantContext | null> {
-    const channel = await this.prisma.channel.findFirst({ where: { tenantId, status: "active", provider: "meta_cloud" }, orderBy: { createdAt: "asc" }, include: { tenant: true } });
+    // Newest first: a number assigned later supersedes a seed placeholder that was never retired.
+    const channel = await this.prisma.channel.findFirst({ where: { tenantId, status: "active", provider: "meta_cloud" }, orderBy: { createdAt: "desc" }, include: { tenant: true } });
+    return channel ? toContext(channel) : null;
+  }
+
+  async findContextByChannelId(channelId: string): Promise<TenantContext | null> {
+    const channel = await this.prisma.channel.findFirst({ where: { id: channelId, status: "active" }, include: { tenant: true } });
     return channel ? toContext(channel) : null;
   }
 
