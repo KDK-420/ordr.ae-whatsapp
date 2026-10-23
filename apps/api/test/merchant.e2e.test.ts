@@ -205,7 +205,7 @@ describe("merchant API", () => {
     // The fake Meta API approves immediately, so one submit is enough here.
     const submitted = await request(server()).post("/merchant/templates/submit").set(auth);
     expect(submitted.status).toBe(200);
-    expect(submitted.body.templates.map((t: { language: string; status: string }) => `${t.language}:${t.status}`)).toEqual(["en:approved", "ar:approved", "en:approved", "ar:approved"]);
+    expect(submitted.body.templates.map((t: { language: string; status: string }) => `${t.language}:${t.status}`)).toEqual(["en:approved", "ar:approved", "en:approved", "ar:approved", "en:approved", "ar:approved"]);
 
     const order = await placeOrder(h, "971500000003", 25 * 60);
     await request(server()).post(`/merchant/orders/${order.id}/transition`).set(auth).send({ event: "accept" });

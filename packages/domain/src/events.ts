@@ -18,4 +18,6 @@ export type ConversationEventType =
   | "conversation.message_received"
   | "conversation.message_sent"
   | "conversation.handoff_requested"
+  /** The bot paused itself on a thread; staff are alerted. */
+  | "conversation.handed_over"
   | "conversation.flow_completed";

@@ -1,15 +1,33 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { type ActionContext, type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult, type SessionState } from "@ordr/flow-schema";
 import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, type OutboundMessage, text } from "@ordr/whatsapp";
-import type { Customer } from "@ordr/domain";
+import type { Customer, DomainEvent } from "@ordr/domain";
 import { COPY, t } from "../actions/copy";
 import { type AgentAttachment, conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
-import type { BlueprintRegistry, ConversationRepository, DedupeStore, SessionStore, TenantContext, TenantRepository } from "../ports";
+import type { BlueprintRegistry, ConversationRepository, DedupeStore, EventBus, SessionStore, TenantContext, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import { InboundMediaService } from "./inbound-media.service";
 import { textOf } from "./inbound-text";
+import { previewOf } from "./preview";
+
+/** A flow result plus why the agent handed over, when it said. */
+type TurnResult = RunResult & { handoffReason?: string };
+
+/** What the outbox carries when the bot hands a thread to a person; HandoffNotifier turns it into a WhatsApp alert. */
+export interface HandedOverPayload {
+  conversationId: string;
+  customerId: string;
+  customerName?: string;
+  waId: string;
+  channelId: string;
+  /** The last inbound text, or a media preview such as "Voice note: …". */
+  preview: string;
+  /** The reason the agent gave hand_over_to_human, when it gave one. */
+  reason?: string;
+}
 
 const APOLOGY: Record<string, string> = {
   en: "Sorry, something went wrong on our side. Please send \"menu\" to try again.",
@@ -28,6 +46,7 @@ export class ConversationService {
     @Inject(TOKENS.SessionStore) private readonly sessions: SessionStore,
     @Inject(TOKENS.DedupeStore) private readonly dedupe: DedupeStore,
     @Inject(TOKENS.MessageSender) private readonly sender: MessageSender,
+    @Inject(TOKENS.EventBus) private readonly bus: EventBus,
     @Inject(TOKENS.ActionRegistry) private readonly actions: ActionRegistry,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(AssistantService) private readonly assistant: AssistantService,
@@ -100,7 +119,7 @@ export class ConversationService {
 
     const asText = natural ? (received ? received.text : textOf(event.content)) : null;
 
-    let result: RunResult;
+    let result: TurnResult;
     try {
       if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
         // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
@@ -141,7 +160,18 @@ export class ConversationService {
     const finalLanguage = result.session?.language ?? language;
     if (finalLanguage !== customer.language) await this.conversations.setCustomerLanguage(customer.id, finalLanguage);
 
-    if (result.handoff) await this.conversations.setConversationStatus(conversation.id, "human");
+    if (result.handoff) {
+      await this.conversations.setConversationStatus(conversation.id, "human");
+      await this.publishHandedOver({
+        conversationId: conversation.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        waId: customer.waId,
+        channelId: channel.id,
+        preview: previewOf(received?.payload ?? event.content),
+        reason: result.handoffReason,
+      }, tenant.id);
+    }
 
     if (result.session) await this.sessions.set(tenant.id, event.from, result.session, this.config.SESSION_TTL_SECONDS);
     else await this.sessions.delete(tenant.id, event.from);
@@ -159,16 +189,16 @@ export class ConversationService {
     baseContext: Record<string, unknown>,
     actionCtx: Omit<ActionContext, "language" | "context">,
     opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[] },
-  ): Promise<RunResult> {
+  ): Promise<TurnResult> {
     try {
       const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);
       const outbound: OutboundMessage[] = reply.text ? [text(reply.text)] : [];
       if (reply.startFlow) {
         const started = await runner.start(reply.startFlow, { language, context: baseContext }, actionCtx);
-        return { ...started, outbound: [...outbound, ...started.outbound], handoff: started.handoff || reply.handoff };
+        return { ...started, outbound: [...outbound, ...started.outbound], handoff: started.handoff || reply.handoff, handoffReason: reply.handoffReason };
       }
       if (reply.handoff && !reply.text) outbound.push(text(t(COPY.handoff, language)));
-      return { outbound, session: null, handoff: reply.handoff, completed: true };
+      return { outbound, session: null, handoff: reply.handoff, handoffReason: reply.handoffReason, completed: true };
     } catch (err) {
       this.logger.warn(`natural conversation failed for ${customer.waId}, showing the menu instead: ${err instanceof Error ? err.message : String(err)}`);
       return runner.start(blueprint.fallbackFlow ?? blueprint.entryFlow, { language, context: baseContext }, actionCtx);
@@ -184,6 +214,26 @@ export class ConversationService {
     const option = id ? pending.options.find((o) => o.id === id) : undefined;
     if (!option) return content;
     return { kind: pending.kind, id: option.id, title: option.title };
+  }
+
+  /**
+   * Tells the outbox a person is needed. The thread is already paused; a failure here must not
+   * fail the customer's turn, so it is logged (with the outbox the worker retries the handler).
+   */
+  private async publishHandedOver(payload: HandedOverPayload, tenantId: string): Promise<void> {
+    const event: DomainEvent<"conversation.handed_over", HandedOverPayload> = {
+      id: randomUUID(),
+      type: "conversation.handed_over",
+      tenantId,
+      occurredAt: new Date().toISOString(),
+      subject: { kind: "conversation", id: payload.conversationId },
+      payload,
+    };
+    try {
+      await this.bus.publish(event);
+    } catch (err) {
+      this.logger.error(`conversation.handed_over for ${payload.conversationId} failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async deliver(ctx: TenantContext, conversationId: string, to: string, messages: RunResult["outbound"]): Promise<void> {

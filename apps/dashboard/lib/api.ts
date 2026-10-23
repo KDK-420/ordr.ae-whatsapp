@@ -249,10 +249,12 @@ export interface ConversationSettings {
   defaultStyle: "guided" | "natural";
   facts: string[];
   profile: BusinessProfile;
+  /** Staff WhatsApp numbers (digits only) alerted when the bot hands a thread over; at most 5. */
+  handoffNumbers: string[];
   assistantAvailable: boolean;
 }
 export const getConversationSettings = () => call<ConversationSettings>("/merchant/settings");
-export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile }) =>
+export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[] }) =>
   call<ConversationSettings>("/merchant/settings", { method: "PATCH", body: JSON.stringify(patch) });
 
 export interface PooledNumber {

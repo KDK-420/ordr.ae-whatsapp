@@ -4,6 +4,7 @@ import { conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
+import { handoffNumbers, MAX_HANDOFF_NUMBERS } from "../conversation/handoff-notifier";
 import type { BlueprintRegistry, TenantRepository } from "../ports";
 import { businessProfile } from "../tenant-profile";
 import { TOKENS } from "../tokens";
@@ -23,6 +24,8 @@ const PatchSchema = z.object({
       hours: optionalText(300),
     })
     .optional(),
+  /** Staff WhatsApp numbers (E.164 digits, "+" and spaces tolerated) alerted when the bot hands a thread over. An empty list clears them. */
+  handoffNumbers: z.array(z.string().trim().regex(/^\+?[\d\s-]{8,20}$/, "must be a phone number in international format")).max(MAX_HANDOFF_NUMBERS).optional(),
 });
 
 /** Tenant-level settings an owner can change: how the bot talks and what it knows. */
@@ -49,6 +52,7 @@ export class MerchantSettingsController {
     if (parsed.data.conversationStyle) patch.conversationStyle = parsed.data.conversationStyle;
     if (parsed.data.facts) patch.facts = parsed.data.facts;
     if (parsed.data.profile) patch.profile = businessProfile({ profile: parsed.data.profile });
+    if (parsed.data.handoffNumbers) patch.handoffNumbers = handoffNumbers({ handoffNumbers: parsed.data.handoffNumbers });
     if (!(await this.tenants.updateSettings(user.tenantId, patch))) throw new NotFoundException("tenant not found");
     return this.view(user.tenantId);
   }
@@ -64,6 +68,7 @@ export class MerchantSettingsController {
       defaultStyle: blueprint && (blueprint.settings as Record<string, unknown>).conversationStyle === "natural" ? "natural" : "guided",
       facts,
       profile: businessProfile(tenant.settings),
+      handoffNumbers: handoffNumbers(tenant.settings),
       /** Natural style needs the model; without the key it silently runs guided. */
       assistantAvailable: this.assistant.conversational,
     };

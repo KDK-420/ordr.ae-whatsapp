@@ -6,6 +6,7 @@ import { TOKENS } from "../tokens";
 
 export const ORDER_STATUS_PURPOSE = "order_status";
 export const BOOKING_REMINDER_PURPOSE = "booking_reminder";
+export const HANDOFF_ALERT_PURPOSE = "handoff_alert";
 
 /** Templates every tenant needs. Bodies use Meta's positional placeholders. */
 export const DEFAULT_TEMPLATES = [
@@ -30,6 +31,17 @@ export const DEFAULT_TEMPLATES = [
       ar: "تذكير: حجزك في {{1}} في {{2}}. راسلنا هنا إذا أردت تغييره.",
     } as Record<string, string>,
     examples: ["Demo Salon", "Tue 20 Oct, 11:00"],
+  },
+  {
+    purpose: HANDOFF_ALERT_PURPOSE,
+    name: "ordr_handoff_alert",
+    category: "UTILITY",
+    parameters: ["customer", "preview", "url"],
+    bodies: {
+      en: "{{1}} needs a person: \"{{2}}\". Reply in the inbox: {{3}}",
+      ar: "{{1}} يحتاج إلى شخص: \"{{2}}\". الرد من صندوق الوارد: {{3}}",
+    } as Record<string, string>,
+    examples: ["Sara (+971500000000)", "I want to speak to someone", "https://app.ordr.ae/inbox"],
   },
 ];
 

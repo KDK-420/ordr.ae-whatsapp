@@ -44,6 +44,7 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  pushSubscriptions PushSubscription[]
 
   @@index([tenantId])
 }
@@ -354,6 +355,22 @@ model PaymentIntent {
 }
 
 /// Provider webhook deliveries already processed, keyed by provider and event id, so replays are no-ops.
+/// A dashboard user's browser or phone that asked for push notifications. One row per endpoint; dead endpoints are pruned on send.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  endpoint  String   @unique
+  /// { p256dh, auth } as the browser handed them over
+  keys      Json
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
 model WebhookReceipt {
   id         String   @id
   provider   String

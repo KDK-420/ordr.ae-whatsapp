@@ -8,6 +8,7 @@ export default function ConversationSettingsPage() {
   const [style, setStyle] = useState<"guided" | "natural">("guided");
   const [facts, setFacts] = useState("");
   const [profile, setProfile] = useState<BusinessProfile>({});
+  const [handoffNumbers, setHandoffNumbers] = useState("");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +20,7 @@ export default function ConversationSettingsPage() {
       setStyle(s.conversationStyle);
       setFacts(s.facts.join("\n"));
       setProfile(s.profile ?? {});
+      setHandoffNumbers((s.handoffNumbers ?? []).map((n) => `+${n}`).join("\n"));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
@@ -39,6 +41,7 @@ export default function ConversationSettingsPage() {
         conversationStyle: style,
         facts: facts.split("\n").map((f) => f.trim()).filter(Boolean),
         profile: { address: profile.address ?? "", mapsUrl: profile.mapsUrl ?? "", phone: profile.phone ?? "", hours: profile.hours ?? "" },
+        handoffNumbers: handoffNumbers.split("\n").map((n) => n.trim()).filter(Boolean),
       });
       setSettings(s);
       setSaved(true);
@@ -102,6 +105,12 @@ export default function ConversationSettingsPage() {
           Facts the bot may share
           <textarea value={facts} onChange={(e) => setFacts(e.target.value)} rows={6} placeholder={"One per line, e.g.\nFree parking in the building.\nWalk-ins welcome before 2pm.\nCancellations under 2 hours are charged 50%."} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand" />
           <span className="mt-1 block text-xs font-normal text-slate-500">Parking, policies, anything else customers ask. The bot never invents facts that are not here, in the details above, or in your catalog.</span>
+        </label>
+
+        <label className="block text-sm font-medium">
+          Who to alert on WhatsApp when the bot hands over
+          <textarea value={handoffNumbers} onChange={(e) => setHandoffNumbers(e.target.value)} rows={3} placeholder={"One number per line, e.g.\n+971 50 123 4567"} inputMode="tel" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand" />
+          <span className="mt-1 block text-xs font-normal text-slate-500">Up to 5 staff numbers in international format. Each gets a WhatsApp message from your business number with the customer&apos;s last message and a link to the inbox. Outside the 24-hour window this uses the &quot;ordr_handoff_alert&quot; template, which must be approved under WhatsApp templates.</span>
         </label>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}

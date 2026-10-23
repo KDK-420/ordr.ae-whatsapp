@@ -293,6 +293,25 @@ export interface PaymentIntentRepository {
   listExpired(now: Date, limit?: number): Promise<PaymentIntentRecord[]>;
 }
 
+/** A browser's Web Push subscription, stored per dashboard user. */
+export interface PushSubscriptionRecord {
+  id: string;
+  userId: string;
+  tenantId: string;
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  userAgent?: string;
+  createdAt: Date;
+}
+
+export interface PushSubscriptionRepository {
+  /** Same endpoint again replaces the row (the browser may re-register after a key rotation). */
+  upsert(input: Omit<PushSubscriptionRecord, "id" | "createdAt">): Promise<PushSubscriptionRecord>;
+  listByTenant(tenantId: string): Promise<PushSubscriptionRecord[]>;
+  /** Removes one endpoint; with a userId only when it belongs to that user. */
+  removeByEndpoint(endpoint: string, userId?: string): Promise<boolean>;
+}
+
 /** Remembers provider webhook ids so a replay changes nothing. */
 export interface WebhookReceiptRepository {
   /** True the first time an id is seen. */

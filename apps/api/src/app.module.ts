@@ -20,6 +20,7 @@ import {
   InMemoryCartRepository,
   InMemoryMemoryRepository,
   InMemoryPaymentIntentRepository,
+  InMemoryPushSubscriptionRepository,
   InMemoryWebhookReceiptRepository,
   InMemoryWebSessionRepository,
 } from "./adapters/memory-commerce";
@@ -29,6 +30,7 @@ import {
   PrismaCartRepository,
   PrismaMemoryRepository,
   PrismaPaymentIntentRepository,
+  PrismaPushSubscriptionRepository,
   PrismaWebhookReceiptRepository,
   PrismaWebSessionRepository,
 } from "./adapters/prisma-commerce";
@@ -37,6 +39,9 @@ import { MaintenanceService } from "./maintenance.service";
 import { MemoryService } from "./memory/memory.service";
 import { MockPaymentProvider, type PaymentProvider } from "./payments/payment-provider";
 import { PaymentsController } from "./payments/payments.controller";
+import { HandoffPushNotifier } from "./push/handoff-push-notifier";
+import { MerchantPushController } from "./push/push.controller";
+import { VapidWebPushSender, type WebPushSender } from "./push/web-push";
 import { WebChatController } from "./webchat/webchat.controller";
 import { WebChatService } from "./webchat/webchat.service";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
@@ -58,6 +63,7 @@ import { AuthService } from "./auth/auth.service";
 import { hashPassword } from "./auth/password";
 import type { AppConfig } from "./config";
 import { ConversationService } from "./conversation/conversation.service";
+import { HandoffNotifier } from "./conversation/handoff-notifier";
 import { InboundMediaService } from "./conversation/inbound-media.service";
 import { InboundQueue } from "./conversation/inbound-queue";
 import { OutboxRelay } from "./events/outbox-relay";
@@ -129,6 +135,7 @@ export interface AppOptions {
     transcriber: Transcriber;
     numbers: NumberPoolRepository;
     paymentProvider: PaymentProvider;
+    pushSender: WebPushSender;
   }>;
 }
 
@@ -243,6 +250,17 @@ export class AppModule {
       InboundMediaService,
       OrderNotifier,
       BookingReminderNotifier,
+      HandoffNotifier,
+      HandoffPushNotifier,
+      {
+        provide: TOKENS.WebPushSender,
+        useFactory: (): WebPushSender => {
+          if (overrides.pushSender) return overrides.pushSender;
+          const sender = new VapidWebPushSender(config);
+          logger.log(sender.enabled ? "web push on: dashboard devices can subscribe to handoff alerts" : "WEB_PUSH_PUBLIC_KEY/WEB_PUSH_PRIVATE_KEY not set: push notifications off");
+          return sender;
+        },
+      },
       {
         provide: TOKENS.TemplateApi,
         useFactory: () =>
@@ -262,6 +280,7 @@ export class AppModule {
         { provide: TOKENS.CartRepository, useValue: new InMemoryCartRepository() },
         { provide: TOKENS.PaymentIntentRepository, useValue: new InMemoryPaymentIntentRepository() },
         { provide: TOKENS.WebhookReceiptRepository, useValue: new InMemoryWebhookReceiptRepository() },
+        { provide: TOKENS.PushSubscriptionRepository, useValue: new InMemoryPushSubscriptionRepository() },
         { provide: TOKENS.WebSessionRepository, useValue: new InMemoryWebSessionRepository() },
         { provide: TOKENS.MemoryRepository, useValue: new InMemoryMemoryRepository() },
         { provide: TOKENS.AgentRunRepository, useValue: new InMemoryAgentRunRepository() },
@@ -321,6 +340,7 @@ export class AppModule {
         { provide: TOKENS.CartRepository, useFactory: (p: PrismaService) => new PrismaCartRepository(p), inject: [PrismaService] },
         { provide: TOKENS.PaymentIntentRepository, useFactory: (p: PrismaService) => new PrismaPaymentIntentRepository(p), inject: [PrismaService] },
         { provide: TOKENS.WebhookReceiptRepository, useFactory: (p: PrismaService) => new PrismaWebhookReceiptRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.PushSubscriptionRepository, useFactory: (p: PrismaService) => new PrismaPushSubscriptionRepository(p), inject: [PrismaService] },
         { provide: TOKENS.WebSessionRepository, useFactory: (p: PrismaService) => new PrismaWebSessionRepository(p), inject: [PrismaService] },
         { provide: TOKENS.MemoryRepository, useFactory: (p: PrismaService) => new PrismaMemoryRepository(p), inject: [PrismaService] },
         { provide: TOKENS.AgentRunRepository, useFactory: (p: PrismaService) => new PrismaAgentRunRepository(p), inject: [PrismaService] },
@@ -366,6 +386,7 @@ export class AppModule {
               MerchantUsersController,
               WebChatController,
               PaymentsController,
+              MerchantPushController,
             ]
           : [],
       providers,

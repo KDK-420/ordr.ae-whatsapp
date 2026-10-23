@@ -55,7 +55,7 @@ export class AnthropicAgent implements ConversationAgent {
     const started = Date.now();
     const settings = await this.deps.scheduling.settings(input.tenant.id);
     const tz = settings.tz;
-    const effects: { handoff: boolean; startFlow?: string } = { handoff: false };
+    const effects: { handoff: boolean; handoffReason?: string; startFlow?: string } = { handoff: false };
     const trace: ToolTrace[] = [];
     const memoryIds = new Set(input.memories.map((m) => m.id));
     const ctx: ToolContext = { input, tz, effects, trace, memoryIds, deps: this.deps, logger: this.logger };
@@ -94,14 +94,14 @@ export class AnthropicAgent implements ConversationAgent {
       const traceOut = { model: final.model, tools: trace, memoryIds: [...memoryIds], inputTokens, outputTokens, durationMs: Date.now() - started };
       if (final.stop_reason === "refusal") {
         this.logger.warn(`agent declined (${final.stop_details?.category ?? "unknown"})`);
-        return { text: "", handoff: true, trace: traceOut };
+        return { text: "", handoff: true, handoffReason: "the assistant declined to answer", trace: traceOut };
       }
       const text = final.content
         .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n")
         .trim();
-      return { text, handoff: effects.handoff, startFlow: effects.startFlow, trace: traceOut };
+      return { text, handoff: effects.handoff, handoffReason: effects.handoffReason, startFlow: effects.startFlow, trace: traceOut };
     } catch (err) {
       if (err instanceof Anthropic.APIError) this.logger.warn(`agent API error ${err.status}: ${err.message}`);
       else this.logger.warn(`agent failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -113,7 +113,7 @@ export class AnthropicAgent implements ConversationAgent {
 interface ToolContext {
   input: AgentInput;
   tz: string;
-  effects: { handoff: boolean; startFlow?: string };
+  effects: { handoff: boolean; handoffReason?: string; startFlow?: string };
   trace: ToolTrace[];
   memoryIds: Set<string>;
   deps: AgentDeps;
@@ -409,6 +409,7 @@ function handoffTool(ctx: ToolContext): Tool {
     inputSchema: z.object({ reason: z.string().max(200) }),
     run: traced(ctx, "hand_over_to_human", async ({ reason }) => {
       ctx.effects.handoff = true;
+      ctx.effects.handoffReason = reason.trim() || undefined;
       ctx.logger.log(`handoff requested for ${ctx.input.customer.waId}: ${reason}`);
       return "The team has been alerted. Tell the customer briefly that a person will reply here shortly.";
     }),

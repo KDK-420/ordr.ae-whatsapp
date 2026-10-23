@@ -10,6 +10,8 @@ import type {
   CreateHoldInput,
   HoldStatus,
   MemoryRecord,
+  PushSubscriptionRecord,
+  PushSubscriptionRepository,
   MemoryRepository,
   OrderRepository,
   PaymentIntentRecord,
@@ -76,6 +78,29 @@ export class InMemoryPaymentIntentRepository implements PaymentIntentRepository 
 
   async listExpired(now: Date, limit = 100): Promise<PaymentIntentRecord[]> {
     return this.intents.filter((x) => x.status === "pending" && new Date(x.expiresAt) < now).slice(0, limit).map((x) => structuredClone(x));
+  }
+}
+
+export class InMemoryPushSubscriptionRepository implements PushSubscriptionRepository {
+  readonly rows: PushSubscriptionRecord[] = [];
+
+  async upsert(input: Omit<PushSubscriptionRecord, "id" | "createdAt">): Promise<PushSubscriptionRecord> {
+    const i = this.rows.findIndex((r) => r.endpoint === input.endpoint);
+    const row: PushSubscriptionRecord = { id: i >= 0 ? this.rows[i]!.id : `push_${this.rows.length + 1}`, createdAt: new Date(), ...input };
+    if (i >= 0) this.rows[i] = row;
+    else this.rows.push(row);
+    return row;
+  }
+
+  async listByTenant(tenantId: string): Promise<PushSubscriptionRecord[]> {
+    return this.rows.filter((r) => r.tenantId === tenantId);
+  }
+
+  async removeByEndpoint(endpoint: string, userId?: string): Promise<boolean> {
+    const i = this.rows.findIndex((r) => r.endpoint === endpoint && (!userId || r.userId === userId));
+    if (i < 0) return false;
+    this.rows.splice(i, 1);
+    return true;
   }
 }
 

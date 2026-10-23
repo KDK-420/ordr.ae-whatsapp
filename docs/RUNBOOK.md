@@ -73,6 +73,36 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
 - **Identity linking.** Web visitors are anonymous (`web:<random>` per session). Linking a web
   visitor to a verified WhatsApp identity is Phase 2 (OTP); until then memories consented in
   web chat belong to that anonymous identity only.
+- **Handoff alerts.** When the agent calls `hand_over_to_human` (or a guided flow hands off),
+  `ConversationService` pauses the thread and emits `conversation.handed_over` through the
+  outbox (payload: conversation and customer ids, name, `waId`, the last inbound text or media
+  preview, the agent's reason). `HandoffNotifier` (worker on Postgres; in process in memory
+  mode) sends a WhatsApp message from the number the customer wrote on to every number in the
+  tenant setting `handoffNumbers` (Settings › Conversation › "Who to alert on WhatsApp when the
+  bot hands over"; E.164 digits, at most 5). A staff number that wrote to the business within
+  24 hours gets a plain text with the reason; otherwise the `ordr_handoff_alert` utility
+  template (`{{1}}` customer, `{{2}}` preview, `{{3}}` inbox link), submitted with the other
+  defaults from Settings › WhatsApp templates and skipped with a warning until it is approved.
+  The link is `PUBLIC_BASE_URL/inbox`. The dashboard shows the number of threads waiting for a
+  person next to "Inbox"; on the inbox page a new handoff plays a short chime (the "Sound on/off"
+  button mutes it, remembered per browser in localStorage; browsers only play it after the first
+  click or key on the page) and, once "Notify me" has been allowed there, a browser notification.
+  Web chat and demo customers' own ids are never alerted; staff numbers are always real.
+- **Push notifications (phones).** `HandoffPushNotifier` also handles `conversation.handed_over`:
+  it sends a Web Push ("<customer> needs a person", the preview, opens `/inbox`) to every device
+  the tenant's users registered, and deletes subscriptions the push service answers 404/410 for.
+  Setup: run `pnpm --filter @ordr/api push:keys` once, put the pair in `WEB_PUSH_PUBLIC_KEY` and
+  `WEB_PUSH_PRIVATE_KEY` (GitHub secrets of the same name reach `deploy/.env` on the next deploy;
+  `WEB_PUSH_SUBJECT` is a `mailto:` push services may contact, default `mailto:hello@ordr.ae`) and
+  restart the API and worker. Without both keys `GET /merchant/push/public-key` answers 503 and the
+  toggle says push is not set up. Rotating the keys invalidates every stored subscription; staff
+  turn the toggle off and on again. Each person turns it on per device under Settings › "Notify me
+  on this device": the page registers `public/sw.js`, asks for permission, subscribes with the
+  public key and `POST`s it to `/merchant/push/subscribe` (`DELETE` removes it); rows live in
+  `PushSubscription` and die with the user. **iPhone and iPad:** Apple delivers Web Push only to a
+  web app on the home screen, so staff first open the dashboard in Safari, Share › Add to Home
+  Screen (the manifest at `/manifest.webmanifest` names it "ordr.ae"), open it from there, sign in
+  and then turn the toggle on; the toggle explains this when it detects an iPhone in the browser.
 - **Housekeeping.** Expired holds and unpaid checkouts are released by `MaintenanceService`
   (worker process on Postgres; the API itself in memory mode), every minute.
 
@@ -137,7 +167,8 @@ Still mocked or missing:
 | `DEMO_CHAT_SLUG` (dashboard) | empty | Tenant slug behind the landing page's "Try the demo in web chat" button |
 
 Per tenant, in `tenant.settings`: `memoryEnabled` (default true; false disables memory tools
-and recall), `conversationStyle` (`natural` or `guided`), `facts`.
+and recall), `conversationStyle` (`natural` or `guided`), `facts`, `profile`, `handoffNumbers`
+(staff WhatsApp numbers alerted on a bot-to-human handoff, see above).
 
 ## Data model additions (migration `20261020090000_commerce_holds_memory_webchat`)
 

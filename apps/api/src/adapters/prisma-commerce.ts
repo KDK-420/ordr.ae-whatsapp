@@ -10,6 +10,8 @@ import type {
   CartRepository,
   ConsentRecord,
   CreateHoldInput,
+  PushSubscriptionRecord,
+  PushSubscriptionRepository,
   HoldStatus,
   MemoryRecord,
   MemoryRepository,
@@ -100,6 +102,36 @@ export class PrismaPaymentIntentRepository implements PaymentIntentRepository {
   async listExpired(now: Date, limit = 100): Promise<PaymentIntentRecord[]> {
     const rows = await this.prisma.paymentIntent.findMany({ where: { status: "pending", expiresAt: { lt: now } }, take: limit, orderBy: { expiresAt: "asc" } });
     return rows.map(toIntent);
+  }
+}
+
+const toPush = (r: { id: string; userId: string; tenantId: string; endpoint: string; keys: unknown; userAgent: string | null; createdAt: Date }): PushSubscriptionRecord => ({
+  id: r.id,
+  userId: r.userId,
+  tenantId: r.tenantId,
+  endpoint: r.endpoint,
+  keys: r.keys as { p256dh: string; auth: string },
+  userAgent: r.userAgent ?? undefined,
+  createdAt: r.createdAt,
+});
+
+export class PrismaPushSubscriptionRepository implements PushSubscriptionRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async upsert(input: Omit<PushSubscriptionRecord, "id" | "createdAt">): Promise<PushSubscriptionRecord> {
+    const data = { userId: input.userId, tenantId: input.tenantId, keys: input.keys, userAgent: input.userAgent ?? null };
+    const row = await this.prisma.pushSubscription.upsert({ where: { endpoint: input.endpoint }, create: { ...data, endpoint: input.endpoint }, update: data });
+    return toPush(row);
+  }
+
+  async listByTenant(tenantId: string): Promise<PushSubscriptionRecord[]> {
+    const rows = await this.prisma.pushSubscription.findMany({ where: { tenantId }, orderBy: { createdAt: "asc" } });
+    return rows.map(toPush);
+  }
+
+  async removeByEndpoint(endpoint: string, userId?: string): Promise<boolean> {
+    const res = await this.prisma.pushSubscription.deleteMany({ where: { endpoint, ...(userId ? { userId } : {}) } });
+    return res.count > 0;
   }
 }
 
