@@ -167,6 +167,8 @@ jobs:
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           META_VERIFY_TOKEN: ${{ secrets.META_VERIFY_TOKEN }}
+          # Voice notes: an OpenAI key turns transcription on. TRANSCRIPTION_API_KEY wins; OPENAI_KEY is the older name.
+          TRANSCRIPTION_API_KEY: ${{ secrets.TRANSCRIPTION_API_KEY || secrets.OPENAI_KEY }}
           SEED_TENANT_NAME: ${{ secrets.SEED_TENANT_NAME }}
           SEED_PHONE_NUMBER_ID: ${{ secrets.SEED_PHONE_NUMBER_ID }}
           SEED_WABA_ID: ${{ secrets.SEED_WABA_ID }}
@@ -198,6 +200,10 @@ jobs:
           add SEED_ADMIN_PASSWORD "$SEED_ADMIN_PASSWORD"
           add AUTH_SECRET "$AUTH_SECRET"
           add ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          if [ -n "$TRANSCRIPTION_API_KEY" ]; then
+            add TRANSCRIPTION_API_KEY "$TRANSCRIPTION_API_KEY"
+            add TRANSCRIPTION_PROVIDER openai
+          fi
           add PUBLIC_BASE_URL "https://$DOMAIN"
           if [ "$SEED_VERTICAL" != "no" ]; then
             add SEED_BLUEPRINT_ID "$SEED_VERTICAL"

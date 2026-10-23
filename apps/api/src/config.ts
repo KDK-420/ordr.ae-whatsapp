@@ -32,8 +32,10 @@ const EnvSchema = z.object({
    * Speech to text for WhatsApp voice notes. "none" (the only value today) leaves them untranscribed;
    * the agent then asks the customer to type. A provider adapter adds its name here and reads TRANSCRIPTION_API_KEY.
    */
-  TRANSCRIPTION_PROVIDER: z.enum(["none"]).default("none"),
+  TRANSCRIPTION_PROVIDER: z.enum(["none", "openai"]).default("none"),
   TRANSCRIPTION_API_KEY: z.string().min(1).optional(),
+  /** Model for the openai provider; gpt-4o-mini-transcribe is fast and handles Arabic and English. */
+  TRANSCRIPTION_MODEL: z.string().default("gpt-4o-mini-transcribe"),
   /** Where the dashboard (web chat, mock checkout page) is reachable by customers. */
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:3001"),
   /** "mock" ships a hosted-looking checkout page that signs its own webhook; real providers plug in behind the same port. */

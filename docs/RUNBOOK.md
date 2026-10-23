@@ -110,9 +110,12 @@ The pieces:
 Still mocked or missing:
 
 - **Transcription.** Claude's API has no audio input (`@anthropic-ai/sdk` 0.135.0 has no audio
-  content block), so voice notes need a speech-to-text provider. Only `TRANSCRIPTION_PROVIDER=none`
-  exists; a real adapter implements `Transcriber` (`apps/api/src/ai/transcriber.ts`), adds its name
-  to the enum in `config.ts` and the switch in `createTranscriber`, and reads `TRANSCRIPTION_API_KEY`.
+  content block), so voice notes go through a speech-to-text provider first.
+  `TRANSCRIPTION_PROVIDER=openai` with `TRANSCRIPTION_API_KEY` (an OpenAI key) sends each note to
+  OpenAI's transcription endpoint (`TRANSCRIPTION_MODEL`, default `gpt-4o-mini-transcribe`, Arabic
+  and English); `none` describes the note to the agent instead. The VPS workflow turns it on when
+  the `TRANSCRIPTION_API_KEY` (or `OPENAI_KEY`) secret exists. Another provider implements
+  `Transcriber` (`apps/api/src/ai/transcriber.ts`) and gets a case in `createTranscriber`.
   `FakeTranscriber` stands in for it in `test/media.e2e.test.ts`.
 - **Documents** are described, not read. PDFs could go to Claude as document blocks behind the same
   service once there is a reason to.

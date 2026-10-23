@@ -236,6 +236,7 @@ export class AppModule {
           if (overrides.transcriber) return overrides.transcriber;
           const transcriber = createTranscriber(config);
           if (!transcriber.enabled) logger.log("TRANSCRIPTION_PROVIDER=none: voice notes are described to the agent, not transcribed");
+          else logger.log(`voice notes transcribed with ${config.TRANSCRIPTION_PROVIDER} (${config.TRANSCRIPTION_MODEL})`);
           return transcriber;
         },
       },
