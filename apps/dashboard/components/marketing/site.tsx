@@ -184,6 +184,9 @@ export function SiteFooter() {
               {v.name}
             </Link>
           ))}
+          <Link href="/privacy" className="hover:text-slate-800">
+            Privacy
+          </Link>
           <Link href="/login" className="hover:text-slate-800">
             Sign in
           </Link>
