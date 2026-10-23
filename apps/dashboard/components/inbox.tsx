@@ -22,18 +22,39 @@ const STATUS_BADGE: Record<ConversationView["status"], { label: string; cls: str
 
 const name = (c: ConversationView) => c.customer?.name || (c.customer?.waId ? `+${c.customer.waId}` : "Customer");
 
+/** Browser notification for a thread the bot just handed over, when the person allowed them. Silent anywhere notifications are unsupported or denied. */
+function notifyHandoff(c: ConversationView): void {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    const n = new Notification(`${name(c)} needs a person`, { body: c.lastMessage?.preview ?? "Open the inbox to reply", tag: `handoff-${c.id}` });
+    n.onclick = () => window.focus();
+  } catch {
+    // Some browsers throw from the constructor outside a service worker; nothing to do.
+  }
+}
+
 export function Inbox() {
   const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [thread, setThread] = useState<{ conversation: ConversationView; messages: MessageView[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationPermission | "unsupported">("unsupported");
+  /** Threads already seen as "human", so only a new handoff notifies; null until the first list has loaded. */
+  const seenHuman = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") setNotifications(Notification.permission);
+  }, []);
 
   const refreshList = useCallback(async () => {
     try {
       const data = await listConversations();
       setConversations(data.conversations);
       setError(null);
+      const human = data.conversations.filter((c) => c.status === "human");
+      if (seenHuman.current) for (const c of human) if (!seenHuman.current.has(c.id)) notifyHandoff(c);
+      seenHuman.current = new Set(human.map((c) => c.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load conversations");
     } finally {
@@ -71,7 +92,14 @@ export function Inbox() {
       <aside className="flex min-h-0 flex-col border-b border-slate-200 md:border-b-0 md:border-r">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h1 className="font-semibold">Inbox</h1>
-          <span className="text-xs text-slate-500">{error ? <span className="text-red-600">{error}</span> : `${conversations.length} chats`}</span>
+          <span className="flex items-center gap-2 text-xs text-slate-500">
+            {notifications === "default" ? (
+              <button type="button" onClick={() => void Notification.requestPermission().then(setNotifications)} className="rounded-md border border-slate-300 px-2 py-0.5 hover:border-slate-400" title="Get a desktop notification when the bot hands a chat over">
+                Notify me
+              </button>
+            ) : null}
+            {error ? <span className="text-red-600">{error}</span> : `${conversations.length} chats`}
+          </span>
         </div>
         <ul className="flex-1 overflow-y-auto">
           {loaded && conversations.length === 0 ? <li className="px-4 py-8 text-center text-sm text-slate-400">No conversations yet</li> : null}

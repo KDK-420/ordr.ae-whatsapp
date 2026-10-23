@@ -64,6 +64,8 @@ export interface AgentReply {
   text: string;
   /** The customer asked for a person, or the model could not help: pause the bot for this thread. */
   handoff: boolean;
+  /** Why the model handed over, as it told the hand_over_to_human tool; shown to staff. */
+  handoffReason?: string;
   /** A guided flow to start right after the text (e.g. the ordering menu). */
   startFlow?: string;
   /** What the model did, for the audit log. */

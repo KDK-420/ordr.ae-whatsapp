@@ -73,6 +73,20 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
 - **Identity linking.** Web visitors are anonymous (`web:<random>` per session). Linking a web
   visitor to a verified WhatsApp identity is Phase 2 (OTP); until then memories consented in
   web chat belong to that anonymous identity only.
+- **Handoff alerts.** When the agent calls `hand_over_to_human` (or a guided flow hands off),
+  `ConversationService` pauses the thread and emits `conversation.handed_over` through the
+  outbox (payload: conversation and customer ids, name, `waId`, the last inbound text or media
+  preview, the agent's reason). `HandoffNotifier` (worker on Postgres; in process in memory
+  mode) sends a WhatsApp message from the number the customer wrote on to every number in the
+  tenant setting `handoffNumbers` (Settings › Conversation › "Who to alert on WhatsApp when the
+  bot hands over"; E.164 digits, at most 5). A staff number that wrote to the business within
+  24 hours gets a plain text with the reason; otherwise the `ordr_handoff_alert` utility
+  template (`{{1}}` customer, `{{2}}` preview, `{{3}}` inbox link), submitted with the other
+  defaults from Settings › WhatsApp templates and skipped with a warning until it is approved.
+  The link is `PUBLIC_BASE_URL/inbox`. The dashboard shows the number of threads waiting for a
+  person next to "Inbox" and, once "Notify me" has been allowed on the inbox page, a browser
+  notification when a new one appears. Web chat and demo customers' own ids are never
+  alerted; staff numbers are always real.
 - **Housekeeping.** Expired holds and unpaid checkouts are released by `MaintenanceService`
   (worker process on Postgres; the API itself in memory mode), every minute.
 
@@ -137,7 +151,8 @@ Still mocked or missing:
 | `DEMO_CHAT_SLUG` (dashboard) | empty | Tenant slug behind the landing page's "Try the demo in web chat" button |
 
 Per tenant, in `tenant.settings`: `memoryEnabled` (default true; false disables memory tools
-and recall), `conversationStyle` (`natural` or `guided`), `facts`.
+and recall), `conversationStyle` (`natural` or `guided`), `facts`, `profile`, `handoffNumbers`
+(staff WhatsApp numbers alerted on a bot-to-human handoff, see above).
 
 ## Data model additions (migration `20261020090000_commerce_holds_memory_webchat`)
 

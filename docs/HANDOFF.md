@@ -5,6 +5,14 @@ note says where the build is and what to do next.
 
 ## What exists (all green: 59 package tests, 83 API tests, 16 Postgres integration tests)
 
+### Changelog
+
+- 2026-10-23: bot-to-human handoff is visible to staff. `conversation.handed_over` goes through
+  the outbox; `HandoffNotifier` WhatsApps the numbers in the new tenant setting
+  `handoffNumbers` (text inside the 24h window, `ordr_handoff_alert` template outside it);
+  the dashboard counts waiting threads next to "Inbox" and raises a browser notification on a
+  new one. See RUNBOOK › "Handoff alerts".
+
 ### Deployed
 
 Production runs on one VPS (200.141.6.31) at https://app.ordr.ae, deployed by the `VPS`

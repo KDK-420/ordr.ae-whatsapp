@@ -58,6 +58,7 @@ import { AuthService } from "./auth/auth.service";
 import { hashPassword } from "./auth/password";
 import type { AppConfig } from "./config";
 import { ConversationService } from "./conversation/conversation.service";
+import { HandoffNotifier } from "./conversation/handoff-notifier";
 import { InboundMediaService } from "./conversation/inbound-media.service";
 import { InboundQueue } from "./conversation/inbound-queue";
 import { OutboxRelay } from "./events/outbox-relay";
@@ -243,6 +244,7 @@ export class AppModule {
       InboundMediaService,
       OrderNotifier,
       BookingReminderNotifier,
+      HandoffNotifier,
       {
         provide: TOKENS.TemplateApi,
         useFactory: () =>
