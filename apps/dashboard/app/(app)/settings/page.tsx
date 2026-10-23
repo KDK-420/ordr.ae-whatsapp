@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PushToggle } from "@/components/push-toggle";
 
 export const metadata = { title: "Settings" };
 
@@ -14,6 +15,9 @@ export default function SettingsPage() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Settings</h1>
+      <div className="mb-4 max-w-2xl">
+        <PushToggle />
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         {SECTIONS.map((s) => (
           <Link key={s.href} href={s.href} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">

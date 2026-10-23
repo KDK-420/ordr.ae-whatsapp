@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
+import { isMuted, playChime, setMuted, unlockChime } from "@/lib/chime";
 import { age } from "@/lib/format";
 import { waFormat } from "@/lib/wa-format";
 
@@ -40,12 +41,29 @@ export function Inbox() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [muted, setMutedState] = useState(false);
   /** Threads already seen as "human", so only a new handoff notifies; null until the first list has loaded. */
   const seenHuman = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") setNotifications(Notification.permission);
+    setMutedState(isMuted());
+    // The chime may only sound after the person has interacted with the page; any click or key unlocks it.
+    const unlock = () => unlockChime();
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
+    unlockChime();
+  }
 
   const refreshList = useCallback(async () => {
     try {
@@ -53,7 +71,11 @@ export function Inbox() {
       setConversations(data.conversations);
       setError(null);
       const human = data.conversations.filter((c) => c.status === "human");
-      if (seenHuman.current) for (const c of human) if (!seenHuman.current.has(c.id)) notifyHandoff(c);
+      if (seenHuman.current) {
+        const fresh = human.filter((c) => !seenHuman.current!.has(c.id));
+        if (fresh.length > 0) playChime();
+        for (const c of fresh) notifyHandoff(c);
+      }
       seenHuman.current = new Set(human.map((c) => c.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load conversations");
@@ -93,6 +115,9 @@ export function Inbox() {
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h1 className="font-semibold">Inbox</h1>
           <span className="flex items-center gap-2 text-xs text-slate-500">
+            <button type="button" onClick={toggleMute} className="rounded-md border border-slate-300 px-2 py-0.5 hover:border-slate-400" title={muted ? "Sound is off for handoffs; click to turn it on" : "A chime plays when the bot hands a chat over; click to mute"} aria-pressed={muted}>
+              {muted ? "Sound off" : "Sound on"}
+            </button>
             {notifications === "default" ? (
               <button type="button" onClick={() => void Notification.requestPermission().then(setNotifications)} className="rounded-md border border-slate-300 px-2 py-0.5 hover:border-slate-400" title="Get a desktop notification when the bot hands a chat over">
                 Notify me

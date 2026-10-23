@@ -36,6 +36,13 @@ const EnvSchema = z.object({
   TRANSCRIPTION_API_KEY: z.string().min(1).optional(),
   /** Model for the openai provider; gpt-4o-mini-transcribe is fast and handles Arabic and English. */
   TRANSCRIPTION_MODEL: z.string().default("gpt-4o-mini-transcribe"),
+  /**
+   * Web Push (VAPID) for dashboard phones: `pnpm --filter @ordr/api push:keys` prints a fresh pair.
+   * Push is off until both keys are set. The subject is a mailto: or https: URL push services may contact.
+   */
+  WEB_PUSH_PUBLIC_KEY: z.string().min(1).optional(),
+  WEB_PUSH_PRIVATE_KEY: z.string().min(1).optional(),
+  WEB_PUSH_SUBJECT: z.string().regex(/^(mailto:|https:)/, "mailto: or https: URL").default("mailto:hello@ordr.ae"),
   /** Where the dashboard (web chat, mock checkout page) is reachable by customers. */
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:3001"),
   /** "mock" ships a hosted-looking checkout page that signs its own webhook; real providers plug in behind the same port. */
