@@ -65,7 +65,8 @@ describe("commerce: carts, stock, checkout and payment webhooks", () => {
     // The public checkout page data never includes customer details.
     const page = await http().get(`/v1/pay/${intent.id}`).expect(200);
     expect(page.body).toMatchObject({ status: "pending", amount: "AED 500.00", simulated: true, order: { number: order.number, items: [{ title: "Ethiopia Yirgacheffe", variantTitle: "1 kg", quantity: 2 }, { title: "Colombia Huila" }] } });
-    expect(JSON.stringify(page.body)).not.toContain("c1");
+    // The customer id would appear as a quoted JSON string; a bare "c1" can occur inside the random intent id.
+    expect(JSON.stringify(page.body)).not.toContain('"c1"');
 
     // A webhook with a bad signature is rejected and changes nothing.
     const { body } = provider.sign({ eventId: "evt_1", intentId: intent.id, status: "paid", amountMinor: 50000 });
