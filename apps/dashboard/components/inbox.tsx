@@ -66,8 +66,9 @@ export function Inbox() {
   }, [selected, refreshThread]);
 
   return (
-    <div className="grid h-[calc(100vh-7.5rem)] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white md:grid-cols-[20rem_1fr]">
-      <aside className="flex flex-col border-r border-slate-200">
+    // Rows are capped at the container height (minmax(0,1fr)); otherwise an auto row grows with the thread and the header scrolls out of reach.
+    <div className="grid h-[calc(100vh-7.5rem)] grid-cols-1 grid-rows-[minmax(0,2fr)_minmax(0,3fr)] overflow-hidden rounded-lg border border-slate-200 bg-white md:grid-cols-[20rem_1fr] md:grid-rows-[minmax(0,1fr)]">
+      <aside className="flex min-h-0 flex-col border-b border-slate-200 md:border-b-0 md:border-r">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h1 className="font-semibold">Inbox</h1>
           <span className="text-xs text-slate-500">{error ? <span className="text-red-600">{error}</span> : `${conversations.length} chats`}</span>
@@ -123,11 +124,13 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const lastId = messages.at(-1)?.id;
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    // Scroll the message list itself, not every ancestor: scrollIntoView would also drag the page and hide the header.
+    const el = list.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [lastId]);
 
   async function send(e: FormEvent) {
@@ -175,7 +178,7 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
   const badge = STATUS_BADGE[conversation.status];
   return (
     <>
-      <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate font-medium">{name(conversation)}</span>
@@ -212,7 +215,7 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 px-4 py-4">
+      <div ref={list} className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-slate-50 px-4 py-4">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
             <div
@@ -233,7 +236,6 @@ function Thread({ conversation, messages, onChange }: { conversation: Conversati
             </div>
           </div>
         ))}
-        <div ref={bottom} />
       </div>
 
       <form onSubmit={send} className="border-t border-slate-200 p-3">
