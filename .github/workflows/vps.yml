@@ -47,7 +47,7 @@ on:
       seed:
         description: Reseed the demo tenant as this vertical (no = leave data alone; setup mode always seeds)
         type: choice
-        options: ["no", restaurant, salon, retail]
+        options: ["no", restaurant, salon, retail, resort]
         default: "no"
 
 concurrency:
