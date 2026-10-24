@@ -96,6 +96,21 @@ describe("natural conversation style", () => {
     expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
   });
 
+  it("'hi' or 'menu' while a person owns the thread brings the agent back for good, not for one message", async () => {
+    agent.next = { text: "A colleague will reply here shortly.", handoff: true };
+    await send(fixtures.textMessageWebhook("I need a human", base));
+    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("human");
+    agent.next = { text: "Hi again! What can I do for you?", handoff: false };
+    await send(fixtures.textMessageWebhook("Hi", base));
+    expect(bodyOf(last())).toBe("Hi again! What can I do for you?");
+    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
+    // The follow-up is answered by the agent too, not swallowed.
+    agent.next = { text: "We offer haircuts, colour, manicures and pedicures.", handoff: false };
+    await send(fixtures.textMessageWebhook("ok let's understand available services", base));
+    expect(bodyOf(last())).toBe("We offer haircuts, colour, manicures and pedicures.");
+    expect(agent.calls).toHaveLength(3);
+  });
+
   it("falls back to the guided menu when the model fails", async () => {
     agent.next = new Error("overloaded");
     await send(fixtures.textMessageWebhook("hi", base));

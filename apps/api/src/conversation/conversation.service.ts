@@ -146,6 +146,9 @@ export class ConversationService {
       this.logger.log(`conversation ${conversation.id}: no staff reply for ${handoffResumeMinutes(tenant.settings)} min, bot resumes`);
       await this.conversations.setConversationStatus(conversation.id, "bot");
       preface.push(text(t(COPY.handoffResumed, language)));
+    } else if (globalFlow && conversation.status === "human") {
+      // "menu" / "hi" while a person owns the thread: the customer wants the assistant back, in either style.
+      await this.conversations.setConversationStatus(conversation.id, "bot");
     }
     // The bot will answer: show "typing…" while the flow or the model works on it.
     this.markRead(ctx, event.messageId, true);
@@ -164,7 +167,6 @@ export class ConversationService {
         // older guided message still goes to its flow; everything else is a conversation.
         result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments });
       } else if (globalFlow) {
-        if (conversation.status === "human") await this.conversations.setConversationStatus(conversation.id, "bot");
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
         const carried = session?.context.cart ? { cart: session.context.cart } : {};
         result = await runner.start(globalFlow, { language, context: { ...baseContext, ...carried } }, actionCtx);
