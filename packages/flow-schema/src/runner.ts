@@ -1,6 +1,6 @@
-import { clip, LIMITS, type InboundContent, type OutboundMessage, buttons, list, locationRequest, text } from "@ordr/whatsapp";
+import { clip, LIMITS, type InboundContent, type OutboundMessage, buttons, image, list, locationRequest, text } from "@ordr/whatsapp";
 import { z } from "zod";
-import { type Blueprint, type DynamicRow, DynamicRowSchema, type FlowDefinition, type FlowNode, type Option, type QuestionNode } from "./schema";
+import { type Blueprint, type DynamicRow, DynamicRowSchema, type FlowDefinition, type FlowNode, ImageRowSchema, type Option, type QuestionNode } from "./schema";
 import { getPath, interpolate, interpolateDeep, resolveText } from "./text";
 
 export interface SessionState {
@@ -182,6 +182,18 @@ export class FlowRunner {
       switch (node.type) {
         case "message": {
           outbound.push(text(this.t(node.text, session)));
+          const next = this.advance(flow, node.next);
+          if (!next) return this.finish(session, outbound);
+          frame = next;
+          break;
+        }
+        case "images": {
+          const raw = getPath(session.context, node.from);
+          const parsed = z.array(ImageRowSchema).safeParse(raw ?? []);
+          if (!parsed.success) throw new FlowRunnerError(`from "${node.from}" in "${node.id}" does not hold ImageRow[]`);
+          const photos = parsed.data.slice(0, node.max);
+          if (photos.length === 0 && node.emptyText) outbound.push(text(this.t(node.emptyText, session)));
+          for (const p of photos) outbound.push(image({ link: p.link }, p.caption ? clip(p.caption, LIMITS.interactiveBody) : undefined));
           const next = this.advance(flow, node.next);
           if (!next) return this.finish(session, outbound);
           frame = next;

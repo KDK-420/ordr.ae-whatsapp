@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { type ActionContext, type ActionRegistry, type Blueprint, detectLanguage, FlowRunner, type RunResult, type SessionState } from "@ordr/flow-schema";
-import { type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, type OutboundMessage, text } from "@ordr/whatsapp";
+import { image, type InboundContent, type InboundEvent, type InboundMessage, type InboundStatus, type MessageSender, type OutboundMessage, text } from "@ordr/whatsapp";
 import type { Customer, DomainEvent } from "@ordr/domain";
 import { COPY, t } from "../actions/copy";
 import { type AgentAttachment, conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
-import type { BlueprintRegistry, ConversationRepository, DedupeStore, EventBus, SessionStore, TenantContext, TenantRepository } from "../ports";
+import type { BlueprintRegistry, ConversationRecord, ConversationRepository, DedupeStore, EventBus, SessionStore, TenantContext, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import { InboundMediaService } from "./inbound-media.service";
 import { textOf } from "./inbound-text";
@@ -27,6 +27,32 @@ export interface HandedOverPayload {
   preview: string;
   /** The reason the agent gave hand_over_to_human, when it gave one. */
   reason?: string;
+}
+
+/** A waiting customer is told once per this long that the team has their messages; the same cadence re-alerts staff. */
+const HANDOFF_ACK_EVERY_SECONDS = 10 * 60;
+/** Minutes a handed-over thread may wait with no reply from staff before the bot takes it back. Tenant setting `handoffResumeMinutes`; 0 disables. */
+export const DEFAULT_HANDOFF_RESUME_MINUTES = 60;
+
+/** The `handoffResumeMinutes` tenant setting, clean. */
+export function handoffResumeMinutes(settings: Record<string, unknown>): number {
+  const v = settings.handoffResumeMinutes;
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : DEFAULT_HANDOFF_RESUME_MINUTES;
+}
+
+/**
+ * What the bot does when a customer writes into a thread a person owns.
+ * - resume: nobody from staff has written for `resumeMinutes` (since the handoff, or since their last reply), so the bot answers again.
+ * - quiet: a staff member has replied since the handoff and is recent; the inbox shows the new message.
+ * - ack: the customer is still waiting for the first human reply; tell them (rate limited) and re-alert staff.
+ */
+export function whileHumanOwns(conversation: Pick<ConversationRecord, "handedOverAt" | "lastStaffReplyAt">, resumeMinutes: number, now: Date): "resume" | "quiet" | "ack" {
+  const handedOverAt = conversation.handedOverAt?.getTime();
+  const staffAt = conversation.lastStaffReplyAt?.getTime();
+  const lastHuman = Math.max(handedOverAt ?? 0, staffAt ?? 0);
+  if (lastHuman > 0 && resumeMinutes > 0 && now.getTime() - lastHuman > resumeMinutes * 60_000) return "resume";
+  if (staffAt && handedOverAt && staffAt >= handedOverAt) return "quiet";
+  return "ack";
 }
 
 const APOLOGY: Record<string, string> = {
@@ -86,31 +112,43 @@ export class ConversationService {
     const natural = conversationStyle(tenant, blueprint) === "natural" && this.assistant.conversational;
     // Media is fetched and transcribed before anything is stored, so the thread shows what arrived.
     const received = event.content.kind === "media" ? await this.media.receive(ctx, event.content, { attachImages: natural, language: customer.language ?? tenant.defaultLanguage }) : null;
-    await this.conversations.recordMessage({
-      tenantId: tenant.id,
-      conversationId: conversation.id,
-      direction: "in",
-      providerMessageId: event.messageId,
-      kind: event.content.kind,
-      payload: received?.payload ?? event.content,
-      createdAt: receivedAt,
-    });
-    await this.conversations.touchInbound(conversation.id, receivedAt);
+    // Independent writes and the session read run together: one round trip instead of three before the bot can think.
+    const [, , session] = await Promise.all([
+      this.conversations.recordMessage({
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        direction: "in",
+        providerMessageId: event.messageId,
+        kind: event.content.kind,
+        payload: received?.payload ?? event.content,
+        createdAt: receivedAt,
+      }),
+      this.conversations.touchInbound(conversation.id, receivedAt),
+      this.sessions.get(tenant.id, event.from),
+    ]);
 
     const runner = this.runnerFor(blueprint);
-    const session = await this.sessions.get(tenant.id, event.from);
     const globalFlow = runner.matchGlobalCommand(event.content);
-
-    if (!globalFlow && conversation.status === "human") {
-      // An agent owns this thread. The bot stays quiet until the customer asks for the menu: read receipt only, no typing.
-      this.markRead(ctx, event.messageId, false);
-      return;
-    }
-    // The bot will answer: show "typing…" while the flow or the model works on it.
-    this.markRead(ctx, event.messageId, true);
 
     const spoken = event.content.kind === "text" ? event.content.text : (received?.payload.transcript ?? received?.payload.caption);
     const language = session?.language ?? customer.language ?? (spoken ? detectLanguage(spoken, blueprint.languages, tenant.defaultLanguage) : tenant.defaultLanguage);
+
+    const preface: OutboundMessage[] = [];
+    if (!globalFlow && conversation.status === "human") {
+      // A person owns this thread. The customer must never feel dropped: a recent human reply means stay quiet (the
+      // inbox shows the message); still waiting means say so and nudge staff; waiting too long means the bot steps back in.
+      const decision = whileHumanOwns(conversation, handoffResumeMinutes(tenant.settings), receivedAt);
+      if (decision !== "resume") {
+        this.markRead(ctx, event.messageId, false);
+        if (decision === "ack") await this.acknowledgeWaiting(ctx, conversation, customer, language, previewOf(received?.payload ?? event.content));
+        return;
+      }
+      this.logger.log(`conversation ${conversation.id}: no staff reply for ${handoffResumeMinutes(tenant.settings)} min, bot resumes`);
+      await this.conversations.setConversationStatus(conversation.id, "bot");
+      preface.push(text(t(COPY.handoffResumed, language)));
+    }
+    // The bot will answer: show "typing…" while the flow or the model works on it.
+    this.markRead(ctx, event.messageId, true);
     const baseContext = {
       tenant: { id: tenant.id, name: tenant.name },
       customer: { id: customer.id, waId: customer.waId, name: customer.name ?? "" },
@@ -155,7 +193,7 @@ export class ConversationService {
       return;
     }
 
-    await this.deliver(ctx, conversation.id, event.from, result.outbound);
+    await this.deliver(ctx, conversation.id, event.from, [...preface, ...result.outbound]);
 
     const finalLanguage = result.session?.language ?? language;
     if (finalLanguage !== customer.language) await this.conversations.setCustomerLanguage(customer.id, finalLanguage);
@@ -177,6 +215,25 @@ export class ConversationService {
     else await this.sessions.delete(tenant.id, event.from);
   }
 
+  /**
+   * The customer wrote again while waiting for a person. At most once per HANDOFF_ACK_EVERY_SECONDS they are told
+   * the team has their message (and how to get the assistant back), and staff are alerted again through the outbox.
+   */
+  private async acknowledgeWaiting(ctx: TenantContext, conversation: ConversationRecord, customer: Customer, language: string, preview: string): Promise<void> {
+    if (!(await this.dedupe.claim(`handoff-ack:${conversation.id}`, HANDOFF_ACK_EVERY_SECONDS))) return;
+    await this.deliver(ctx, conversation.id, customer.waId, [text(t(COPY.handoffWaiting, language))]);
+    const waitedMin = conversation.handedOverAt ? Math.round((Date.now() - conversation.handedOverAt.getTime()) / 60_000) : undefined;
+    await this.publishHandedOver({
+      conversationId: conversation.id,
+      customerId: customer.id,
+      customerName: customer.name,
+      waId: customer.waId,
+      channelId: ctx.channel.id,
+      preview,
+      reason: waitedMin !== undefined ? `still waiting for a reply (${waitedMin} min)` : "still waiting for a reply",
+    }, ctx.tenant.id);
+  }
+
   /** One natural-style turn; falls back to the guided menu when the model is unavailable. */
   private async converse(
     runner: FlowRunner,
@@ -193,6 +250,7 @@ export class ConversationService {
     try {
       const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);
       const outbound: OutboundMessage[] = reply.text ? [text(reply.text)] : [];
+      for (const photo of reply.media ?? []) outbound.push(image({ link: photo.link }, photo.caption));
       if (reply.startFlow) {
         const started = await runner.start(reply.startFlow, { language, context: baseContext }, actionCtx);
         return { ...started, outbound: [...outbound, ...started.outbound], handoff: started.handoff || reply.handoff, handoffReason: reply.handoffReason };

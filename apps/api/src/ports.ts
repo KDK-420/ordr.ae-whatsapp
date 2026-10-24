@@ -1,4 +1,4 @@
-import type { Category, Channel, Customer, DomainEvent, Offering, Order, OrderItem, OrderKind, OrderSource, PaymentStatus, DeliveryLocation, Tenant } from "@ordr/domain";
+import type { Category, Channel, Customer, DomainEvent, Offering, OfferingType, Order, OrderItem, OrderKind, OrderSource, PaymentStatus, DeliveryLocation, Property, StayRange, Tenant } from "@ordr/domain";
 import type { LocalizedText, Resource, WeeklyHours } from "@ordr/domain";
 import type { PaymentStatus as OrderPaymentStatus } from "@ordr/domain";
 import type { Blueprint, SessionState } from "@ordr/flow-schema";
@@ -101,6 +101,10 @@ export interface ConversationRecord {
   customerId: string;
   channelId: string;
   status: ConversationStatus;
+  /** When the thread was last handed to a person (set whenever status becomes human). */
+  handedOverAt?: Date;
+  /** When a staff member last replied from the inbox. */
+  lastStaffReplyAt?: Date;
 }
 
 export interface MessageRecord {
@@ -130,15 +134,22 @@ export interface ConversationRepository {
   upsertCustomer(tenantId: string, waId: string, name?: string): Promise<Customer>;
   findCustomerById(customerId: string): Promise<Customer | null>;
   findCustomersByIds(customerIds: string[]): Promise<Customer[]>;
-  findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null>;
+  findCustomerByWaId(tenantId: string, waId: string): Promise<Customer | null>;
+  findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date; updatedAt: Date }) | null>;
   /** Most recently active first. */
   listConversations(tenantId: string, opts?: { status?: ConversationStatus; limit?: number }): Promise<ConversationSummary[]>;
   /** The last `limit` messages of a conversation, oldest first. */
   listMessages(conversationId: string, opts?: { limit?: number }): Promise<StoredMessage[]>;
+  findMessageById(conversationId: string, messageId: string): Promise<StoredMessage | null>;
+  /** When each of these WhatsApp ids last wrote to the tenant (any thread); absent when they never did. */
+  lastInboundAtByWaId(tenantId: string, waIds: string[]): Promise<Map<string, Date>>;
   setCustomerLanguage(customerId: string, language: string): Promise<void>;
   getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord>;
+  /** Changes the status; moving to "human" also stamps handedOverAt. */
   setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void>;
   touchInbound(conversationId: string, at: Date): Promise<void>;
+  /** A person replied from the inbox at `at`. */
+  markStaffReply(conversationId: string, at: Date): Promise<void>;
   recordMessage(message: MessageRecord): Promise<void>;
   updateMessageStatus(providerMessageId: string, status: string): Promise<void>;
 }
@@ -191,7 +202,7 @@ export interface VariantInput {
 
 export interface OfferingInput {
   categoryId?: string | null;
-  type?: "product" | "service";
+  type?: OfferingType;
   name: LocalizedText;
   description?: LocalizedText | null;
   priceMinor: number;
@@ -200,6 +211,10 @@ export interface OfferingInput {
   imageUrl?: string | null;
   /** Units on hand for a product without variants; null means not tracked. */
   stock?: number | null;
+  /** Stays: property, guests per unit and number of identical units. */
+  propertyId?: string | null;
+  maxGuests?: number | null;
+  units?: number | null;
   sortOrder?: number;
   isActive?: boolean;
   /** When present, replaces every modifier group of the offering. */
@@ -354,6 +369,8 @@ export interface BookingHoldRepository {
   setStatus(id: string, status: HoldStatus): Promise<BookingHoldRecord | null>;
   /** Live holds (held, not expired) touching [from, to) on a resource, optionally ignoring one hold. */
   activeOverlapping(tenantId: string, resourceId: string, from: Date, to: Date, now: Date, exceptId?: string): Promise<BookingHoldRecord[]>;
+  /** Live holds touching [from, to) on any resource of the tenant, for availability over a window in one query. */
+  activeInRange(tenantId: string, from: Date, to: Date, now: Date): Promise<BookingHoldRecord[]>;
   /** Marks held holds past their deadline as expired; resolves to the count. */
   expire(now: Date): Promise<number>;
 }
@@ -454,6 +471,10 @@ export interface CreateOrderInput {
   scheduledAt?: Date;
   resourceId?: string;
   durationMinutes?: number;
+  /** Stays: check-out instant, guests and the property. */
+  checkOutAt?: Date;
+  guests?: number;
+  propertyId?: string;
 }
 
 export type CreateBookingInput = CreateOrderInput & { scheduledAt: Date; resourceId: string; durationMinutes: number; /** The customer's own hold for this slot, ignored by the overlap check. */ holdId?: string };
@@ -495,8 +516,8 @@ export interface OrderRepository {
   latestForCustomer(tenantId: string, customerId: string): Promise<Order | null>;
   updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order>;
   listByStatus(tenantId: string, statuses: string[], limit?: number): Promise<Order[]>;
-  /** Newest first, optionally restricted to statuses and to orders updated after `since`. */
-  listRecent(tenantId: string, opts?: { statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
+  /** Newest first, optionally restricted to one customer, to statuses and to orders updated after `since`. */
+  listRecent(tenantId: string, opts?: { customerId?: string; statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
   /**
    * Like create, but serialized per resource: throws SlotTakenError when another order in one of
    * `blockingStatuses` overlaps the requested time on the same resource.
@@ -508,6 +529,70 @@ export interface OrderRepository {
   updatePayment(tenantId: string, orderId: string, paymentStatus: OrderPaymentStatus, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order>;
   /** Orders scheduled in [from, to), soonest first. */
   listBookings(tenantId: string, opts: { from: Date; to: Date; resourceId?: string; statuses?: string[] }): Promise<Order[]>;
+}
+
+export interface PropertyInput {
+  name: LocalizedText;
+  description?: LocalizedText | null;
+  address?: string | null;
+  mapsUrl?: string | null;
+  phone?: string | null;
+  checkInTime?: string;
+  checkOutTime?: string;
+  amenities?: string[];
+  imageUrls?: string[];
+  sortOrder?: number;
+  isActive?: boolean;
+}
+
+/** Resorts, hotels and venues a tenant runs; room types point at one of them. */
+export interface PropertyRepository {
+  list(tenantId: string, opts?: { includeInactive?: boolean }): Promise<Property[]>;
+  get(tenantId: string, propertyId: string): Promise<Property | null>;
+  create(tenantId: string, input: PropertyInput): Promise<Property>;
+  update(tenantId: string, propertyId: string, patch: Partial<PropertyInput>): Promise<Property | null>;
+}
+
+/** What occupies a room type in a window: stays in blocking statuses and other customers' live holds. */
+export interface StayOccupancy {
+  stays: Array<StayRange & { orderId: string }>;
+  holds: Array<StayRange & { id: string; customerId: string }>;
+}
+
+export type CreateStayInput = CreateOrderInput & {
+  scheduledAt: Date;
+  checkOutAt: Date;
+  propertyId: string;
+  guests: number;
+  /** The customer's own hold for this stay, ignored by the occupancy check and confirmed with the order. */
+  holdId?: string;
+};
+
+/**
+ * Night-based inventory for room types (Offering.type = "stay"). Holds reuse the BookingHold
+ * table with the room type id in `resourceId`. Both writes run under the room type's row lock
+ * and recheck occupancy so a room type is never oversold.
+ */
+export interface StayRepository {
+  occupancy(tenantId: string, offeringId: string, from: Date, to: Date, blockingStatuses: string[], now: Date): Promise<StayOccupancy>;
+  /** Holds one unit for [startAt, endAt). Throws SlotTakenError when some night has no free unit. */
+  createHold(input: CreateHoldInput, blockingStatuses: string[], units: number, nightStarts: Date[], now: Date): Promise<BookingHoldRecord>;
+  /** Books one unit. Throws SlotTakenError when some night has no free unit (the customer's own hold does not count). */
+  createStay(input: CreateStayInput, blockingStatuses: string[], units: number, nightStarts: Date[], now: Date, outbox?: OutboxFactory): Promise<Order>;
+}
+
+export interface MediaAssetRecord {
+  id: string;
+  tenantId: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+/** Images merchants upload (catalog photos), served publicly by id so WhatsApp can fetch them. */
+export interface MediaRepository {
+  save(input: { tenantId: string; mimeType: string; data: Buffer }): Promise<MediaAssetRecord>;
+  get(id: string): Promise<(MediaAssetRecord & { data: Buffer }) | null>;
 }
 
 export type EventHandler = (event: DomainEvent) => Promise<void> | void;

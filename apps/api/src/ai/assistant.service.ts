@@ -94,9 +94,8 @@ export class AssistantService {
     }
   }
 
-  private async recentOrders(tenantId: string, customerId: string) {
-    const rows = await this.orders.listRecent(tenantId, { limit: 100 });
-    return rows.filter((o) => o.customerId === customerId).slice(0, 5);
+  private recentOrders(tenantId: string, customerId: string) {
+    return this.orders.listRecent(tenantId, { customerId, limit: 5 });
   }
 
   /** Which flow free text asks for, or a direct reply. Null means "not sure": show the menu as before. */

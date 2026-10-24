@@ -88,6 +88,7 @@ export class InboxService {
     };
     await this.conversations.recordMessage(record);
     if (conversation.status !== "human") await this.conversations.setConversationStatus(conversationId, "human");
+    await this.conversations.markStaffReply(conversationId, record.createdAt);
     this.logger.log(`${actor} replied to ${customer.waId} in conversation ${conversationId}`);
     return toMessageView(record);
   }
@@ -97,11 +98,10 @@ export class InboxService {
    * token. Nothing is stored on our side; Meta keeps media for about 30 days.
    */
   async media(tenantId: string, conversationId: string, messageId: string): Promise<DownloadedMedia> {
-    const messages = await this.conversations.listMessages(conversationId, { limit: 1000 });
-    const message = messages.find((m) => m.id === messageId && m.direction === "in");
-    const payload = message?.payload as { kind?: unknown; mediaId?: unknown; mimeType?: unknown } | undefined;
-    if (!payload || payload.kind !== "media" || typeof payload.mediaId !== "string") throw new InboxError("not_found", "no media on that message");
     const conversation = await this.summary(tenantId, conversationId);
+    const message = await this.conversations.findMessageById(conversationId, messageId);
+    const payload = message?.direction === "in" ? (message.payload as { kind?: unknown; mediaId?: unknown; mimeType?: unknown }) : undefined;
+    if (!payload || payload.kind !== "media" || typeof payload.mediaId !== "string") throw new InboxError("not_found", "no media on that message");
     const ctx = (await this.tenants.findContextByChannelId(conversation.channelId)) ?? (await this.tenants.findContextById(tenantId));
     if (!ctx) throw new InboxError("no_channel", "tenant has no active WhatsApp channel");
     if (!this.sender.downloadMedia) throw new InboxError("media_unavailable", "media download is not available with this sender");
@@ -120,11 +120,12 @@ export class InboxService {
     return this.present(await this.summary(tenantId, conversationId));
   }
 
+  /** One conversation by id, scoped to the tenant: two point lookups instead of listing the whole inbox. */
   private async summary(tenantId: string, conversationId: string): Promise<ConversationSummary> {
-    const rows = await this.conversations.listConversations(tenantId, { limit: 1000 });
-    const found = rows.find((r) => r.id === conversationId);
-    if (!found) throw new InboxError("not_found", "conversation not found");
-    return found;
+    const found = await this.conversations.findConversationById(conversationId);
+    if (!found || found.tenantId !== tenantId) throw new InboxError("not_found", "conversation not found");
+    const customer = await this.conversations.findCustomerById(found.customerId);
+    return { ...found, customer };
   }
 
   private windowOpen(lastInboundAt: Date | undefined, now = Date.now()): boolean {

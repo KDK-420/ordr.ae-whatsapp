@@ -1,0 +1,17 @@
+{
+  "id": "photos",
+  "description": "Sends photos of what we offer (catalog with pictures).",
+  "entry": "load",
+  "nodes": [
+    { "id": "load", "type": "action", "action": "catalog.photos", "saveAs": "photos", "next": "send" },
+    {
+      "id": "send",
+      "type": "images",
+      "from": "photos",
+      "max": 6,
+      "emptyText": { "en": "We have no photos to share yet.", "ar": "لا توجد صور لمشاركتها حتى الآن." },
+      "next": "done"
+    },
+    { "id": "done", "type": "end", "text": { "en": "Send \"menu\" when you are ready.", "ar": "أرسل \"القائمة\" عندما تكون مستعداً." } }
+  ]
+}

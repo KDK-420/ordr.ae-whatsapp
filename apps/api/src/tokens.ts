@@ -30,4 +30,7 @@ export const TOKENS = {
   PaymentProvider: Symbol("PaymentProvider"),
   PushSubscriptionRepository: Symbol("PushSubscriptionRepository"),
   WebPushSender: Symbol("WebPushSender"),
+  PropertyRepository: Symbol("PropertyRepository"),
+  StayRepository: Symbol("StayRepository"),
+  MediaRepository: Symbol("MediaRepository"),
 } as const;

@@ -6,11 +6,14 @@ import {
   createCategory,
   createOffering,
   getCatalog,
+  listProperties,
   type LocalizedText,
   type ModifierGroup,
   type Offering,
+  type Property,
   updateCategory,
   updateOffering,
+  uploadImage,
 } from "@/lib/api";
 import { money } from "@/lib/format";
 
@@ -28,6 +31,7 @@ type Editing = { kind: "category"; item: Category | null } | { kind: "offering";
 export function Catalog() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
@@ -35,9 +39,10 @@ export function Catalog() {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await getCatalog();
+      const [data, props] = await Promise.all([getCatalog(), listProperties().catch(() => ({ properties: [] as Property[] }))]);
       setCategories(data.categories);
       setOfferings(data.offerings);
+      setProperties(props.properties);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the catalog");
@@ -107,32 +112,48 @@ export function Catalog() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="w-12 px-2 py-2" aria-label="Photo" />
                 <th className="px-4 py-2">Item</th>
                 <th className="px-4 py-2">Arabic</th>
                 <th className="px-4 py-2 text-right">Price</th>
-                <th className="px-4 py-2">Modifiers</th>
+                <th className="px-4 py-2">{properties.length ? "Resort · sleeps · units" : "Modifiers"}</th>
                 <th className="px-4 py-2">Active</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loaded && visible.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                     No items here yet
                   </td>
                 </tr>
               ) : null}
               {visible.map((o) => (
                 <tr key={o.id} className={`cursor-pointer hover:bg-slate-50 ${o.isActive ? "" : "text-slate-400"}`} onClick={() => setEditing({ kind: "offering", item: o })}>
+                  <td className="px-2 py-2">
+                    {o.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={o.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" loading="lazy" />
+                    ) : (
+                      <span className="block h-9 w-9 rounded-md bg-slate-100" title="No photo yet" />
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-medium">{o.name.en || label(o.name)}</td>
                   <td className="px-4 py-3" dir="rtl">
                     {o.name.ar ?? ""}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {money(o.priceMinor, o.currency)}
+                    {o.type === "stay" ? <span className="ml-1 text-xs text-slate-400">/ night</span> : null}
                     {o.durationMinutes ? <span className="ml-1 text-xs text-slate-400">· {o.durationMinutes} min</span> : null}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{o.modifierGroups.length ? o.modifierGroups.map((g) => label(g.name)).join(", ") : "–"}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {o.type === "stay"
+                      ? `${label(properties.find((p) => p.id === o.propertyId)?.name) || "No resort"} · ${o.maxGuests ?? 2} · ${o.units ?? 1}`
+                      : o.modifierGroups.length
+                        ? o.modifierGroups.map((g) => label(g.name)).join(", ")
+                        : "–"}
+                  </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={o.isActive} onChange={() => void toggleOffering(o)} aria-label="Active" />
                   </td>
@@ -157,6 +178,7 @@ export function Catalog() {
         <OfferingDrawer
           item={editing.item}
           categories={categories}
+          properties={properties}
           defaultCategoryId={filter !== "all" && filter !== "none" ? filter : null}
           onClose={() => setEditing(null)}
           onSaved={async () => {
@@ -220,6 +242,68 @@ function TextFields({ value, onChange, placeholder }: { value: LocalizedText; on
 
 const inputCls = "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand";
 
+/** Reads a picked file as a data: URL for the upload endpoint. */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error ?? new Error("could not read the file"));
+    r.readAsDataURL(file);
+  });
+}
+
+/** A photo: paste a public link or upload a JPEG/PNG (5 MB max); shows a preview. Used for catalog items and resorts. */
+export function ImageField({ value, onChange, label: title = "Photo", hint }: { value: string; onChange: (url: string) => void; label?: string; hint?: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    if (!["image/jpeg", "image/png"].includes(file.type)) return setError("JPEG or PNG only (WhatsApp does not accept other formats).");
+    if (file.size > 5 * 1024 * 1024) return setError("Keep photos under 5 MB.");
+    setUploading(true);
+    try {
+      const { url } = await uploadImage(await readAsDataUrl(file));
+      onChange(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="text-sm">
+      <span className="block font-medium">{title}</span>
+      <div className="mt-1 flex items-start gap-3">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt="" className="h-20 w-20 shrink-0 rounded-md border border-slate-200 object-cover" />
+        ) : (
+          <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md border border-dashed border-slate-300 text-xs text-slate-400">No photo</span>
+        )}
+        <div className="min-w-0 flex-1 space-y-2">
+          <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://… or upload a file" inputMode="url" className={inputCls} />
+          <div className="flex items-center gap-3 text-xs">
+            <label className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 font-medium hover:border-slate-400">
+              {uploading ? "Uploading…" : "Upload JPEG/PNG"}
+              <input type="file" accept="image/jpeg,image/png" className="hidden" disabled={uploading} onChange={(e) => void pick(e.target.files?.[0])} />
+            </label>
+            {value ? (
+              <button type="button" onClick={() => onChange("")} className="text-slate-500 hover:text-red-600">
+                Remove
+              </button>
+            ) : null}
+          </div>
+          {hint ? <p className="text-xs text-slate-500">{hint}</p> : null}
+          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CategoryDrawer({ item, onClose, onSaved }: { item: Category | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const [name, setName] = useState<LocalizedText>(item?.name ?? {});
   const [sortOrder, setSortOrder] = useState(String(item?.sortOrder ?? 0));
@@ -269,16 +353,20 @@ function CategoryDrawer({ item, onClose, onSaved }: { item: Category | null; onC
   );
 }
 
-function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved }: { item: Offering | null; categories: Category[]; defaultCategoryId: string | null; onClose: () => void; onSaved: () => Promise<void> }) {
+function OfferingDrawer({ item, categories, properties, defaultCategoryId, onClose, onSaved }: { item: Offering | null; categories: Category[]; properties: Property[]; defaultCategoryId: string | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const [name, setName] = useState<LocalizedText>(item?.name ?? {});
   const [description, setDescription] = useState<LocalizedText>(item?.description ?? {});
   const [price, setPrice] = useState(item ? fromMinor(item.priceMinor) : "");
-  const [type, setType] = useState<Offering["type"]>(item?.type ?? "product");
+  const [type, setType] = useState<Offering["type"]>(item?.type ?? (properties.length ? "stay" : "product"));
+  const [propertyId, setPropertyId] = useState(item?.propertyId ?? properties[0]?.id ?? "");
+  const [maxGuests, setMaxGuests] = useState(String(item?.maxGuests ?? 2));
+  const [units, setUnits] = useState(String(item?.units ?? 1));
   const [duration, setDuration] = useState(item?.durationMinutes ? String(item.durationMinutes) : "");
   const [categoryId, setCategoryId] = useState<string>(item?.categoryId ?? defaultCategoryId ?? "");
   const [sortOrder, setSortOrder] = useState(String(item?.sortOrder ?? 0));
   const [isActive, setIsActive] = useState(item?.isActive ?? true);
   const [groups, setGroups] = useState<ModifierGroup[]>(item?.modifierGroups.map((g) => ({ ...g, options: g.options.map((o) => ({ ...o })) })) ?? []);
+  const [imageUrl, setImageUrl] = useState(item?.imageUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,6 +389,10 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
         type,
         durationMinutes: type === "service" ? Number(duration) || null : null,
         categoryId: categoryId || null,
+        imageUrl: imageUrl.trim() || null,
+        propertyId: type === "stay" ? propertyId || null : null,
+        maxGuests: type === "stay" ? Math.max(1, Number(maxGuests) || 1) : null,
+        units: type === "stay" ? Math.max(1, Number(units) || 1) : null,
         sortOrder: Number(sortOrder) || 0,
         isActive,
         modifierGroups: groups.map((g, gi) => ({
@@ -341,6 +433,7 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
             <select value={type} onChange={(e) => setType(e.target.value as Offering["type"])} className={`${inputCls} mt-1`}>
               <option value="product">Product</option>
               <option value="service">Service</option>
+              <option value="stay">Room type (per night)</option>
             </select>
           </label>
           {type === "service" ? (
@@ -350,9 +443,32 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
             </label>
           ) : null}
           <label className="block text-sm font-medium">
-            Price (AED)
+            {type === "stay" ? "Price per night (AED)" : "Price (AED)"}
             <input type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} className={`${inputCls} mt-1`} />
           </label>
+          {type === "stay" ? (
+            <>
+              <label className="block text-sm font-medium">
+                Resort
+                <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} required className={`${inputCls} mt-1`}>
+                  <option value="">Pick a resort</option>
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {label(p.name)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-medium">
+                Sleeps (guests)
+                <input type="number" min={1} max={50} required value={maxGuests} onChange={(e) => setMaxGuests(e.target.value)} className={`${inputCls} mt-1`} />
+              </label>
+              <label className="block text-sm font-medium">
+                Units (rooms of this type)
+                <input type="number" min={1} max={10000} required value={units} onChange={(e) => setUnits(e.target.value)} className={`${inputCls} mt-1`} />
+              </label>
+            </>
+          ) : null}
           <label className="block text-sm font-medium">
             Category
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} mt-1`}>
@@ -372,6 +488,8 @@ function OfferingDrawer({ item, categories, defaultCategoryId, onClose, onSaved 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Shown to customers
         </label>
+
+        <ImageField value={imageUrl} onChange={setImageUrl} hint="Sent to customers when they ask to see the item or the catalog, with the name and price as caption." />
 
         <fieldset className="space-y-3">
           <div className="flex items-center justify-between">

@@ -39,7 +39,7 @@ export default async function VerticalPage({ params }: Params) {
             </Link>
           </div>
         </div>
-        <ChatDemo lines={v.conversation} title={v.slug === "salons" ? "Glow Salon" : v.slug === "restaurants" ? "Bella Pasta" : v.slug === "clinics" ? "Smile Clinic" : "Marina Padel"} />
+        <ChatDemo lines={v.conversation} title={v.slug === "salons" ? "Glow Salon" : v.slug === "restaurants" ? "Bella Pasta" : v.slug === "clinics" ? "Smile Clinic" : v.slug === "resorts" ? "Al Noor Resorts" : "Marina Padel"} />
       </section>
 
       <section className="bg-slate-50">

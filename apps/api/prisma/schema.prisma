@@ -105,6 +105,10 @@ model Conversation {
   /// bot: automated replies; human: an agent owns the thread; closed: archived
   status        String    @default("bot")
   lastInboundAt DateTime?
+  /// When the thread was last handed to a person (set whenever status becomes human)
+  handedOverAt     DateTime?
+  /// When a staff member last replied from the inbox
+  lastStaffReplyAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -174,28 +178,75 @@ model Offering {
   id              String   @id @default(cuid())
   tenantId        String
   categoryId      String?
-  /// product or service
+  /// product, service, or stay (a room type at a property, priced per night)
   type            String   @default("product")
   name            Json
   description     Json?
-  /// Minor units (fils)
+  /// Minor units (fils); per night for stays
   priceMinor      Int
   currency        String   @default("AED")
   durationMinutes Int?
   imageUrl        String?
   /// Units on hand for products without variants; null means not tracked (always available)
   stock           Int?
+  /// Stays: the property (resort) this room type belongs to
+  propertyId      String?
+  /// Stays: most guests one unit sleeps
+  maxGuests       Int?
+  /// Stays: how many identical units exist (rooms, villas, tents); null means one
+  units           Int?
   sortOrder       Int      @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   category       Category?        @relation(fields: [categoryId], references: [id])
+  property       Property?        @relation(fields: [propertyId], references: [id])
   modifierGroups ModifierGroup[]
   variants       ProductVariant[]
   orderItems     OrderItem[]
 
   @@index([tenantId, categoryId, sortOrder])
+  @@index([tenantId, propertyId])
+}
+
+/// A resort, hotel or venue a tenant runs. Several properties share one WhatsApp number; room types (Offering.type = "stay") belong to one property.
+model Property {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         Json
+  description  Json?
+  /// Street address as customers should read it
+  address      String?
+  mapsUrl      String?
+  phone        String?
+  /// Local wall clock, HH:MM
+  checkInTime  String   @default("15:00")
+  checkOutTime String   @default("12:00")
+  /// Short amenity names, e.g. ["Private beach", "Pool", "Spa"]
+  amenities    Json     @default("[]")
+  /// Photos sent to customers, public https URLs
+  imageUrls    Json     @default("[]")
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roomTypes Offering[]
+
+  @@index([tenantId, sortOrder])
+}
+
+/// Images merchants upload for catalog items and properties, served publicly at /v1/media/:id so WhatsApp can fetch them.
+model MediaAsset {
+  id        String   @id @default(cuid())
+  tenantId  String
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 model ModifierGroup {
@@ -260,7 +311,7 @@ model Order {
   tenantId         String
   /// Per-tenant sequence shown to customers and kitchen
   number           Int
-  /// order, booking or appointment
+  /// order, booking, appointment or stay
   kind             String    @default("order")
   status           String
   fulfillmentType  String
@@ -276,10 +327,14 @@ model Order {
   paymentMethod    String?
   deliveryLocation Json?
   notes            String?
-  /// Bookings: start of the appointment, the resource it occupies and how long it takes
+  /// Bookings: start of the appointment, the resource it occupies and how long it takes. Stays: check-in instant.
   scheduledAt      DateTime?
   resourceId       String?
   durationMinutes  Int?
+  /// Stays: check-out instant, guests and the property
+  checkOutAt       DateTime?
+  guests           Int?
+  propertyId       String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -292,6 +347,7 @@ model Order {
   @@index([tenantId, customerId, createdAt])
   @@index([tenantId, scheduledAt])
   @@index([resourceId, scheduledAt])
+  @@index([tenantId, propertyId, scheduledAt])
 }
 
 /// A purchasable variant of a product (size, weight, colour) with its own stock and optional price.

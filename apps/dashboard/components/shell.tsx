@@ -12,6 +12,7 @@ const HUMAN_COUNT_POLL_MS = 15000;
 const NAV: Array<{ href: string; label: string; module?: string; admin?: boolean }> = [
   { href: "/orders", label: "Orders" },
   { href: "/calendar", label: "Calendar", module: "calendar" },
+  { href: "/properties", label: "Resorts", module: "properties" },
   { href: "/inbox", label: "Inbox" },
   { href: "/catalog", label: "Catalog" },
   { href: "/settings", label: "Settings" },

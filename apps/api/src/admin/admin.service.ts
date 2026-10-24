@@ -3,7 +3,7 @@ import type { Channel, Tenant } from "@ordr/domain";
 import { demoDataFor } from "../actions/demo";
 import { hashPassword } from "../auth/password";
 import { temporaryPassword } from "../merchant/users.controller";
-import type { BlueprintRegistry, CatalogRepository, ChannelInput, NumberPoolRepository, PooledNumber, ResourceRepository, TenantRepository, UserRecord, UserRepository } from "../ports";
+import type { BlueprintRegistry, CatalogRepository, ChannelInput, NumberPoolRepository, PooledNumber, PropertyRepository, ResourceRepository, TenantRepository, UserRecord, UserRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
 export interface TenantOverview {
@@ -51,6 +51,7 @@ export class AdminService {
     @Inject(TOKENS.UserRepository) private readonly users: UserRepository,
     @Inject(TOKENS.CatalogRepository) private readonly catalog: CatalogRepository,
     @Inject(TOKENS.ResourceRepository) private readonly resources: ResourceRepository,
+    @Inject(TOKENS.PropertyRepository) private readonly properties: PropertyRepository,
     @Inject(TOKENS.NumberPoolRepository) private readonly numbers: NumberPoolRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
   ) {}
@@ -139,6 +140,11 @@ export class AdminService {
   /** The same demo data the seed loads, with fresh ids so several tenants can have it. */
   private async seedDemo(tenant: Tenant): Promise<void> {
     const demo = demoDataFor(tenant.blueprintId, tenant.id);
+    const propertyIds = new Map<string, string>();
+    for (const p of demo.properties) {
+      const created = await this.properties.create(tenant.id, { name: p.name, description: p.description ?? null, address: p.address ?? null, mapsUrl: p.mapsUrl ?? null, phone: p.phone ?? null, checkInTime: p.checkInTime, checkOutTime: p.checkOutTime, amenities: p.amenities, imageUrls: p.imageUrls, sortOrder: p.sortOrder, isActive: p.isActive });
+      propertyIds.set(p.id, created.id);
+    }
     const categoryIds = new Map<string, string>();
     for (const c of demo.categories) {
       const created = await this.catalog.createCategory(tenant.id, { name: c.name, sortOrder: c.sortOrder, isActive: c.isActive });
@@ -154,7 +160,11 @@ export class AdminService {
         priceMinor: o.priceMinor,
         currency: o.currency,
         durationMinutes: o.durationMinutes ?? null,
+        imageUrl: o.imageUrl ?? null,
         stock: o.stock ?? null,
+        propertyId: o.propertyId ? (propertyIds.get(o.propertyId) ?? null) : null,
+        maxGuests: o.maxGuests ?? null,
+        units: o.units ?? null,
         variants: (o.variants ?? []).map((v) => ({ name: v.name, sku: v.sku, priceMinor: v.priceMinor, stock: v.stock, sortOrder: v.sortOrder, isActive: v.isActive })),
         sortOrder: o.sortOrder,
         isActive: o.isActive,

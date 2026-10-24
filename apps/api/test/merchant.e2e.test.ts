@@ -215,3 +215,39 @@ describe("merchant API", () => {
     expect(JSON.stringify(sent[0])).toContain("confirmed");
   });
 });
+
+describe("catalog photos", () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await createHarness();
+  });
+  afterEach(async () => {
+    await h.app.close();
+  });
+
+  it("uploads a JPEG, serves it publicly, and the catalog item can point at it", async () => {
+    const server = h.app.getHttpServer();
+    const token = (await request(server).post("/merchant/auth/login").send({ email: EMAIL, password: PASSWORD }).expect(200)).body.token as string;
+    const auth = { authorization: `Bearer ${token}` };
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9]);
+    const up = await request(server).post("/merchant/media").set(auth).send({ dataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}` }).expect(201);
+    expect(up.body).toMatchObject({ mimeType: "image/jpeg", sizeBytes: jpeg.byteLength });
+    expect(up.body.url).toMatch(/^http:\/\/localhost:3001\/v1\/media\/media_/);
+    const served = await request(server).get(`/v1/media/${up.body.id}`).buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => cb(null, Buffer.concat(chunks)));
+    }).expect(200);
+    expect(served.headers["content-type"]).toContain("image/jpeg");
+    expect(served.headers["cache-control"]).toContain("immutable");
+    expect((served.body as Buffer).equals(jpeg)).toBe(true);
+    await request(server).post("/merchant/media").set(auth).send({ dataUrl: "data:text/plain;base64,aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=" }).expect(400);
+    await request(server).post("/merchant/media").send({ dataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}` }).expect(401);
+    await request(server).get("/v1/media/nope").expect(404);
+
+    const catalog = await request(server).get("/merchant/catalog").set(auth).expect(200);
+    const item = catalog.body.offerings[0];
+    const updated = await request(server).patch(`/merchant/catalog/offerings/${item.id}`).set(auth).send({ imageUrl: up.body.url }).expect(200);
+    expect(updated.body.imageUrl).toBe(up.body.url);
+  });
+});

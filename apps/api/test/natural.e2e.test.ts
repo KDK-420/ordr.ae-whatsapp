@@ -76,15 +76,24 @@ describe("natural conversation style", () => {
     expect((await conversations.listMessages(agent.calls[2]!.conversationId)).at(-1)?.direction).toBe("out");
   });
 
-  it("hands the thread to a person when the agent asks, then stays quiet until the merchant hands it back", async () => {
+  it("hands the thread to a person when the agent asks, then acknowledges the customer instead of calling the model", async () => {
     agent.next = { text: "A colleague will reply here shortly.", handoff: true };
     await send(fixtures.textMessageWebhook("I want to talk to someone", base));
     expect(bodyOf(last())).toBe("A colleague will reply here shortly.");
     const [conv] = await conversations.listConversations("tenant_seed");
     expect(conv?.status).toBe("human");
     await send(fixtures.textMessageWebhook("hello?", base));
-    expect(sender.to(base.from)).toHaveLength(1);
+    expect(sender.to(base.from)).toHaveLength(2);
+    expect(bodyOf(last())).toContain("your message has reached our team");
     expect(agent.calls).toHaveLength(1);
+    // Waiting too long: the agent is back, with an apology first.
+    const record = [...conversations.conversations.values()][0]!;
+    record.handedOverAt = new Date(Date.now() - 2 * 60 * 60_000);
+    agent.next = { text: "Back with you. What can I do?", handoff: false };
+    await send(fixtures.textMessageWebhook("anyone?", base));
+    expect(sender.to(base.from).slice(-2).map(bodyOf)).toEqual([expect.stringContaining("Sorry for the wait"), "Back with you. What can I do?"]);
+    expect(agent.calls).toHaveLength(2);
+    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
   });
 
   it("falls back to the guided menu when the model fails", async () => {

@@ -43,6 +43,10 @@ async function main() {
   }
   const blueprintId = env.SEED_BLUEPRINT_ID ?? "restaurant";
   const demo = demoDataFor(blueprintId, tenant.id);
+  for (const p of demo.properties) {
+    const data = { name: p.name, description: p.description ?? Prisma.JsonNull, address: p.address ?? null, mapsUrl: p.mapsUrl ?? null, phone: p.phone ?? null, checkInTime: p.checkInTime, checkOutTime: p.checkOutTime, amenities: p.amenities, imageUrls: p.imageUrls, sortOrder: p.sortOrder, isActive: p.isActive };
+    await prisma.property.upsert({ where: { id: p.id }, update: data, create: { id: p.id, tenantId: tenant.id, ...data } });
+  }
   for (const c of demo.categories) {
     await prisma.category.upsert({
       where: { id: c.id },
@@ -60,6 +64,10 @@ async function main() {
         priceMinor: o.priceMinor,
         durationMinutes: o.durationMinutes ?? null,
         stock: o.stock ?? null,
+        imageUrl: o.imageUrl ?? null,
+        propertyId: o.propertyId ?? null,
+        maxGuests: o.maxGuests ?? null,
+        units: o.units ?? null,
         sortOrder: o.sortOrder,
         isActive: o.isActive,
         categoryId: o.categoryId,
@@ -75,6 +83,10 @@ async function main() {
         currency: o.currency,
         durationMinutes: o.durationMinutes ?? null,
         stock: o.stock ?? null,
+        imageUrl: o.imageUrl ?? null,
+        propertyId: o.propertyId ?? null,
+        maxGuests: o.maxGuests ?? null,
+        units: o.units ?? null,
         sortOrder: o.sortOrder,
         isActive: o.isActive,
       },
@@ -110,7 +122,7 @@ async function main() {
     });
   }
   console.log(
-    `Seeded tenant "${tenant.name}" (${tenant.id}, ${blueprintId}) with channel ${phoneNumberId}, ${demo.categories.length} categories, ${demo.offerings.length} offerings and ${demo.resources.length} resources`,
+    `Seeded tenant "${tenant.name}" (${tenant.id}, ${blueprintId}) with channel ${phoneNumberId}, ${demo.categories.length} categories, ${demo.offerings.length} offerings, ${demo.resources.length} resources and ${demo.properties.length} properties`,
   );
 }
 

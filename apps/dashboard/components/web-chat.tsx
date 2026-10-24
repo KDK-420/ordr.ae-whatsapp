@@ -120,7 +120,7 @@ export function WebChat({ slug }: { slug: string }) {
         <div className="mx-auto flex max-w-2xl flex-col gap-2">
           {session && messages.length === 0 ? (
             <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-              Hi! Ask about {session.tenant.blueprintId === "retail" ? "products, prices and delivery, or order right here" : "services, prices and free times, or book right here"}.
+              Hi! Ask about {session.tenant.blueprintId === "retail" ? "products, prices and delivery, or order right here" : session.tenant.blueprintId === "resort" ? "our resorts, rooms and dates, or book your stay right here" : "services, prices and free times, or book right here"}.
             </p>
           ) : null}
           {messages.map((m) => (
@@ -161,6 +161,10 @@ function Bubble({ message }: { message: WebMessage }) {
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm shadow-sm ${mine ? "rounded-br-sm bg-brand text-white" : "rounded-bl-sm bg-white text-slate-900"}`}>
+        {message.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={message.imageUrl} alt={message.text || "Photo"} className="-mx-2 mb-1 mt-0.5 max-h-72 rounded-xl object-cover" loading="lazy" />
+        ) : null}
         {parts.map((p, i) =>
           p.kind === "link" ? (
             <a key={`${message.id}-${i}`} href={p.href} target="_blank" rel="noreferrer" className={`mt-1 inline-block rounded-md px-3 py-1.5 font-semibold ${mine ? "bg-white/20" : "bg-brand text-white"}`}>

@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, listOrders, type OrderView, type StateMachine, transitionOrder } from "@/lib/api";
-import { age, DESTRUCTIVE_EVENTS, EVENT_LABEL, FULFILLMENT_LABEL, label, money, STATUS_LABEL } from "@/lib/format";
+import { age, dayOf, DESTRUCTIVE_EVENTS, EVENT_LABEL, FULFILLMENT_LABEL, label, money, STATUS_LABEL } from "@/lib/format";
+
+/** "Thu 24 Dec → Sun 27 Dec · 3 nights · 2 guests · Palm Lagoon" for a stay, in the tenant's zone. */
+function stayLine(order: OrderView, tz = "Asia/Dubai"): string | null {
+  if (order.kind !== "stay" || !order.scheduledAt || !order.checkOutAt) return null;
+  const nights = Math.max(1, Math.round((Date.parse(order.checkOutAt) - Date.parse(order.scheduledAt)) / 86_400_000));
+  return [`${dayOf(order.scheduledAt, tz)} → ${dayOf(order.checkOutAt, tz)}`, `${nights} night${nights === 1 ? "" : "s"}`, order.guests ? `${order.guests} guest${order.guests === 1 ? "" : "s"}` : null, order.propertyName ?? null].filter(Boolean).join(" · ");
+}
 
 const POLL_MS = 8000;
 
@@ -166,6 +173,7 @@ function OrderCard({ order, busy, onAction, onOpen }: { order: OrderView; busy: 
       </div>
       <div className="mt-1 text-sm">{order.customer?.name || order.customer?.waId || "Customer"}</div>
       <div className="mt-1 line-clamp-2 text-xs text-slate-600">{summary}</div>
+      {stayLine(order) ? <div className="mt-1 text-xs font-medium text-slate-700">{stayLine(order)}</div> : null}
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{label(FULFILLMENT_LABEL, order.fulfillmentType)}</span>
         <span className="font-medium">{money(order.totalMinor, order.currency)}</span>
@@ -216,6 +224,13 @@ function OrderDetail({ order, states, busy, onAction, onClose }: { order: OrderV
           </p>
         </section>
 
+        {stayLine(order) ? (
+          <section className="mt-6">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stay</h3>
+            <p className="mt-1 text-sm">{stayLine(order)}</p>
+          </section>
+        ) : null}
+
         <section className="mt-6">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</h3>
           <ul className="mt-2 divide-y divide-slate-100 text-sm">
@@ -243,7 +258,7 @@ function OrderDetail({ order, states, busy, onAction, onClose }: { order: OrderV
 
         {loc || order.notes ? (
           <section className="mt-6">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Delivery</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{order.kind === "stay" ? "Guest notes" : "Delivery"}</h3>
             {loc ? (
               <p className="mt-1 text-sm">
                 {loc.address || loc.name || `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`}

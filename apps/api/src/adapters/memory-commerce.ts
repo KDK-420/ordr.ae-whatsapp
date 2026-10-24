@@ -147,6 +147,10 @@ export class InMemoryBookingHoldRepository implements BookingHoldRepository {
       .map((h) => structuredClone(h));
   }
 
+  async activeInRange(tenantId: string, from: Date, to: Date, now: Date): Promise<BookingHoldRecord[]> {
+    return this.holds.filter((h) => h.tenantId === tenantId && h.status === "held" && new Date(h.expiresAt) > now && overlaps(from, to, new Date(h.startAt), new Date(h.endAt))).map((h) => structuredClone(h));
+  }
+
   async expire(now: Date): Promise<number> {
     let n = 0;
     for (const h of this.holds) {

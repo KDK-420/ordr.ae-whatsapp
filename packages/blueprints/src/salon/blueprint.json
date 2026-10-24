@@ -26,6 +26,7 @@
   "fallbackFlow": "main_menu",
   "globalCommands": [
     { "keywords": ["menu", "hi", "hello", "start", "book", "القائمة", "مرحبا", "السلام عليكم", "حجز"], "flow": "main_menu" },
+    { "keywords": ["photos", "pictures", "catalog", "catalogue", "صور", "الكتالوج"], "flow": "photos" },
     { "keywords": ["bookings", "my bookings", "appointments", "حجوزاتي", "مواعيدي"], "flow": "my_bookings" },
     { "keywords": ["agent", "help", "موظف", "مساعدة"], "flow": "talk_to_us" },
     { "keywords": ["language", "lang", "اللغة", "لغة"], "flow": "language" },

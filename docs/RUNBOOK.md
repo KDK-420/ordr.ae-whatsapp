@@ -27,6 +27,7 @@ in `apps/api`, start the API (`tsx src/main.ts`) and the worker (`tsx src/worker
 | Check | Command |
 | --- | --- |
 | Package tests | `pnpm -r --filter './packages/*' test` |
+| Postgres locally without Docker | `pg_ctlcluster 16 main start`, `createdb ordr_test`, then `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ordr_test?schema=public pnpm --filter @ordr/api exec prisma migrate deploy` |
 | API unit + e2e (in memory) | `pnpm --filter @ordr/api test` |
 | Postgres integration (row locks, holds, stock, isolation) | `DATABASE_URL=... pnpm --filter @ordr/api test:integration` |
 | Typecheck everything | `pnpm typecheck` |
@@ -88,6 +89,38 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
   button mutes it, remembered per browser in localStorage; browsers only play it after the first
   click or key on the page) and, once "Notify me" has been allowed there, a browser notification.
   Web chat and demo customers' own ids are never alerted; staff numbers are always real.
+- **While a customer waits for a person.** `ConversationService` decides per message in a
+  `human` thread (`whileHumanOwns`): a staff reply since the handoff and inside
+  `handoffResumeMinutes` means the bot stays silent (the inbox shows the message); no reply yet
+  means the customer gets `COPY.handoffWaiting` ("your message has reached our team… send
+  *menu*…") at most once per 10 minutes (`DedupeStore` key `handoff-ack:<conversation>`) and
+  `conversation.handed_over` is published again with reason "still waiting for a reply (n min)",
+  so WhatsApp and push alerts repeat; more than `handoffResumeMinutes` (tenant setting, default
+  60, 0 disables) since the last human action means the bot sends `COPY.handoffResumed` and
+  answers the message itself, setting the thread back to `bot`. `Conversation.handedOverAt` is
+  stamped when a thread becomes `human` (bot handoff or "Take over"), `lastStaffReplyAt` on
+  every inbox reply. Owners change the minutes under Settings › Conversation.
+- **Catalog photos.** `POST /merchant/media` takes `{ dataUrl }` (base64 JPEG or PNG, 5 MB; the
+  API's JSON body limit is 8 MB for this) and stores the bytes in `MediaAsset`; `GET
+  /v1/media/:id` serves them with a one-year immutable cache header, so `PUBLIC_BASE_URL/v1/media/<id>`
+  is a link Meta can fetch. `Offering.imageUrl` and `Property.imageUrls` hold such links (or any
+  public https image). The agent gets `send_photos` whenever a catalog repository is wired
+  (always, in the module); photos go out as image messages right after the reply text, caption
+  `*Name* · price` plus one line of description. Guided flows send them through the `images` node
+  (`from` a context path holding `{ link, caption? }[]`, filled by `catalog.photos`).
+- **Resorts.** A resort tenant (`blueprintId: "resort"`) runs any number of properties from one
+  number. `StayService.search` returns every room type that sleeps the party with free units over
+  the whole range and the total (nightly × nights, VAT inclusive by default); `hold` reserves one
+  unit for `HOLD_MINUTES`; `confirmHold` creates the stay through `OrderService.placeThrough`
+  (publishes `order.placed`, queues the day-before reminder). Check-in/check-out instants come
+  from the property's `checkInTime`/`checkOutTime` in the tenant zone; a check-out at 12:00 and a
+  check-in at 15:00 on the same day do not collide. `maxNights` (30) and `maxAdvanceDays` (365)
+  come from the blueprint and can be overridden in `tenant.settings`. Payment is at the property
+  (`paymentMethods: ["at_property"]`); the agent hands over for payment questions. Merchant API:
+  `GET/POST/PATCH /merchant/properties` (owner-only writes); room types are catalog offerings
+  with `type: "stay"`, `propertyId`, `maxGuests`, `units`. Try it: `SEED_BLUEPRINT_ID=resort`
+  then web chat `/chat/seed` with `ANTHROPIC_API_KEY` set; without the key the guided fallback
+  hands over and `photos` still works.
 - **Push notifications (phones).** `HandoffPushNotifier` also handles `conversation.handed_over`:
   it sends a Web Push ("<customer> needs a person", the preview, opens `/inbox`) to every device
   the tenant's users registered, and deletes subscriptions the push service answers 404/410 for.
@@ -168,7 +201,17 @@ Still mocked or missing:
 
 Per tenant, in `tenant.settings`: `memoryEnabled` (default true; false disables memory tools
 and recall), `conversationStyle` (`natural` or `guided`), `facts`, `profile`, `handoffNumbers`
-(staff WhatsApp numbers alerted on a bot-to-human handoff, see above).
+(staff WhatsApp numbers alerted on a bot-to-human handoff, see above), `handoffResumeMinutes`
+(how long a handed-over chat waits for a person before the bot answers again; default 60, 0 never),
+and for resorts `maxNights`, `maxAdvanceDays`.
+
+## Data model additions (migration `20261024090000_handoff_media_properties_stays`)
+
+`Conversation.handedOverAt`, `Conversation.lastStaffReplyAt`; `Offering.propertyId`, `.maxGuests`,
+`.units` (room types, `type = "stay"`); `Order.checkOutAt`, `.guests`, `.propertyId` (kind `stay`);
+`Property` (resorts: address, map link, phone, check-in/out times, amenities, photos);
+`MediaAsset` (uploaded catalog photos, served at `/v1/media/:id`). Stay holds live in `BookingHold`
+with the room type id as `resourceId`.
 
 ## Data model additions (migration `20261020090000_commerce_holds_memory_webchat`)
 

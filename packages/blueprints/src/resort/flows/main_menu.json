@@ -1,0 +1,15 @@
+{
+  "id": "main_menu",
+  "description": "Guided fallback when the assistant is unavailable: a short note and a person takes over.",
+  "entry": "handoff",
+  "nodes": [
+    {
+      "id": "handoff",
+      "type": "handoff",
+      "text": {
+        "en": "Thanks for writing to us! Our booking assistant is briefly unavailable, so a member of our reservations team will reply here shortly. Send \"photos\" to see our rooms meanwhile.",
+        "ar": "شكراً لتواصلك معنا! مساعد الحجز غير متاح حالياً، سيرد عليك أحد أعضاء فريق الحجوزات هنا قريباً. أرسل \"صور\" لرؤية غرفنا في هذه الأثناء."
+      }
+    }
+  ]
+}

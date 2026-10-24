@@ -5,8 +5,9 @@ import blueprint from "./blueprint.json";
 import bookService from "./flows/book_service.json";
 import mainMenu from "./flows/main_menu.json";
 import myBookings from "./flows/my_bookings.json";
+import photos from "./flows/photos.json";
 
 export const salon = parseBlueprint({
   ...(blueprint as Omit<BlueprintInput, "flows">),
-  flows: [mainMenu, bookService, myBookings, talkToUs, language],
+  flows: [mainMenu, bookService, myBookings, photos, talkToUs, language],
 } as BlueprintInput);

@@ -23,6 +23,27 @@ export interface Vertical {
 
 export const VERTICALS: Vertical[] = [
   {
+    slug: "resorts",
+    name: "Resorts and hotels",
+    short: "Room bookings for one or many properties",
+    status: "live",
+    headline: "Every resort you run, booked from one WhatsApp number.",
+    sub: "Guests ask for dates and a room the way they would at the front desk. The AI checks real inventory per night across all your properties, sends photos, holds the room while they decide and confirms the reservation.",
+    handles: ["Which resort, which dates, how many guests, in one short exchange", "Live availability per night and totals for the stay, across all properties", "Photos of rooms and resorts on request", "Holds while guests decide, then a confirmed reservation with check-in details", "Cancellations, 'when is my stay?', reminders the day before arrival"],
+    conversation: [
+      { from: "customer", text: "something by the beach for 2, 24 to 27 Dec" },
+      { from: "bot", text: "Palm Lagoon has a Deluxe Sea View at AED 950/night, AED 2,850 for 3 nights, or a Family Room for AED 4,200. Want to see photos?", delay: 1500 },
+      { from: "customer", text: "sea view please", delay: 1300 },
+      { from: "bot", text: "Holding a Deluxe Sea View, 24–27 Dec, 2 guests, AED 2,850 incl. VAT. What name for the booking?", delay: 1400 },
+      { from: "customer", text: "Noor Ahmed", delay: 1100 },
+      { from: "bot", text: "Reserved, booking #1021. Check-in from 15:00 on Thu 24 Dec. See you at Palm Lagoon!", delay: 1300 },
+    ],
+    faq: [
+      { q: "Can one number serve several resorts?", a: "Yes. One account holds any number of properties, each with its own rooms, inventory, check-in times and photos. The AI asks which resort only when it is not obvious." },
+      { q: "How is overbooking prevented?", a: "Every room type has a number of units. Availability is checked per night, a room is held while the guest decides, and the final write is done under a lock, so two guests cannot take the last unit." },
+    ],
+  },
+  {
     slug: "salons",
     name: "Salons and spas",
     short: "Bookings, reminders, no-shows handled",

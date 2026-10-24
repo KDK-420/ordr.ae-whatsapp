@@ -111,16 +111,7 @@ export class HandoffNotifier implements OnModuleInit {
   }
 
   /** When each staff number last wrote to this tenant, from their own threads; absent when they never did. */
-  private async lastInboundFrom(ctx: TenantContext, numbers: string[]): Promise<Map<string, Date>> {
-    const out = new Map<string, Date>();
-    const wanted = new Set(numbers);
-    const threads = await this.conversations.listConversations(ctx.tenant.id, { limit: 500 });
-    for (const c of threads) {
-      const waId = c.customer?.waId;
-      if (!waId || !wanted.has(waId) || !c.lastInboundAt) continue;
-      const seen = out.get(waId);
-      if (!seen || c.lastInboundAt > seen) out.set(waId, c.lastInboundAt);
-    }
-    return out;
+  private lastInboundFrom(ctx: TenantContext, numbers: string[]): Promise<Map<string, Date>> {
+    return this.conversations.lastInboundAtByWaId(ctx.tenant.id, numbers);
   }
 }

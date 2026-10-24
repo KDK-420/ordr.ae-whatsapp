@@ -36,7 +36,7 @@ const txt = (text: string): InboundContent => ({ kind: "text", text });
 
 describe("salon blueprint", () => {
   it("parses with the booking state machine and flows", () => {
-    expect(salon.flows.map((f) => f.id).sort()).toEqual(["book_service", "language", "main_menu", "my_bookings", "talk_to_us"]);
+    expect(salon.flows.map((f) => f.id).sort()).toEqual(["book_service", "language", "main_menu", "my_bookings", "photos", "talk_to_us"]);
     expect(salon.orderStates.initial).toBe("requested");
     expect(salon.globalCommands.find((g) => g.flow === "my_bookings")?.keywords).toContain("bookings");
   });

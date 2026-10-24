@@ -51,7 +51,7 @@ export class BookingReminderNotifier implements OnModuleInit {
   async onReminder(event: DomainEvent, now = new Date()): Promise<void> {
     const payload = event.payload as Partial<BookingReminderPayload>;
     const order = await this.orders.findById(event.tenantId, event.subject.id);
-    if (!order || order.kind !== "booking" || !order.scheduledAt) return;
+    if (!order || (order.kind !== "booking" && order.kind !== "stay") || !order.scheduledAt) return;
     if (!REMIND_WHEN.has(order.status)) {
       this.logger.log(`booking #${order.number} is ${order.status}; reminder skipped`);
       return;
@@ -81,7 +81,7 @@ export class BookingReminderNotifier implements OnModuleInit {
     let message;
     let kind: string;
     if (inWindow) {
-      message = text([t(COPY.bookingReminder, language, { tenant: ctx.tenant.name, when }), ...locationLines(businessProfile(ctx.tenant.settings))].join("\n"));
+      message = text([t(order.kind === "stay" ? COPY.stayReminder : COPY.bookingReminder, language, { tenant: ctx.tenant.name, when }), ...locationLines(businessProfile(ctx.tenant.settings))].join("\n"));
       kind = "text";
     } else {
       const tpl = await this.templates.approved(order.tenantId, BOOKING_REMINDER_PURPOSE, language, [ctx.tenant.defaultLanguage, "en"]);

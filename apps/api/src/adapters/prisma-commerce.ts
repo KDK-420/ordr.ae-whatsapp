@@ -191,6 +191,11 @@ export class PrismaBookingHoldRepository implements BookingHoldRepository {
     return rows.map(toHold);
   }
 
+  async activeInRange(tenantId: string, from: Date, to: Date, now: Date): Promise<BookingHoldRecord[]> {
+    const rows = await this.prisma.bookingHold.findMany({ where: { tenantId, status: "held", expiresAt: { gt: now }, startAt: { lt: to }, endAt: { gt: from } } });
+    return rows.map(toHold);
+  }
+
   async expire(now: Date): Promise<number> {
     const res = await this.prisma.bookingHold.updateMany({ where: { status: "held", expiresAt: { lte: now } }, data: { status: "expired" } });
     return res.count;

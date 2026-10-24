@@ -1,0 +1,44 @@
+{
+  "id": "resort",
+  "version": 1,
+  "name": "Resort & hotel stays",
+  "description": "Night-based room bookings for one or several resorts run from a single WhatsApp number, with holds, per-night inventory and photos.",
+  "defaultLanguage": "en",
+  "languages": ["en", "ar"],
+  "offeringType": "stay",
+  "fulfillmentTypes": ["stay"],
+  "orderStates": {
+    "initial": "requested",
+    "states": ["requested", "confirmed", "checked_in", "checked_out", "cancelled", "rejected", "no_show"],
+    "transitions": [
+      { "from": "requested", "to": "confirmed", "on": "confirm" },
+      { "from": "requested", "to": "rejected", "on": "reject" },
+      { "from": "requested", "to": "cancelled", "on": "cancel" },
+      { "from": "confirmed", "to": "checked_in", "on": "check_in" },
+      { "from": "confirmed", "to": "cancelled", "on": "cancel" },
+      { "from": "confirmed", "to": "no_show", "on": "no_show" },
+      { "from": "checked_in", "to": "checked_out", "on": "check_out" }
+    ],
+    "terminal": ["checked_out", "cancelled", "rejected", "no_show"]
+  },
+  "entryFlow": "main_menu",
+  "fallbackFlow": "main_menu",
+  "globalCommands": [
+    { "keywords": ["menu", "hi", "hello", "start", "book", "القائمة", "مرحبا", "السلام عليكم", "حجز"], "flow": "main_menu" },
+    { "keywords": ["photos", "pictures", "catalog", "catalogue", "rooms", "صور", "الكتالوج", "الغرف"], "flow": "photos" },
+    { "keywords": ["agent", "help", "موظف", "مساعدة"], "flow": "talk_to_us" },
+    { "keywords": ["language", "lang", "اللغة", "لغة"], "flow": "language" }
+  ],
+  "dashboardModules": ["orders", "properties", "catalog", "customers", "inbox"],
+  "settings": {
+    "currency": "AED",
+    "vatRate": 0.05,
+    "vatInclusive": true,
+    "paymentMethods": ["at_property"],
+    "maxNights": 30,
+    "maxAdvanceDays": 365,
+    "reminderMinutes": [1440],
+    "conversationStyle": "natural",
+    "memoryEnabled": true
+  }
+}

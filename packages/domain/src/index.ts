@@ -7,3 +7,5 @@ export * from "./order";
 export * from "./state-machine";
 export * from "./events";
 export * from "./scheduling";
+export * from "./property";
+export * from "./stays";

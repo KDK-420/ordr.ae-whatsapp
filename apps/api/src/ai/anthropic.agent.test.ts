@@ -14,6 +14,8 @@ import { seedTenantFromConfig } from "../app.module";
 import { loadConfig } from "../config";
 import { OrderService } from "../orders/order.service";
 import { SchedulingService } from "../scheduling/scheduling.service";
+import { resort } from "@ordr/blueprints";
+import { setupStays } from "../stays/stay.service.test";
 import { AnthropicAgent } from "./anthropic.agent";
 import type { TenantKnowledge } from "./assistant";
 
@@ -211,6 +213,23 @@ describe("AnthropicAgent", () => {
     expect(api2.toolResults()[0]).toBe("Not possible: only 2 left of Cloud Runner EU 41.");
   });
 
+  it("sends catalog photos after the reply, with name and price as caption, and says which items have none", async () => {
+    const h = setupShop();
+    await h.catalog.updateOffering(h.tenantId, "prd_ethiopia", { imageUrl: "https://img.test/ethiopia.jpg" });
+    const api = fakeApi([{ tool: { name: "send_photos", input: { ids: ["prd_ethiopia", "prd_colombia", "nope"] } } }, { text: "Here is our Ethiopia." }]);
+    const agent = new AnthropicAgent({ ...h.deps, catalog: h.catalog }, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
+    const reply = await agent.reply({ ...h.input, text: "show me the coffee", history: [] });
+    expect((api.requests[0]!.tools as Array<{ name: string }>).map((t) => t.name)).toContain("send_photos");
+    expect(api.toolResults()[0]).toBe("Photos of Ethiopia Yirgacheffe will be sent right after your message; do not describe the pictures, just refer to them. No photo for: Colombia Huila, nope.");
+    expect(reply.text).toBe("Here is our Ethiopia.");
+    expect(reply.media).toEqual([{ link: "https://img.test/ethiopia.jpg", caption: "*Ethiopia Yirgacheffe* · AED 65.00\nWashed, floral and citrus. Roasted this week." }]);
+    // The search result marks items that have a picture.
+    const api2 = fakeApi([{ tool: { name: "search_products", input: { query: "ethiopia" } } }, { text: "ok" }]);
+    const agent2 = new AnthropicAgent({ ...h.deps, catalog: h.catalog }, { apiKey: "k", model: "claude-opus-5-5", fetch: api2.fetchImpl });
+    await agent2.reply({ ...h.input, text: "ethiopia?", history: [] });
+    expect(api2.toolResults()[0]).toContain("[photo]");
+  });
+
   it("stores memory only with consent, through the service, never sensitive details", async () => {
     const h = setup();
     // Without consent, remember is refused and nothing is stored.
@@ -259,6 +278,47 @@ describe("AnthropicAgent", () => {
     expect(api2.toolResults()[0]).toMatch(/#1 Manicure on Wed 21 Oct, 12:00 \(staff_id res_sara\), requested/);
     expect(api2.toolResults()[1]).toMatch(/^Cancelled booking #1/);
     expect(h.orders.orders[0]!.status).toBe("cancelled");
+  });
+
+  it("books a resort stay through the stay tools: resorts, availability, hold, confirm, with photos", async () => {
+    const h = setupStays();
+    const knowledge: TenantKnowledge = { tenantName: "Al Noor Resorts", blueprintId: "resort", timezone: "Asia/Dubai", services: [], staff: [], intents: [], facts: [] };
+    const input = { tenant: h.seed.tenant, blueprint: resort, customer: { id: "c1", tenantId: h.tenantId, waId: "971500000001", name: "Noor" }, conversationId: "conv1", language: "en", knowledge, channel: "whatsapp" as const, memories: [], consent: undefined, recentOrders: [] };
+    const deps = { stays: h.stays, catalog: h.catalog, properties: h.properties };
+    const api = fakeApi([
+      { tool: { name: "list_resorts", input: {} } },
+      { tool: { name: "search_stays", input: { check_in: "2026-12-24", check_out: "2026-12-27", guests: 2, resort_id: "prop_hatta" } } },
+      { tool: { name: "send_photos", input: { ids: ["stay_hatta_lodge", "prop_hatta"] } } },
+      { text: "Hatta has a Mountain Lodge at AED 850/night, AED 2,550 for 3 nights. Shall I hold it?" },
+    ]);
+    const agent = new AnthropicAgent(deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
+    const reply = await agent.reply({ ...input, text: "something in the mountains for 2, Dec 24 to 27", history: [] });
+    expect((api.requests[0]!.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["list_resorts", "list_room_types", "search_stays", "hold_stay", "confirm_stay", "release_hold", "my_stays", "cancel_stay", "send_photos", "hand_over_to_human"]);
+    expect(JSON.stringify(api.requests[0]!.system)).toContain("resort group");
+    const results = api.toolResults();
+    expect(results[0]).toContain("prop_hatta: Hatta Mountain Lodge - Hatta Dam Road, Hatta, Dubai; check-in 14:00, check-out 11:00");
+    expect(results[0]).toContain("prop_fujairah");
+    expect(results[1]).toMatch(/^2026-12-24 \(Thu 24 Dec\) to 2026-12-27 \(Sun 27 Dec\), 3 nights, 2 guests:\nstay_hatta_lodge: Mountain Lodge at Hatta Mountain Lodge - 10 free, AED 850\.00\/night, total AED 2,550\.00 for 3 nights \[photo\]/);
+    expect(results[2]).toContain("Photos of Mountain Lodge, Hatta Mountain Lodge will be sent");
+    expect(reply.media?.map((m) => m.link)).toEqual(["https://picsum.photos/seed/hatta-lodge/1200/800", "https://picsum.photos/seed/hatta-lodge-1/1200/800", "https://picsum.photos/seed/hatta-lodge-2/1200/800"]);
+
+    const api2 = fakeApi([{ tool: { name: "hold_stay", input: { room_type_id: "stay_hatta_lodge", check_in: "2026-12-24", check_out: "2026-12-27", guests: 2 } } }, { text: "Held. Mountain Lodge, 24-27 Dec, 2 guests, AED 2,550. Name for the booking?" }]);
+    const agent2 = new AnthropicAgent(deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api2.fetchImpl });
+    await agent2.reply({ ...input, text: "yes hold it", history: [] });
+    expect(api2.toolResults()[0]).toMatch(/^Held \(hold_id hold_\w+\) until 10:10: Mountain Lodge at Hatta Mountain Lodge, 2026-12-24 \(Thu 24 Dec\) to 2026-12-27 \(Sun 27 Dec\) \(3 nights, 2 guests\), total AED 2,550\.00 incl\. VAT\. Check-in from 14:00, check-out by 11:00\./);
+    const holdId = /hold_id (hold_\w+)/.exec(api2.toolResults()[0]!)![1]!;
+
+    const api3 = fakeApi([{ tool: { name: "confirm_stay", input: { hold_id: holdId, guests: 2, guest_name: "Noor A." } } }, { text: "Confirmed! Booking 1." }]);
+    const agent3 = new AnthropicAgent(deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api3.fetchImpl });
+    await agent3.reply({ ...input, text: "Noor A., yes", history: [] });
+    expect(api3.toolResults()[0]).toMatch(/^Reserved\. Booking number 1: Mountain Lodge at Hatta Mountain Lodge, 2026-12-24 \(Thu 24 Dec\) to 2026-12-27 \(Sun 27 Dec\), 2 guests, total AED 2,550\.00, payment at the property\. Status: requested and waiting for confirmation\. Check-in from 14:00\. Tell the customer where to come: Address: Hatta Dam Road, Hatta, Dubai https:\/\/maps\.google\.com\/\?q=Hatta\+Dam/);
+    expect(h.orders.orders[0]).toMatchObject({ kind: "stay", propertyId: "prop_hatta", guests: 2, notes: "Guest: Noor A.", scheduledAt: "2026-12-24T10:00:00.000Z", checkOutAt: "2026-12-27T07:00:00.000Z" });
+
+    const api4 = fakeApi([{ tool: { name: "my_stays", input: {} } }, { tool: { name: "cancel_stay", input: { stay_id: h.orders.orders[0]!.id } } }, { text: "Cancelled." }]);
+    const agent4 = new AnthropicAgent(deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api4.fetchImpl });
+    await agent4.reply({ ...input, text: "cancel my booking", history: [] });
+    expect(api4.toolResults()[0]).toMatch(/#1 Mountain Lodge · Hatta Mountain Lodge, 2026-12-24 \(Thu 24 Dec\) to 2026-12-27 \(Sun 27 Dec\), 2 guests, AED 2,550\.00/);
+    expect(api4.toolResults()[1]).toMatch(/^Cancelled booking #1/);
   });
 
   it("surfaces API failures so the caller can fall back to the menu", async () => {

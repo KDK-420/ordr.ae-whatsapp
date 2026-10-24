@@ -134,6 +134,9 @@ export class InMemoryCatalogRepository implements CatalogRepository {
       durationMinutes: input.durationMinutes ?? undefined,
       imageUrl: input.imageUrl ?? undefined,
       stock: input.stock ?? undefined,
+      propertyId: input.propertyId ?? undefined,
+      maxGuests: input.maxGuests ?? undefined,
+      units: input.units ?? undefined,
       sortOrder: input.sortOrder ?? this.offerings.length,
       isActive: input.isActive ?? true,
       modifierGroups: buildGroups(input.modifierGroups ?? []),
@@ -157,6 +160,9 @@ export class InMemoryCatalogRepository implements CatalogRepository {
     if (patch.sortOrder !== undefined) o.sortOrder = patch.sortOrder;
     if (patch.isActive !== undefined) o.isActive = patch.isActive;
     if (patch.stock !== undefined) o.stock = patch.stock ?? undefined;
+    if (patch.propertyId !== undefined) o.propertyId = patch.propertyId ?? undefined;
+    if (patch.maxGuests !== undefined) o.maxGuests = patch.maxGuests ?? undefined;
+    if (patch.units !== undefined) o.units = patch.units ?? undefined;
     if (patch.modifierGroups) o.modifierGroups = buildGroups(patch.modifierGroups);
     if (patch.variants) {
       const previous = new Map((o.variants ?? []).map((v) => [v.id, v]));
@@ -228,8 +234,8 @@ export class InMemoryOrderRepository implements OrderRepository {
     const number = (this.sequences.get(input.tenantId) ?? 0) + 1;
     this.sequences.set(input.tenantId, number);
     const now = new Date().toISOString();
-    const { initialStatus, scheduledAt, ...rest } = input;
-    const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, scheduledAt: scheduledAt?.toISOString(), createdAt: now, updatedAt: now };
+    const { initialStatus, scheduledAt, checkOutAt, ...rest } = input;
+    const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, scheduledAt: scheduledAt?.toISOString(), checkOutAt: checkOutAt?.toISOString(), createdAt: now, updatedAt: now };
     this.orders.push(order);
     this.history.push({ orderId: order.id, type: "order.placed" });
     if (outbox) this.outbox.push(outbox(structuredClone(order)));
@@ -323,10 +329,11 @@ export class InMemoryOrderRepository implements OrderRepository {
       .map((o) => structuredClone(o));
   }
 
-  async listRecent(tenantId: string, opts: { statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+  async listRecent(tenantId: string, opts: { customerId?: string; statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
     const limit = opts.limit ?? 100;
     return this.orders
       .filter((x) => x.tenantId === tenantId)
+      .filter((x) => !opts.customerId || x.customerId === opts.customerId)
       .filter((x) => !opts.statuses || opts.statuses.includes(x.status))
       .filter((x) => !opts.since || new Date(x.updatedAt) >= opts.since)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.number - a.number)

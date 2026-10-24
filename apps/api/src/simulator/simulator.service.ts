@@ -140,9 +140,8 @@ export class SimulatorService {
   private async demoCustomer(tenantId: string, waId: string): Promise<{ ctx: Awaited<ReturnType<SimulatorService["context"]>>; customer: Customer }> {
     if (!isDemoWaId(waId)) throw new InboxError("not_found", "not a demo customer");
     const ctx = await this.context(tenantId);
-    const existing = (await this.listCustomers(tenantId)).find((c) => c.waId === waId);
-    if (!existing) throw new InboxError("not_found", "demo customer not found");
-    const customer = await this.conversations.upsertCustomer(tenantId, waId);
+    const customer = await this.conversations.findCustomerByWaId(tenantId, waId);
+    if (!customer) throw new InboxError("not_found", "demo customer not found");
     return { ctx, customer };
   }
 

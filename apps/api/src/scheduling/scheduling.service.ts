@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   addDays,
+  type Busy,
   canServe,
   canTransition,
   generateSlots,
@@ -46,6 +47,12 @@ export interface Slot {
   resource: Resource;
 }
 
+/** What is already taken in a window, loaded once for every resource. */
+interface Occupied {
+  bookings: Order[];
+  holds: BookingHoldRecord[];
+}
+
 export class BookingError extends Error {
   constructor(
     public readonly code: "slot_taken" | "not_found" | "not_allowed" | "unavailable",
@@ -79,7 +86,7 @@ export class SchedulingService {
     const settings = await this.settings(input.tenantId);
     const offering = await this.service(input.tenantId, input.offeringId);
     const date = localDateKey(input.startAt, settings.tz);
-    const free = await this.slots(input.tenantId, input.offeringId, input.resourceId, date, { forCustomerId: input.customerId });
+    const free = await this.slotsOn(settings, offering, await this.candidates(input.tenantId, input.offeringId, input.resourceId), date, { forCustomerId: input.customerId });
     const match = free.find((s) => s.startAt.getTime() === input.startAt.getTime());
     if (!match) throw new BookingError("slot_taken", "that time is not available");
     const duration = offering.durationMinutes ?? settings.slotStepMinutes;
@@ -210,10 +217,13 @@ export class SchedulingService {
     const candidates = await this.candidates(tenantId, offeringId, resourceId);
     const now = this.now();
     const today = localDateKey(now, settings.tz);
+    // Everything that occupies the whole window is read once (two queries), not twice per day per person.
+    const lastDay = addDays(today, settings.maxAdvanceDays + 1);
+    const occupied = await this.occupied(settings, offering.tenantId, zonedToUtc(today, "00:00", settings.tz), zonedToUtc(lastDay, "00:00", settings.tz), now);
     const out: string[] = [];
     for (let d = 0; d <= settings.maxAdvanceDays && out.length < (opts.count ?? 7); d++) {
       const date = addDays(today, d);
-      const slots = await this.slotsFor(settings, offering, candidates, date, now, opts.forCustomerId);
+      const slots = this.slotsFor(settings, offering, candidates, date, now, occupied, opts.forCustomerId);
       if (slots.length > 0) out.push(date);
     }
     return out;
@@ -223,8 +233,14 @@ export class SchedulingService {
   async slots(tenantId: string, offeringId: string, resourceId: string, date: string, opts: { period?: Period; forCustomerId?: string } = {}): Promise<Slot[]> {
     const settings = await this.settings(tenantId);
     const offering = await this.service(tenantId, offeringId);
-    const candidates = await this.candidates(tenantId, offeringId, resourceId);
-    const all = await this.slotsFor(settings, offering, candidates, date, this.now(), opts.forCustomerId);
+    return this.slotsOn(settings, offering, await this.candidates(tenantId, offeringId, resourceId), date, opts);
+  }
+
+  /** `slots` with everything already looked up. */
+  private async slotsOn(settings: SchedulingSettings, offering: Offering, candidates: Resource[], date: string, opts: { period?: Period; forCustomerId?: string } = {}): Promise<Slot[]> {
+    const now = this.now();
+    const occupied = await this.occupied(settings, offering.tenantId, zonedToUtc(date, "00:00", settings.tz), new Date(zonedToUtc(addDays(date, 1), "00:00", settings.tz).getTime() + 6 * 60 * 60_000), now);
+    const all = this.slotsFor(settings, offering, candidates, date, now, occupied, opts.forCustomerId);
     if (!opts.period) return all;
     const [from, to] = PERIODS[opts.period];
     return all.filter((s) => {
@@ -247,7 +263,7 @@ export class SchedulingService {
     const settings = await this.settings(input.tenantId);
     const offering = await this.service(input.tenantId, input.offeringId);
     const date = localDateKey(input.startAt, settings.tz);
-    const free = await this.slots(input.tenantId, input.offeringId, input.resourceId, date);
+    const free = await this.slotsOn(settings, offering, await this.candidates(input.tenantId, input.offeringId, input.resourceId), date);
     const match = free.find((s) => s.startAt.getTime() === input.startAt.getTime());
     if (!match) throw new BookingError("slot_taken", "that time is no longer available");
     try {
@@ -294,25 +310,39 @@ export class SchedulingService {
     return r && canServe(r, offeringId) ? [r] : [];
   }
 
-  /** Free slots: working hours minus bookings in blocking statuses minus other customers' live holds. */
-  private async slotsFor(settings: SchedulingSettings, offering: Offering, candidates: Resource[], date: string, now: Date, forCustomerId?: string): Promise<Slot[]> {
+  /** Bookings in blocking statuses and live holds for every resource of the tenant in [from, to), with a margin for appointments that started earlier. */
+  private async occupied(settings: SchedulingSettings, tenantId: string, from: Date, to: Date, now: Date): Promise<Occupied> {
+    const margin = 6 * 60 * 60_000;
+    const [bookings, holds] = await Promise.all([
+      this.orders.listBookings(tenantId, { from: new Date(from.getTime() - margin), to: new Date(to.getTime() + margin), statuses: settings.blocking }),
+      this.holds.activeInRange(tenantId, new Date(from.getTime() - margin), new Date(to.getTime() + margin), now),
+    ]);
+    return { bookings: bookings.filter((b) => b.resourceId), holds };
+  }
+
+  /** Free slots on one day: working hours minus bookings in blocking statuses minus other customers' live holds. */
+  private slotsFor(settings: SchedulingSettings, offering: Offering, candidates: Resource[], date: string, now: Date, occupied: Occupied, forCustomerId?: string): Slot[] {
     const duration = offering.durationMinutes ?? settings.slotStepMinutes;
-    const dayStart = zonedToUtc(date, "00:00", settings.tz);
-    const dayEnd = new Date(zonedToUtc(addDays(date, 1), "00:00", settings.tz).getTime() + 6 * 60 * 60_000);
+    const dayStart = zonedToUtc(date, "00:00", settings.tz).getTime() - 6 * 60 * 60_000;
+    const dayEnd = zonedToUtc(addDays(date, 1), "00:00", settings.tz).getTime() + 6 * 60 * 60_000;
     const byStart = new Map<number, Slot>();
     for (const resource of [...candidates].sort((a, b) => a.sortOrder - b.sortOrder)) {
       const hours = hoursOn(resource.hours, date);
       if (hours.length === 0) continue;
-      const bookings = await this.orders.listBookings(offering.tenantId, { from: new Date(dayStart.getTime() - 6 * 60 * 60_000), to: dayEnd, resourceId: resource.id, statuses: settings.blocking });
-      const busy = bookings.map((b) => {
-        const start = new Date(b.scheduledAt!);
-        return { start, end: new Date(start.getTime() + (b.durationMinutes ?? duration) * 60_000) };
-      });
-      const held = await this.holds.activeOverlapping(offering.tenantId, resource.id, new Date(dayStart.getTime() - 6 * 60 * 60_000), dayEnd, now);
-      for (const h of held) {
-        if (forCustomerId && h.customerId === forCustomerId) continue;
+      const busy: Busy[] = [];
+      for (const b of occupied.bookings) {
+        if (b.resourceId !== resource.id || !b.scheduledAt) continue;
+        const start = new Date(b.scheduledAt);
+        const end = new Date(start.getTime() + (b.durationMinutes ?? duration) * 60_000);
+        if (end.getTime() <= dayStart || start.getTime() >= dayEnd) continue;
+        busy.push({ start, end });
+      }
+      for (const h of occupied.holds) {
+        if (h.resourceId !== resource.id || (forCustomerId && h.customerId === forCustomerId)) continue;
+        const start = new Date(h.startAt);
+        if (new Date(h.endAt).getTime() <= dayStart || start.getTime() >= dayEnd) continue;
         // A hold already includes the buffer in its end time; generateSlots adds the buffer again, so take it back out.
-        busy.push({ start: new Date(h.startAt), end: new Date(new Date(h.endAt).getTime() - settings.bufferMinutes * 60_000) });
+        busy.push({ start, end: new Date(new Date(h.endAt).getTime() - settings.bufferMinutes * 60_000) });
       }
       for (const startAt of generateSlots({ date, tz: settings.tz, hours, stepMinutes: settings.slotStepMinutes, durationMinutes: duration, bufferMinutes: settings.bufferMinutes, busy, now, leadMinutes: settings.leadMinutes })) {
         if (!byStart.has(startAt.getTime())) byStart.set(startAt.getTime(), { startAt, resource });

@@ -27,6 +27,7 @@ export interface Harness {
   config: AppConfig;
   sender: FakeSender;
   conversations: InMemoryConversationRepository;
+  tenants: InMemoryTenantRepository;
   sessions: InMemorySessionStore;
   orders: InMemoryOrderRepository;
   eventBus: InMemoryEventBus;
@@ -53,6 +54,7 @@ export async function createHarness(): Promise<Harness> {
     config,
     sender,
     conversations,
+    tenants,
     sessions,
     orders,
     eventBus,

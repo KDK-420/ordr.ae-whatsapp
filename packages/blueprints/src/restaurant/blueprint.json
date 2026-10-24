@@ -90,6 +90,17 @@
   "globalCommands": [
     {
       "keywords": [
+        "photos",
+        "pictures",
+        "catalog",
+        "catalogue",
+        "صور",
+        "الكتالوج"
+      ],
+      "flow": "photos"
+    },
+    {
+      "keywords": [
         "menu",
         "hi",
         "hello",

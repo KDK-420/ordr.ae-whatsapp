@@ -7,6 +7,39 @@ note says where the build is and what to do next.
 
 ### Changelog
 
+- 2026-10-24: four changes in one round.
+  - **Nobody is left hanging after a handoff.** A customer who writes while a person owns the
+    thread gets a short "the team has your message" note (at most once per 10 minutes; `menu`
+    brings the assistant back) and staff are alerted again through `conversation.handed_over`
+    with a "still waiting" reason. After `handoffResumeMinutes` (tenant setting, default 60,
+    0 = never) with no staff reply the bot apologises and answers again. `Conversation` gained
+    `handedOverAt` and `lastStaffReplyAt`; the inbox stamps the latter on every reply.
+    Settings › Conversation has the field. See RUNBOOK › "Handoff alerts".
+  - **Performance.** Inbox thread and media lookups are point queries instead of listing up to
+    1000 conversations or messages; the agent's "recent orders" is one filtered query instead of
+    100 rows scanned; availability loads bookings and holds once per window instead of two
+    queries per day per person (`BookingHoldRepository.activeInRange`); staff 24h-window lookup
+    for handoff alerts is one customer query (`lastInboundAtByWaId`); the inbound turn writes the
+    message, touches the thread and reads the session in parallel.
+  - **Photos on catalog items.** `POST /merchant/media` stores JPEG/PNG (5 MB) in Postgres
+    (`MediaAsset`), served publicly at `/v1/media/:id` so WhatsApp can fetch them; the catalog
+    editor uploads or links a photo. The agent's `send_photos` tool sends up to four pictures
+    (items or whole resorts) with name and price as caption after its reply; tool results mark
+    items that have one with `[photo]`. Guided style: flow node `images` plus action
+    `catalog.photos` and a `photos` flow on the `photos`/`catalog`/`صور` keywords in salon,
+    restaurant and resort. Web chat and the inbox render sent photos.
+  - **Resort vertical** (`packages/blueprints/src/resort`, `apps/api/src/stays`). One tenant (one
+    WhatsApp number, one owner login) runs one or many `Property` rows; room types are
+    `Offering.type = "stay"` with `propertyId`, `maxGuests`, `units` and a nightly price. Stays
+    are Orders with `kind: "stay"`, `scheduledAt` (check-in), `checkOutAt`, `guests`, `propertyId`.
+    Availability is per night (`freeUnits` in `@ordr/domain`); holds reuse `BookingHold` with the
+    room type id as `resourceId`; `StayRepository` writes under the Offering row lock and recount
+    occupancy, so a room type cannot be oversold (integration test with a race). Agent tools:
+    list_resorts, list_room_types, search_stays, hold_stay → confirm_stay, release_hold, my_stays,
+    cancel_stay. Dashboard: Resorts page (`/properties`), room-type fields in the catalog editor,
+    stay line on the orders board, `check_out` transition. Demo: `SEED_BLUEPRINT_ID=resort`
+    seeds "Al Noor Resorts" with four properties and ten room types; the admin console's
+    "New merchant" offers the vertical. Migration `20261024090000_handoff_media_properties_stays`.
 - 2026-10-23: bot-to-human handoff is visible to staff. `conversation.handed_over` goes through
   the outbox; `HandoffNotifier` WhatsApps the numbers in the new tenant setting
   `handoffNumbers` (text inside the 24h window, `ordr_handoff_alert` template outside it);
@@ -189,7 +222,7 @@ engine; restaurant blueprint; memory, Redis and Prisma adapters; simulator CLI.
 | packages/domain | Tenant, Channel, Customer, Order and catalog types; state machine helpers |
 | packages/whatsapp | Cloud API client (messages, templates), webhook parsing, signature check, builders, FakeSender |
 | packages/flow-schema | zod schemas for flows and blueprints, FlowRunner, localized copy |
-| packages/blueprints | Restaurant blueprint and flows in en and ar |
+| packages/blueprints | Restaurant, salon, retail and resort blueprints and flows in en and ar |
 | apps/api | NestJS API and worker: webhook, conversation engine, orders, merchant API, outbox relay |
 | apps/dashboard | Next.js landing page and merchant dashboard |
 

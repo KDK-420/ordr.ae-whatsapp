@@ -1,13 +1,16 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { type Customer, isTerminal, type Order, type Resource, type StateMachine } from "@ordr/domain";
 import { OrderService } from "../orders/order.service";
-import type { BlueprintRegistry, ConversationRepository, OrderRepository, ResourceRepository } from "../ports";
+import type { BlueprintRegistry, ConversationRepository, OrderRepository, PropertyRepository, ResourceRepository } from "../ports";
+import { localized } from "@ordr/domain";
 import { TOKENS } from "../tokens";
 
 export type OrderScope = "board" | "active" | "all";
 
 export interface OrderView extends Order {
   customer: { id: string; name?: string; waId?: string; language?: string } | null;
+  /** Stays: the resort's name, for the board. */
+  propertyName?: string;
   /** Transition events the merchant may apply from the current status, e.g. ["accept", "reject"]. */
   allowedEvents: string[];
   isTerminal: boolean;
@@ -36,6 +39,7 @@ export class MerchantOrdersService {
     @Inject(TOKENS.ConversationRepository) private readonly conversations: ConversationRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(TOKENS.ResourceRepository) private readonly resources: ResourceRepository,
+    @Inject(TOKENS.PropertyRepository) private readonly properties: PropertyRepository,
     @Inject(OrderService) private readonly orderService: OrderService,
   ) {}
 
@@ -87,13 +91,19 @@ export class MerchantOrdersService {
   }
 
   private async present(orders: Order[], states: StateMachine): Promise<OrderView[]> {
-    const customers = await this.conversations.findCustomersByIds([...new Set(orders.map((o) => o.customerId))]);
+    const tenantId = orders[0]?.tenantId;
+    const [customers, properties] = await Promise.all([
+      this.conversations.findCustomersByIds([...new Set(orders.map((o) => o.customerId))]),
+      tenantId && orders.some((o) => o.propertyId) ? this.properties.list(tenantId, { includeInactive: true }) : Promise.resolve([]),
+    ]);
     const byId = new Map<string, Customer>(customers.map((c) => [c.id, c]));
+    const propertyNames = new Map(properties.map((p) => [p.id, localized(p.name, "en")]));
     return orders.map((order) => {
       const c = byId.get(order.customerId);
       return {
         ...order,
         customer: c ? { id: c.id, name: c.name, waId: c.waId, language: c.language } : null,
+        propertyName: order.propertyId ? propertyNames.get(order.propertyId) : undefined,
         allowedEvents: states.transitions.filter((t) => t.from === order.status).map((t) => t.on),
         isTerminal: isTerminal(states, order.status),
       };

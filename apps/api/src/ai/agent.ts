@@ -43,6 +43,11 @@ export interface AgentAttachment {
   data: string;
 }
 
+export interface AgentPhoto {
+  link: string;
+  caption?: string;
+}
+
 export interface ToolTrace {
   name: string;
   input: unknown;
@@ -68,6 +73,8 @@ export interface AgentReply {
   handoffReason?: string;
   /** A guided flow to start right after the text (e.g. the ordering menu). */
   startFlow?: string;
+  /** Photos to send right after the text, each with a caption (catalog items, rooms, resorts). */
+  media?: AgentPhoto[];
   /** What the model did, for the audit log. */
   trace?: AgentTrace;
 }

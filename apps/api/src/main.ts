@@ -14,6 +14,8 @@ loadEnv({ path: [resolve(__dirname, "../../../.env"), resolve(process.cwd(), ".e
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register({ config }), { rawBody: true });
+  // Catalog photos arrive as base64 JSON (5 MB of image is about 7 MB of text); every other body stays small.
+  app.useBodyParser("json", { limit: "8mb" });
   app.enableShutdownHooks();
 
   const queue = app.get(InboundQueue);

@@ -4,6 +4,8 @@ export interface WebMessage {
   id: string;
   role: "customer" | "assistant";
   text: string;
+  /** A photo the assistant sent; `text` is its caption. */
+  imageUrl?: string;
   createdAt: string;
 }
 

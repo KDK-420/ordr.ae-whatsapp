@@ -48,8 +48,22 @@ export type QuestionInput = z.infer<typeof QuestionInputSchema>;
 
 const base = { id: z.string().min(1), next: z.string().optional() };
 
+/** Shape expected for photos supplied through an `images` node's `from` path. */
+export const ImageRowSchema = z.object({ link: z.string().url(), caption: z.string().max(1024).optional() });
+export type ImageRow = z.infer<typeof ImageRowSchema>;
+
 export const NodeSchema = z.discriminatedUnion("type", [
   z.object({ ...base, type: z.literal("message"), text: I18nTextSchema }),
+  z.object({
+    ...base,
+    type: z.literal("images"),
+    /** Context path holding ImageRow[] (public https links with optional captions); each becomes an image message. */
+    from: z.string().min(1),
+    /** Said instead when the path holds no photos. */
+    emptyText: I18nTextSchema.optional(),
+    /** At most this many photos per turn (WhatsApp delivers them one by one). */
+    max: z.number().int().min(1).max(10).default(6),
+  }),
   z.object({
     ...base,
     type: z.literal("question"),
@@ -148,7 +162,7 @@ export const BlueprintSchema = z
     description: z.string().optional(),
     defaultLanguage: z.string().min(2),
     languages: z.array(z.string().min(2)).min(1),
-    offeringType: z.enum(["product", "service"]),
+    offeringType: z.enum(["product", "service", "stay"]),
     fulfillmentTypes: z.array(z.string().min(1)).min(1),
     orderStates: StateMachineSchema,
     entryFlow: z.string().min(1),

@@ -225,7 +225,12 @@ export class PrismaConversationRepository implements ConversationRepository {
     return rows.map(toCustomer);
   }
 
-  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null> {
+  async findCustomerByWaId(tenantId: string, waId: string): Promise<Customer | null> {
+    const c = await this.prisma.customer.findUnique({ where: { tenantId_waId: { tenantId, waId } } });
+    return c ? toCustomer(c) : null;
+  }
+
+  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date; updatedAt: Date }) | null> {
     const row = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
     if (!row) return null;
     return {
@@ -235,6 +240,9 @@ export class PrismaConversationRepository implements ConversationRepository {
       channelId: row.channelId,
       status: row.status as ConversationStatus,
       lastInboundAt: row.lastInboundAt ?? undefined,
+      handedOverAt: row.handedOverAt ?? undefined,
+      lastStaffReplyAt: row.lastStaffReplyAt ?? undefined,
+      updatedAt: row.updatedAt,
     };
   }
 
@@ -244,11 +252,39 @@ export class PrismaConversationRepository implements ConversationRepository {
       orderBy: { createdAt: "desc" },
     });
     const row = existing ?? (await this.prisma.conversation.create({ data: { tenantId, customerId, channelId } }));
-    return { id: row.id, tenantId: row.tenantId, customerId: row.customerId, channelId: row.channelId, status: row.status as ConversationStatus };
+    return { id: row.id, tenantId: row.tenantId, customerId: row.customerId, channelId: row.channelId, status: row.status as ConversationStatus, handedOverAt: row.handedOverAt ?? undefined, lastStaffReplyAt: row.lastStaffReplyAt ?? undefined };
   }
 
   async setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void> {
+    if (status === "human") {
+      // Stamp the handoff only on the way in, so a second "human" write does not reset how long the customer has waited.
+      await this.prisma.conversation.updateMany({ where: { id: conversationId, status: { not: "human" } }, data: { status, handedOverAt: new Date() } });
+      return;
+    }
     await this.prisma.conversation.update({ where: { id: conversationId }, data: { status } });
+  }
+
+  async markStaffReply(conversationId: string, at: Date): Promise<void> {
+    await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastStaffReplyAt: at } });
+  }
+
+  async findMessageById(conversationId: string, messageId: string): Promise<StoredMessage | null> {
+    const m = await this.prisma.message.findFirst({ where: { id: messageId, conversationId } });
+    return m ? toStoredMessage(m) : null;
+  }
+
+  async lastInboundAtByWaId(tenantId: string, waIds: string[]): Promise<Map<string, Date>> {
+    const out = new Map<string, Date>();
+    if (waIds.length === 0) return out;
+    const rows = await this.prisma.customer.findMany({
+      where: { tenantId, waId: { in: waIds } },
+      select: { waId: true, conversations: { select: { lastInboundAt: true }, where: { lastInboundAt: { not: null } }, orderBy: { lastInboundAt: "desc" }, take: 1 } },
+    });
+    for (const r of rows) {
+      const at = r.conversations[0]?.lastInboundAt;
+      if (at) out.set(r.waId, at);
+    }
+    return out;
   }
 
   async touchInbound(conversationId: string, at: Date): Promise<void> {
@@ -290,6 +326,8 @@ export class PrismaConversationRepository implements ConversationRepository {
         channelId: row.channelId,
         status: row.status as ConversationStatus,
         lastInboundAt: row.lastInboundAt ?? undefined,
+        handedOverAt: row.handedOverAt ?? undefined,
+        lastStaffReplyAt: row.lastStaffReplyAt ?? undefined,
         updatedAt: row.updatedAt,
         customer: toCustomer(row.customer),
         lastMessage: last ? { direction: last.direction as "in" | "out", kind: last.kind, preview: previewOf(last.payload), createdAt: last.createdAt } : undefined,
@@ -301,19 +339,21 @@ export class PrismaConversationRepository implements ConversationRepository {
 
   async listMessages(conversationId: string, opts: { limit?: number } = {}): Promise<StoredMessage[]> {
     const rows = await this.prisma.message.findMany({ where: { conversationId }, orderBy: { createdAt: "desc" }, take: opts.limit ?? 200 });
-    return rows.reverse().map((m) => ({
-      id: m.id,
-      tenantId: m.tenantId,
-      conversationId: m.conversationId,
-      direction: m.direction as "in" | "out",
-      providerMessageId: m.providerMessageId ?? undefined,
-      kind: m.kind,
-      payload: m.payload,
-      status: m.status ?? undefined,
-      createdAt: m.createdAt,
-    }));
+    return rows.reverse().map(toStoredMessage);
   }
 }
+
+const toStoredMessage = (m: { id: string; tenantId: string; conversationId: string; direction: string; providerMessageId: string | null; kind: string; payload: unknown; status: string | null; createdAt: Date }): StoredMessage => ({
+  id: m.id,
+  tenantId: m.tenantId,
+  conversationId: m.conversationId,
+  direction: m.direction as "in" | "out",
+  providerMessageId: m.providerMessageId ?? undefined,
+  kind: m.kind,
+  payload: m.payload,
+  status: m.status ?? undefined,
+  createdAt: m.createdAt,
+});
 
 export class PrismaUserRepository implements UserRepository {
   constructor(private readonly prisma: PrismaClient) {}

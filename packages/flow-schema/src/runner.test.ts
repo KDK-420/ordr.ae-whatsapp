@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FlowRunner, MapActionRegistry } from "./runner";
 import { parseBlueprint } from "./schema";
 
-const blueprint = parseBlueprint({
+const baseBlueprint = parseBlueprint({
   id: "test",
   version: 1,
   name: "Test",
@@ -67,7 +67,7 @@ const blueprint = parseBlueprint({
 
 function makeRunner(categories: Array<{ id: string; title: string }> = [{ id: "burgers", title: "Burgers" }, { id: "vip", title: "VIP" }]) {
   const actions = new MapActionRegistry().register("catalog.categories", async () => categories);
-  return new FlowRunner(blueprint, actions);
+  return new FlowRunner(baseBlueprint, actions);
 }
 
 const actionCtx = { tenantId: "t1", customer: { waId: "971500000001", name: "Sara" } };
@@ -146,9 +146,56 @@ describe("FlowRunner", () => {
   it("rejects blueprints with dangling references", () => {
     expect(() =>
       parseBlueprint({
-        ...blueprint,
+        ...baseBlueprint,
         flows: [{ id: "main", entry: "missing", nodes: [{ id: "a", type: "end" }] }],
       }),
     ).toThrow(/entry references unknown node "missing"/);
+  });
+});
+
+describe("images node", () => {
+  const blueprint = {
+    id: "t",
+    version: 1,
+    name: "t",
+    defaultLanguage: "en",
+    languages: ["en"],
+    offeringType: "product" as const,
+    fulfillmentTypes: ["pickup"],
+    orderStates: { initial: "placed", states: ["placed", "done"], transitions: [{ from: "placed", to: "done", on: "finish" }], terminal: ["done"] },
+    entryFlow: "photos",
+    flows: [
+      {
+        id: "photos",
+        entry: "load",
+        nodes: [
+          { id: "load", type: "action" as const, action: "catalog.photos", saveAs: "photos", next: "send" },
+          { id: "send", type: "images" as const, from: "photos", max: 2, emptyText: "No photos yet.", next: "done" },
+          { id: "done", type: "end" as const, text: "Done." },
+        ],
+      },
+    ],
+  };
+
+  it("sends one image message per row, capped, then carries on", async () => {
+    const actions = new MapActionRegistry().register("catalog.photos", async () => [
+      { link: "https://img.test/a.jpg", caption: "A" },
+      { link: "https://img.test/b.jpg" },
+      { link: "https://img.test/c.jpg", caption: "C" },
+    ]);
+    const runner = new FlowRunner(parseBlueprint(blueprint), actions);
+    const res = await runner.start("photos", { language: "en" }, { tenantId: "t1", customer: { waId: "1" } });
+    expect(res.outbound).toEqual([
+      { type: "image", image: { link: "https://img.test/a.jpg", caption: "A" } },
+      { type: "image", image: { link: "https://img.test/b.jpg", caption: undefined } },
+      { type: "text", text: { body: "Done.", preview_url: false } },
+    ]);
+    expect(res.completed).toBe(true);
+  });
+
+  it("says so when there is nothing to show", async () => {
+    const runner = new FlowRunner(parseBlueprint(blueprint), new MapActionRegistry().register("catalog.photos", async () => []));
+    const res = await runner.start("photos", { language: "en" }, { tenantId: "t1", customer: { waId: "1" } });
+    expect(res.outbound.map((m) => (m.type === "text" ? m.text.body : m.type))).toEqual(["No photos yet.", "Done."]);
   });
 });

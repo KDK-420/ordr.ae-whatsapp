@@ -30,6 +30,7 @@ export const STATUS_LABEL: Record<string, string> = {
   checked_in: "Checked in",
   in_progress: "In progress",
   no_show: "No show",
+  checked_out: "Checked out",
 };
 
 export const EVENT_LABEL: Record<string, string> = {
@@ -43,13 +44,19 @@ export const EVENT_LABEL: Record<string, string> = {
   complete: "Complete",
   confirm: "Confirm",
   check_in: "Check in",
+  check_out: "Check out",
   no_show: "No show",
 };
 
 /** Events that end an order; rendered as secondary buttons so they are harder to hit by accident. */
 export const DESTRUCTIVE_EVENTS = new Set(["reject", "cancel", "no_show"]);
 
-export const FULFILLMENT_LABEL: Record<string, string> = { delivery: "Delivery", pickup: "Pickup", dine_in: "Dine in", in_store: "In store", at_home: "At home" };
+export const FULFILLMENT_LABEL: Record<string, string> = { delivery: "Delivery", pickup: "Pickup", dine_in: "Dine in", in_store: "In store", at_home: "At home", stay: "Stay" };
+
+/** "Thu 24 Dec" in the tenant's zone. */
+export function dayOf(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone }).format(new Date(iso));
+}
 
 /** "Tue 20 Oct, 11:00" in the tenant's zone. */
 export function when(iso: string, timeZone: string): string {

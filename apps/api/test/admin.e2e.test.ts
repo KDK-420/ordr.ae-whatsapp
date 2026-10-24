@@ -70,7 +70,7 @@ describe("platform admin: tenants and the number pool", () => {
     const before = await request(server()).get("/merchant/admin/overview").set("authorization", auth);
     expect(before.status).toBe(200);
     expect(before.body.tenants.map((t: { tenant: { slug: string } }) => t.tenant.slug)).toEqual(["seed"]);
-    expect(before.body.verticals.map((v: { id: string }) => v.id).sort()).toEqual(["restaurant", "retail", "salon"]);
+    expect(before.body.verticals.map((v: { id: string }) => v.id).sort()).toEqual(["resort", "restaurant", "retail", "salon"]);
 
     const added = await request(server())
       .post("/merchant/admin/numbers")

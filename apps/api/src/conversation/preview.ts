@@ -3,6 +3,10 @@ export function previewOf(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const p = payload as Record<string, unknown>;
   if (p.kind === "media") return mediaPreview(p);
+  if (p.type === "image") {
+    const caption = (p.image as { caption?: unknown } | undefined)?.caption;
+    return typeof caption === "string" && caption.trim() ? `Image: ${caption.trim()}` : "Image";
+  }
   if (typeof p.text === "string") return p.text;
   const text = p.text as { body?: unknown } | undefined;
   if (text && typeof text.body === "string") return text.body;

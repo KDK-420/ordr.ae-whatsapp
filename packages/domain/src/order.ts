@@ -5,7 +5,7 @@ import type { OfferingId, OrderId, ResourceId, TenantId } from "./ids";
  * One Order type serves every vertical. A salon booking is an Order with a slot and a
  * resource; a food order is an Order whose constraint is kitchen capacity.
  */
-export type OrderKind = "order" | "booking" | "appointment";
+export type OrderKind = "order" | "booking" | "appointment" | "stay";
 export type OrderSource = "whatsapp" | "pos" | "web";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "failed" | "refunded";
 
@@ -44,9 +44,13 @@ export interface Order {
   conversationId?: string;
   items: OrderItem[];
   resourceId?: ResourceId;
-  /** Bookings: ISO start and length of the appointment. */
+  /** Bookings: ISO start and length of the appointment. Stays: ISO check-in instant. */
   scheduledAt?: string;
   durationMinutes?: number;
+  /** Stays: ISO check-out instant, guests and the property. */
+  checkOutAt?: string;
+  guests?: number;
+  propertyId?: string;
   currency: string;
   subtotalMinor: number;
   deliveryFeeMinor: number;

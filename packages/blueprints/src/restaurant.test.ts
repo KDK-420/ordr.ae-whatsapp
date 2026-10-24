@@ -48,7 +48,7 @@ const txt = (text: string): InboundContent => ({ kind: "text", text });
 
 describe("restaurant blueprint", () => {
   it("parses and exposes the expected flows", () => {
-    expect(restaurant.flows.map((f) => f.id).sort()).toEqual(["checkout", "language", "main_menu", "order_food", "talk_to_us", "track_order", "view_cart"]);
+    expect(restaurant.flows.map((f) => f.id).sort()).toEqual(["checkout", "language", "main_menu", "order_food", "photos", "talk_to_us", "track_order", "view_cart"]);
     expect(restaurant.globalCommands.find((g) => g.flow === "view_cart")?.keywords).toContain("cart");
   });
 

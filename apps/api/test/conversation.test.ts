@@ -147,18 +147,63 @@ describe("ConversationService", () => {
     expect(customer.language).toBe("ar");
   });
 
-  it("goes quiet after handoff and resumes on 'menu'", async () => {
+  it("after a handoff a waiting customer is acknowledged once, staff are re-alerted, and 'menu' brings the bot back", async () => {
     await send(fixtures.textMessageWebhook("agent", h.base));
     expect(bodyOf(h.sender.to("971500000001")[0])).toBe("One of our team will reply here shortly.");
-    const conv = [...h.conversations.conversations.values()][0];
-    expect(conv?.status).toBe("human");
+    const conv = [...h.conversations.conversations.values()][0]!;
+    expect(conv.status).toBe("human");
+    expect(conv.handedOverAt).toBeInstanceOf(Date);
+    expect(h.eventBus.published.filter((e) => e.type === "conversation.handed_over")).toHaveLength(1);
 
+    // Still waiting: the customer hears that the team has the message (not the flow), and staff get a second alert.
     await send(fixtures.textMessageWebhook("is anyone there?", h.base));
-    expect(h.sender.to("971500000001")).toHaveLength(1);
+    expect(h.sender.to("971500000001")).toHaveLength(2);
+    expect(bodyOf(h.sender.to("971500000001")[1])).toContain("your message has reached our team");
+    const alerts = h.eventBus.published.filter((e) => e.type === "conversation.handed_over");
+    expect(alerts).toHaveLength(2);
+    expect((alerts[1]!.payload as { reason?: string; preview: string })).toMatchObject({ preview: "is anyone there?", reason: expect.stringContaining("still waiting") });
+
+    // Not on every message: the next one within ten minutes is silent (the inbox shows it).
+    await send(fixtures.textMessageWebhook("hello??", h.base));
+    expect(h.sender.to("971500000001")).toHaveLength(2);
+    expect(conv.status).toBe("human");
+
+    // Once a person has replied, the bot stays out of the way.
+    conv.lastStaffReplyAt = new Date();
+    await send(fixtures.textMessageWebhook("thanks", h.base));
+    expect(h.sender.to("971500000001")).toHaveLength(2);
 
     await send(fixtures.textMessageWebhook("menu", h.base));
-    expect(h.sender.to("971500000001")).toHaveLength(2);
-    expect(conv?.status).toBe("bot");
+    expect(h.sender.to("971500000001")).toHaveLength(3);
+    expect(conv.status).toBe("bot");
+  });
+
+  it("takes a thread back when nobody from staff has replied for the configured time", async () => {
+    await send(fixtures.textMessageWebhook("agent", h.base));
+    const conv = [...h.conversations.conversations.values()][0]!;
+    conv.handedOverAt = new Date(Date.now() - 61 * 60_000);
+    await send(fixtures.textMessageWebhook("hello, still there?", h.base));
+    const bodies = h.sender.to("971500000001").map(bodyOf);
+    expect(bodies[1]).toContain("Sorry for the wait");
+    expect(bodies[2]).toContain("Welcome to Demo Restaurant");
+    expect(conv.status).toBe("bot");
+
+    // A recent staff reply resets the clock even when the handoff itself is old.
+    await send(fixtures.textMessageWebhook("agent", h.base));
+    conv.handedOverAt = new Date(Date.now() - 5 * 60 * 60_000);
+    conv.lastStaffReplyAt = new Date(Date.now() - 2 * 60_000);
+    const before = h.sender.to("971500000001").length;
+    await send(fixtures.textMessageWebhook("one more thing", h.base));
+    expect(h.sender.to("971500000001")).toHaveLength(before);
+    expect(conv.status).toBe("human");
+
+    // 0 keeps waiting forever: the customer gets the acknowledgement, never the bot.
+    (await h.tenants.findById("tenant_seed"))!.settings.handoffResumeMinutes = 0;
+    conv.handedOverAt = new Date(Date.now() - 48 * 60 * 60_000);
+    conv.lastStaffReplyAt = undefined;
+    await send(fixtures.textMessageWebhook("anyone?", h.base));
+    expect(bodyOf(h.sender.to("971500000001").at(-1))).toContain("your message has reached our team");
+    expect(conv.status).toBe("human");
   });
 
   it("restarts from the entry flow when a session has ended", async () => {

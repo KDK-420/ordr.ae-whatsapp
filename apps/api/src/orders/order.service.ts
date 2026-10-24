@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { addItem, type Cart, type DeliveryLocation, type DomainEvent, emptyCart, nextState, type Offering, type Order, type Quote, quote as buildQuote, type Tenant } from "@ordr/domain";
-import type { BlueprintRegistry, EventBus, OrderRepository, OutboxStore, TenantRepository } from "../ports";
+import type { BlueprintRegistry, EventBus, OrderRepository, OutboxFactory, OutboxStore, TenantRepository } from "../ports";
 import { BOOKING_REMINDER_EVENT, type BookingReminderPayload, reminderEventId } from "./booking-reminder";
 import { TOKENS } from "../tokens";
 
@@ -160,6 +160,23 @@ export class OrderService {
     await this.publish(placed(order));
     await this.scheduleReminders(order, blueprint.settings, s.tenant.settings);
     this.logger.log(`booking #${order.number} placed for tenant ${order.tenantId} at ${input.startAt.toISOString()} on ${input.resourceId}`);
+    return order;
+  }
+
+  /**
+   * Places an order through any repository write that accepts the outbox factory (stays use their
+   * own inventory check), then publishes `order.placed` and queues reminders like placeBooking does.
+   */
+  async placeThrough(tenantId: string, create: (outbox: OutboxFactory) => Promise<Order>, extra: Record<string, unknown> = {}): Promise<Order> {
+    const s = await this.settingsFor(tenantId);
+    const blueprint = this.blueprints.get(s.tenant.blueprintId);
+    if (!blueprint) throw new OrderError(`blueprint ${s.tenant.blueprintId} not found`);
+    const eventId = randomUUID();
+    const placed = (o: Order) => this.event(eventId, "order.placed", o, { fulfillmentType: o.fulfillmentType, totalMinor: o.totalMinor, scheduledAt: o.scheduledAt, ...extra });
+    const order = await create(placed);
+    await this.publish(placed(order));
+    await this.scheduleReminders(order, blueprint.settings, s.tenant.settings);
+    this.logger.log(`${order.kind} #${order.number} placed for tenant ${order.tenantId}${order.scheduledAt ? ` from ${order.scheduledAt}` : ""}`);
     return order;
   }
 

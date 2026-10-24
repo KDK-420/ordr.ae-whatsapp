@@ -23,7 +23,18 @@ export interface WebMessageView {
   id: string;
   role: "customer" | "assistant";
   text: string;
+  /** A photo the assistant sent; `text` is then its caption. */
+  imageUrl?: string;
   createdAt: string;
+}
+
+/** Image messages become a picture with the caption as text; everything else is its preview line. */
+export function webMessageText(payload: unknown): { text: string; imageUrl?: string } {
+  const p = payload as { type?: unknown; image?: { link?: unknown; caption?: unknown } } | null;
+  if (p && typeof p === "object" && p.type === "image" && typeof p.image?.link === "string") {
+    return { text: typeof p.image.caption === "string" ? p.image.caption : "", imageUrl: p.image.link };
+  }
+  return { text: previewOf(payload) };
 }
 
 export interface WebSessionView {
@@ -121,7 +132,7 @@ export class WebChatService {
       tenant: { name: ctx.tenant.name, slug: ctx.tenant.slug, blueprintId: ctx.tenant.blueprintId, language: ctx.tenant.defaultLanguage },
       conversationId: session.conversationId,
       status: conversation?.status === "human" ? "human" : "bot",
-      messages: messages.map((m) => ({ id: m.id, role: m.direction === "in" ? "customer" : "assistant", text: previewOf(m.payload), createdAt: m.createdAt.toISOString() })),
+      messages: messages.map((m) => ({ id: m.id, role: m.direction === "in" ? "customer" : "assistant", ...webMessageText(m.payload), createdAt: m.createdAt.toISOString() })),
     };
   }
 

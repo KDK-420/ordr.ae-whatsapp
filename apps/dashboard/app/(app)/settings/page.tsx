@@ -7,6 +7,7 @@ const SECTIONS = [
   { href: "/settings/conversation", title: "Conversation", body: "Natural chat with Claude or guided menus, and the facts the bot may share with customers." },
   { href: "/settings/templates", title: "WhatsApp templates", body: "Approved templates let the bot update customers after their 24 hour window closes." },
   { href: "/settings/team", title: "Team and hours", body: "Stylists, rooms and chairs that customers book, with weekly hours and the services each one offers." },
+  { href: "/properties", title: "Resorts", body: "The properties you run from this number: address, check-in times, amenities and photos. Room types live in the catalog." },
   { href: "/settings/staff", title: "Staff", body: "Who can sign in to this dashboard. Owners can add staff and reset passwords." },
   { href: "/settings/password", title: "Your password", body: "Change the password you sign in with." },
 ];

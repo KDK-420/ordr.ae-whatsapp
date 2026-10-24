@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, Inject, NotFoundException, 
 import { z } from "zod";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
-import type { CatalogRepository } from "../ports";
+import type { CatalogRepository, PropertyRepository } from "../ports";
 import { TOKENS } from "../tokens";
 
 /** { en: "Burgers", ar: "برجر" }: at least one language with text. */
@@ -28,13 +28,17 @@ const GroupSchema = z
 
 const OfferingSchema = z.object({
   categoryId: z.string().min(1).nullable().optional(),
-  type: z.enum(["product", "service"]).optional(),
+  type: z.enum(["product", "service", "stay"]).optional(),
   name: LocalizedText,
   description: OptionalText.optional(),
   priceMinor: Minor,
   currency: z.string().length(3).optional(),
   durationMinutes: z.number().int().min(1).max(24 * 60).nullable().optional(),
   imageUrl: z.string().url().max(500).nullable().optional(),
+  /** Stays: the resort the room type belongs to, how many guests one unit sleeps, how many units exist. */
+  propertyId: z.string().min(1).nullable().optional(),
+  maxGuests: z.number().int().min(1).max(50).nullable().optional(),
+  units: z.number().int().min(1).max(10_000).nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
   modifierGroups: z.array(GroupSchema).max(20).optional(),
@@ -49,7 +53,10 @@ function parse<T>(schema: z.ZodType<T>, body: unknown): T {
 @Controller("merchant/catalog")
 @UseGuards(AuthGuard)
 export class MerchantCatalogController {
-  constructor(@Inject(TOKENS.CatalogRepository) private readonly catalog: CatalogRepository) {}
+  constructor(
+    @Inject(TOKENS.CatalogRepository) private readonly catalog: CatalogRepository,
+    @Inject(TOKENS.PropertyRepository) private readonly properties: PropertyRepository,
+  ) {}
 
   @Get()
   async all(@CurrentUser() user: AuthUser) {
@@ -73,6 +80,8 @@ export class MerchantCatalogController {
   async createOffering(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     const input = parse(OfferingSchema, body);
     await this.assertCategory(user.tenantId, input.categoryId);
+    await this.assertProperty(user.tenantId, input.propertyId);
+    if (input.type === "stay" && !input.propertyId) throw new BadRequestException("a room type needs a propertyId");
     return this.catalog.createOffering(user.tenantId, input);
   }
 
@@ -80,9 +89,15 @@ export class MerchantCatalogController {
   async updateOffering(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     const patch = parse(OfferingSchema.partial(), body);
     await this.assertCategory(user.tenantId, patch.categoryId);
+    await this.assertProperty(user.tenantId, patch.propertyId);
     const updated = await this.catalog.updateOffering(user.tenantId, id, patch);
     if (!updated) throw new NotFoundException("offering not found");
     return updated;
+  }
+
+  private async assertProperty(tenantId: string, propertyId: string | null | undefined): Promise<void> {
+    if (!propertyId) return;
+    if (!(await this.properties.get(tenantId, propertyId))) throw new BadRequestException("propertyId does not belong to this tenant");
   }
 
   private async assertCategory(tenantId: string, categoryId: string | null | undefined): Promise<void> {

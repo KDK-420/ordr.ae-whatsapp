@@ -3,7 +3,8 @@ import { type DomainEvent, formatMoney } from "@ordr/domain";
 import { type MessageSender, text } from "@ordr/whatsapp";
 import { COPY, statusLabel, t } from "../actions/copy";
 import type { ConversationRepository, EventBus, OrderRepository, TenantRepository } from "../ports";
-import { formatWhen } from "../scheduling/format";
+import { formatDay, formatWhen } from "../scheduling/format";
+import { localDateKey } from "@ordr/domain";
 import { ORDER_STATUS_PURPOSE, TemplateService } from "../templates/template.service";
 import { businessProfile, locationLines } from "../tenant-profile";
 import { TOKENS } from "../tokens";
@@ -55,12 +56,16 @@ export class OrderNotifier implements OnModuleInit {
     const language = customer.language ?? ctx.tenant.defaultLanguage;
     const values = { number: order.number, status: statusLabel(order.status, language), total: formatMoney(order.totalMinor, order.currency) };
     const booking = order.kind === "booking" && order.scheduledAt;
+    const stay = order.kind === "stay" && order.scheduledAt && order.checkOutAt;
+    const tz = ctx.tenant.timezone || "Asia/Dubai";
     let message;
     let kind: string;
     if (inWindow) {
-      let body = booking
-        ? t(COPY.bookingStatus, language, { ...values, when: formatWhen(new Date(order.scheduledAt!), ctx.tenant.timezone || "Asia/Dubai", language) })
-        : t(COPY.orderStatus, language, values);
+      let body = stay
+        ? t(COPY.stayStatus, language, { ...values, property: order.items[0]?.title.split(" · ").at(-1) ?? ctx.tenant.name, from: formatDay(localDateKey(new Date(order.scheduledAt!), tz), tz, language), to: formatDay(localDateKey(new Date(order.checkOutAt!), tz), tz, language) })
+        : booking
+          ? t(COPY.bookingStatus, language, { ...values, when: formatWhen(new Date(order.scheduledAt!), tz, language) })
+          : t(COPY.orderStatus, language, values);
       // A confirmed booking is when the customer needs the address: add it with the map link once the merchant has filled them in.
       if (booking && order.status === "confirmed") body = [body, ...locationLines(businessProfile(ctx.tenant.settings))].join("\n");
       message = text(body);

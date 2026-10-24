@@ -192,6 +192,7 @@ export class InMemoryUserRepository implements UserRepository {
 export class InMemoryConversationRepository implements ConversationRepository {
   readonly customers = new Map<string, Customer>();
   readonly conversations = new Map<string, ConversationRecord & { lastInboundAt?: Date; updatedAt: Date }>();
+  private readonly messageIndex = new Map<string, StoredMessage>();
   readonly messages: StoredMessage[] = [];
   readonly statuses = new Map<string, string>();
 
@@ -221,8 +222,13 @@ export class InMemoryConversationRepository implements ConversationRepository {
     return [...this.customers.values()].filter((c) => wanted.has(c.id));
   }
 
-  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date }) | null> {
-    return this.conversations.get(conversationId) ?? null;
+  async findCustomerByWaId(tenantId: string, waId: string): Promise<Customer | null> {
+    return this.customers.get(`${tenantId}:${waId}`) ?? null;
+  }
+
+  async findConversationById(conversationId: string): Promise<(ConversationRecord & { lastInboundAt?: Date; updatedAt: Date }) | null> {
+    const c = this.conversations.get(conversationId);
+    return c ? { ...c } : null;
   }
 
   async getOrCreateOpenConversation(tenantId: string, customerId: string, channelId: string): Promise<ConversationRecord> {
@@ -237,8 +243,17 @@ export class InMemoryConversationRepository implements ConversationRepository {
   async setConversationStatus(conversationId: string, status: ConversationStatus): Promise<void> {
     const c = this.conversations.get(conversationId);
     if (c) {
+      if (status === "human" && c.status !== "human") c.handedOverAt = new Date();
       c.status = status;
       c.updatedAt = new Date();
+    }
+  }
+
+  async markStaffReply(conversationId: string, at: Date): Promise<void> {
+    const c = this.conversations.get(conversationId);
+    if (c) {
+      c.lastStaffReplyAt = at;
+      c.updatedAt = at;
     }
   }
 
@@ -251,7 +266,28 @@ export class InMemoryConversationRepository implements ConversationRepository {
   }
 
   async recordMessage(message: MessageRecord): Promise<void> {
-    this.messages.push({ id: nextId("msg"), ...message });
+    const stored: StoredMessage = { id: nextId("msg"), ...message };
+    this.messages.push(stored);
+    this.messageIndex.set(stored.id, stored);
+  }
+
+  async findMessageById(conversationId: string, messageId: string): Promise<StoredMessage | null> {
+    const m = this.messageIndex.get(messageId);
+    return m && m.conversationId === conversationId ? structuredClone(m) : null;
+  }
+
+  async lastInboundAtByWaId(tenantId: string, waIds: string[]): Promise<Map<string, Date>> {
+    const out = new Map<string, Date>();
+    for (const waId of waIds) {
+      const customer = this.customers.get(`${tenantId}:${waId}`);
+      if (!customer) continue;
+      for (const c of this.conversations.values()) {
+        if (c.customerId !== customer.id || !c.lastInboundAt) continue;
+        const seen = out.get(waId);
+        if (!seen || c.lastInboundAt > seen) out.set(waId, c.lastInboundAt);
+      }
+    }
+    return out;
   }
 
   async updateMessageStatus(providerMessageId: string, status: string): Promise<void> {

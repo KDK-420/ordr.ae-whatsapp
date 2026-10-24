@@ -12,6 +12,12 @@ function isImage(payload: unknown): boolean {
   return !!p && typeof p === "object" && p.kind === "media" && p.mediaType === "image";
 }
 
+/** A photo the bot or an agent sent: the Cloud API payload carries its public link. */
+function sentImageLink(payload: unknown): string | null {
+  const p = payload as { type?: unknown; image?: { link?: unknown } } | null;
+  return p && typeof p === "object" && p.type === "image" && typeof p.image?.link === "string" ? p.image.link : null;
+}
+
 const LIST_POLL_MS = 8000;
 const THREAD_POLL_MS = 4000;
 
@@ -322,6 +328,10 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
               {m.direction === "in" && isImage(m.payload) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={`/merchant/conversations/${encodeURIComponent(conversation.id)}/media/${encodeURIComponent(m.id)}`} alt={m.preview} className="mb-1 max-h-64 rounded-lg" loading="lazy" />
+              ) : null}
+              {m.direction === "out" && sentImageLink(m.payload) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={sentImageLink(m.payload)!} alt={m.preview} className="mb-1 max-h-64 rounded-lg" loading="lazy" />
               ) : null}
               {m.preview ? waFormat(m.preview, m.id) : <span className="italic text-slate-400">[{m.kind}]</span>}
               <div className={`mt-1 text-[10px] ${m.direction === "out" ? "text-green-700/70" : "text-slate-400"}`}>

@@ -36,6 +36,7 @@ import {
 } from "./adapters/prisma-commerce";
 import { CommerceService } from "./commerce/commerce.service";
 import { MaintenanceService } from "./maintenance.service";
+import { MediaController } from "./media/media.controller";
 import { MemoryService } from "./memory/memory.service";
 import { MockPaymentProvider, type PaymentProvider } from "./payments/payment-provider";
 import { PaymentsController } from "./payments/payments.controller";
@@ -44,6 +45,8 @@ import { MerchantPushController } from "./push/push.controller";
 import { VapidWebPushSender, type WebPushSender } from "./push/web-push";
 import { WebChatController } from "./webchat/webchat.controller";
 import { WebChatService } from "./webchat/webchat.service";
+import { InMemoryMediaRepository, InMemoryPropertyRepository, InMemoryStayRepository } from "./adapters/memory-stays";
+import { PrismaMediaRepository, PrismaPropertyRepository, PrismaStayRepository } from "./adapters/prisma-stays";
 import { OutboxEventBus, PrismaOutboxStore } from "./adapters/outbox";
 import { FakeTemplateApi, InMemoryTemplateRepository, PrismaTemplateRepository } from "./adapters/templates";
 import { PrismaCatalogRepository, PrismaOrderRepository, PrismaResourceRepository } from "./adapters/prisma-catalog";
@@ -71,6 +74,7 @@ import { HealthController } from "./health.controller";
 import { InboxService } from "./inbox/inbox.service";
 import { MerchantBookingsController } from "./merchant/bookings.controller";
 import { MerchantCatalogController } from "./merchant/catalog.controller";
+import { MerchantPropertiesController } from "./merchant/properties.controller";
 import { MerchantResourcesController } from "./merchant/resources.controller";
 import { MerchantSettingsController } from "./merchant/settings.controller";
 import { MerchantConversationsController } from "./merchant/conversations.controller";
@@ -82,6 +86,7 @@ import { BookingReminderNotifier } from "./orders/booking-reminder";
 import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
 import { SchedulingService } from "./scheduling/scheduling.service";
+import { StayService } from "./stays/stay.service";
 import { MerchantSimulatorController } from "./simulator/simulator.controller";
 import { DemoAwareSender, SimulatorService } from "./simulator/simulator.service";
 import { TemplateService } from "./templates/template.service";
@@ -101,6 +106,8 @@ import type {
   TenantRepository,
   UserRepository,
   NumberPoolRepository,
+  PropertyRepository,
+  MediaRepository,
 } from "./ports";
 import { RootController } from "./root.controller";
 import { TOKENS } from "./tokens";
@@ -136,6 +143,8 @@ export interface AppOptions {
     numbers: NumberPoolRepository;
     paymentProvider: PaymentProvider;
     pushSender: WebPushSender;
+    properties: PropertyRepository;
+    media: MediaRepository;
   }>;
 }
 
@@ -184,6 +193,7 @@ export class AppModule {
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
       OrderService,
       SchedulingService,
+      StayService,
       CommerceService,
       MemoryService,
       WebChatService,
@@ -230,12 +240,12 @@ export class AppModule {
       },
       {
         provide: TOKENS.Agent,
-        useFactory: (scheduling: SchedulingService, commerce: CommerceService, memory: MemoryService): ConversationAgent => {
+        useFactory: (scheduling: SchedulingService, commerce: CommerceService, memory: MemoryService, catalog: CatalogRepository, properties: PropertyRepository, stays: StayService): ConversationAgent => {
           if (overrides.agent) return overrides.agent;
           if (!config.ANTHROPIC_API_KEY) return new NoopAgent();
-          return new AnthropicAgent({ scheduling, commerce, memory }, { apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
+          return new AnthropicAgent({ scheduling, commerce, memory, catalog, properties, stays }, { apiKey: config.ANTHROPIC_API_KEY, model: config.ANTHROPIC_MODEL });
         },
-        inject: [SchedulingService, CommerceService, MemoryService],
+        inject: [SchedulingService, CommerceService, MemoryService, TOKENS.CatalogRepository, TOKENS.PropertyRepository, StayService],
       },
       {
         provide: TOKENS.Transcriber,
@@ -275,8 +285,12 @@ export class AppModule {
       const orders = overrides.orders ?? new InMemoryOrderRepository();
       const holds = new InMemoryBookingHoldRepository(orders);
       if (orders instanceof InMemoryOrderRepository) orders.holds = holds;
+      const memoryOrders = orders instanceof InMemoryOrderRepository ? orders : new InMemoryOrderRepository();
       providers.push(
         { provide: TOKENS.BookingHoldRepository, useValue: holds },
+        { provide: TOKENS.PropertyRepository, useValue: overrides.properties ?? new InMemoryPropertyRepository(demo.properties) },
+        { provide: TOKENS.StayRepository, useValue: new InMemoryStayRepository(memoryOrders, holds) },
+        { provide: TOKENS.MediaRepository, useValue: overrides.media ?? new InMemoryMediaRepository() },
         { provide: TOKENS.CartRepository, useValue: new InMemoryCartRepository() },
         { provide: TOKENS.PaymentIntentRepository, useValue: new InMemoryPaymentIntentRepository() },
         { provide: TOKENS.WebhookReceiptRepository, useValue: new InMemoryWebhookReceiptRepository() },
@@ -337,6 +351,13 @@ export class AppModule {
           ? { provide: TOKENS.NumberPoolRepository, useValue: overrides.numbers }
           : { provide: TOKENS.NumberPoolRepository, useFactory: (p: PrismaService) => new PrismaNumberPoolRepository(p), inject: [PrismaService] },
         { provide: TOKENS.BookingHoldRepository, useFactory: (p: PrismaService) => new PrismaBookingHoldRepository(p), inject: [PrismaService] },
+        overrides.properties
+          ? { provide: TOKENS.PropertyRepository, useValue: overrides.properties }
+          : { provide: TOKENS.PropertyRepository, useFactory: (p: PrismaService) => new PrismaPropertyRepository(p), inject: [PrismaService] },
+        { provide: TOKENS.StayRepository, useFactory: (p: PrismaService) => new PrismaStayRepository(p), inject: [PrismaService] },
+        overrides.media
+          ? { provide: TOKENS.MediaRepository, useValue: overrides.media }
+          : { provide: TOKENS.MediaRepository, useFactory: (p: PrismaService) => new PrismaMediaRepository(p), inject: [PrismaService] },
         { provide: TOKENS.CartRepository, useFactory: (p: PrismaService) => new PrismaCartRepository(p), inject: [PrismaService] },
         { provide: TOKENS.PaymentIntentRepository, useFactory: (p: PrismaService) => new PrismaPaymentIntentRepository(p), inject: [PrismaService] },
         { provide: TOKENS.WebhookReceiptRepository, useFactory: (p: PrismaService) => new PrismaWebhookReceiptRepository(p), inject: [PrismaService] },
@@ -381,12 +402,14 @@ export class AppModule {
               AdminController,
               MerchantBookingsController,
               MerchantResourcesController,
+              MerchantPropertiesController,
               MerchantSettingsController,
               MerchantCatalogController,
               MerchantUsersController,
               WebChatController,
               PaymentsController,
               MerchantPushController,
+              MediaController,
             ]
           : [],
       providers,

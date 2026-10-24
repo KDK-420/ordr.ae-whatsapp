@@ -47,12 +47,15 @@ export interface ProductVariant {
   isActive: boolean;
 }
 
-/** A product (food item) or a service (salon treatment). Same shape, different blueprint. */
+/** What an offering is: a product (food, goods), a service (salon treatment) or a stay (a room type, priced per night). */
+export type OfferingType = "product" | "service" | "stay";
+
+/** A product (food item), a service (salon treatment) or a room type (resort stay). Same shape, different blueprint. */
 export interface Offering {
   id: OfferingId;
   tenantId: TenantId;
   categoryId?: string;
-  type: "product" | "service";
+  type: OfferingType;
   name: LocalizedText;
   description?: LocalizedText;
   priceMinor: number;
@@ -61,6 +64,12 @@ export interface Offering {
   imageUrl?: string;
   /** Units on hand for products without variants; undefined means not tracked. */
   stock?: number;
+  /** Stays: the property (resort) this room type belongs to. */
+  propertyId?: string;
+  /** Stays: most guests one unit sleeps. */
+  maxGuests?: number;
+  /** Stays: how many identical units exist (rooms, villas, tents); undefined means one. */
+  units?: number;
   sortOrder: number;
   isActive: boolean;
   modifierGroups: ModifierGroup[];

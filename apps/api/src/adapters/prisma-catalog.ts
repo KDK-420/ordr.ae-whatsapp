@@ -145,7 +145,7 @@ function toOffering(row: OfferingRow, includeInactiveOptions = false): Offering 
     id: row.id,
     tenantId: row.tenantId,
     categoryId: row.categoryId ?? undefined,
-    type: row.type === "service" ? "service" : "product",
+    type: row.type === "service" || row.type === "stay" ? row.type : "product",
     name: asText(row.name) ?? {},
     description: asText(row.description),
     priceMinor: row.priceMinor,
@@ -153,6 +153,9 @@ function toOffering(row: OfferingRow, includeInactiveOptions = false): Offering 
     durationMinutes: row.durationMinutes ?? undefined,
     imageUrl: row.imageUrl ?? undefined,
     stock: row.stock ?? undefined,
+    propertyId: row.propertyId ?? undefined,
+    maxGuests: row.maxGuests ?? undefined,
+    units: row.units ?? undefined,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
     modifierGroups: groups,
@@ -239,6 +242,9 @@ export class PrismaCatalogRepository implements CatalogRepository {
         imageUrl: input.imageUrl ?? null,
         sortOrder,
         stock: input.stock ?? null,
+        propertyId: input.propertyId ?? null,
+        maxGuests: input.maxGuests ?? null,
+        units: input.units ?? null,
         isActive: input.isActive ?? true,
         modifierGroups: { create: groupsCreate(tenantId, input.modifierGroups ?? []) },
         variants: { create: variantsCreate(tenantId, input.variants ?? []) },
@@ -277,6 +283,9 @@ export class PrismaCatalogRepository implements CatalogRepository {
           ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
           ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
           ...(patch.stock !== undefined ? { stock: patch.stock } : {}),
+          ...(patch.propertyId !== undefined ? { propertyId: patch.propertyId } : {}),
+          ...(patch.maxGuests !== undefined ? { maxGuests: patch.maxGuests } : {}),
+          ...(patch.units !== undefined ? { units: patch.units } : {}),
           ...(patch.modifierGroups ? { modifierGroups: { create: groupsCreate(tenantId, patch.modifierGroups) } } : {}),
         },
         include: OFFERING_INCLUDE,
@@ -372,10 +381,30 @@ function toOrder(row: OrderRow): Order {
     scheduledAt: row.scheduledAt?.toISOString(),
     resourceId: row.resourceId ?? undefined,
     durationMinutes: row.durationMinutes ?? undefined,
+    checkOutAt: row.checkOutAt?.toISOString(),
+    guests: row.guests ?? undefined,
+    propertyId: row.propertyId ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+/** Order lines as Prisma nested creates. */
+export function orderItemsCreate(items: OrderItem[]): Prisma.OrderItemUncheckedCreateWithoutOrderInput[] {
+  return items.map((i) => ({
+    offeringId: i.offeringId || null,
+    variantId: i.variantId ?? null,
+    variantTitle: i.variantTitle ?? null,
+    title: i.title,
+    quantity: i.quantity,
+    unitPriceMinor: i.unitPriceMinor,
+    modifiers: i.modifiers as unknown as Prisma.InputJsonValue,
+    lineTotalMinor: i.lineTotalMinor,
+    notes: i.notes,
+  }));
+}
+
+export { toOrder };
 
 export class PrismaOrderRepository implements OrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -405,19 +434,10 @@ export class PrismaOrderRepository implements OrderRepository {
           scheduledAt: input.scheduledAt,
           resourceId: input.resourceId,
           durationMinutes: input.durationMinutes,
-          items: {
-            create: input.items.map((i) => ({
-              offeringId: i.offeringId || null,
-              variantId: i.variantId ?? null,
-              variantTitle: i.variantTitle ?? null,
-              title: i.title,
-              quantity: i.quantity,
-              unitPriceMinor: i.unitPriceMinor,
-              modifiers: i.modifiers as unknown as Prisma.InputJsonValue,
-              lineTotalMinor: i.lineTotalMinor,
-              notes: i.notes,
-            })),
-          },
+          checkOutAt: input.checkOutAt,
+          guests: input.guests,
+          propertyId: input.propertyId,
+          items: { create: orderItemsCreate(input.items) },
           events: { create: { tenantId: input.tenantId, type: "order.placed", payload: {} } },
         },
         include: { items: true },
@@ -576,10 +596,11 @@ export class PrismaOrderRepository implements OrderRepository {
     return rows.map(toOrder);
   }
 
-  async listRecent(tenantId: string, opts: { statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+  async listRecent(tenantId: string, opts: { customerId?: string; statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
     const rows = await this.prisma.order.findMany({
       where: {
         tenantId,
+        ...(opts.customerId ? { customerId: opts.customerId } : {}),
         ...(opts.statuses ? { status: { in: opts.statuses } } : {}),
         ...(opts.since ? { updatedAt: { gte: opts.since } } : {}),
       },

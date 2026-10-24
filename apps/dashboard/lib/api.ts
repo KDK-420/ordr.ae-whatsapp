@@ -12,10 +12,15 @@ export interface OrderItem {
 export interface OrderView {
   id: string;
   number: number;
-  kind?: "order" | "booking";
+  kind?: "order" | "booking" | "stay";
   scheduledAt?: string;
   resourceId?: string;
   durationMinutes?: number;
+  /** Stays: check-out instant, guests and the resort. */
+  checkOutAt?: string;
+  guests?: number;
+  propertyId?: string;
+  propertyName?: string;
   status: string;
   fulfillmentType: string;
   source: string;
@@ -159,16 +164,25 @@ export interface ModifierGroup {
 export interface Offering {
   id: string;
   categoryId?: string | null;
-  type: "product" | "service";
+  type: "product" | "service" | "stay";
   name: LocalizedText;
   description?: LocalizedText | null;
   priceMinor: number;
   currency: string;
   durationMinutes?: number | null;
+  /** Public https link of the item's photo, sent to customers on request. */
+  imageUrl?: string | null;
+  /** Room types: the resort, guests per unit and how many identical units exist. */
+  propertyId?: string | null;
+  maxGuests?: number | null;
+  units?: number | null;
   sortOrder: number;
   isActive: boolean;
   modifierGroups: ModifierGroup[];
 }
+
+/** Uploads a JPEG or PNG (as a data: URL) and returns where it is served from. */
+export const uploadImage = (dataUrl: string) => call<{ id: string; url: string; mimeType: string; sizeBytes: number }>("/merchant/media", { method: "POST", body: JSON.stringify({ dataUrl }) });
 
 export type OfferingInput = Omit<Offering, "id" | "currency" | "type" | "sortOrder" | "modifierGroups"> & Partial<Pick<Offering, "currency" | "type" | "sortOrder" | "modifierGroups">>;
 
@@ -230,6 +244,26 @@ export const createResource = (input: ResourceInput) => call<Resource>("/merchan
 export const updateResource = (id: string, patch: Partial<ResourceInput>) =>
   call<Resource>(`/merchant/resources/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
 
+export interface Property {
+  id: string;
+  name: LocalizedText;
+  description?: LocalizedText | null;
+  address?: string | null;
+  mapsUrl?: string | null;
+  phone?: string | null;
+  checkInTime: string;
+  checkOutTime: string;
+  amenities: string[];
+  imageUrls: string[];
+  sortOrder: number;
+  isActive: boolean;
+}
+export type PropertyInput = Partial<Omit<Property, "id" | "name">> & { name: LocalizedText };
+export const listProperties = () => call<{ properties: Property[] }>("/merchant/properties");
+export const createProperty = (input: PropertyInput) => call<Property>("/merchant/properties", { method: "POST", body: JSON.stringify(input) });
+export const updateProperty = (id: string, patch: Partial<PropertyInput>) =>
+  call<Property>(`/merchant/properties/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+
 export interface BookingList {
   bookings: OrderView[];
   resources: Resource[];
@@ -251,10 +285,13 @@ export interface ConversationSettings {
   profile: BusinessProfile;
   /** Staff WhatsApp numbers (digits only) alerted when the bot hands a thread over; at most 5. */
   handoffNumbers: string[];
+  /** Minutes a handed-over chat waits for a person before the bot answers again; 0 keeps it waiting. */
+  handoffResumeMinutes: number;
+  defaultHandoffResumeMinutes: number;
   assistantAvailable: boolean;
 }
 export const getConversationSettings = () => call<ConversationSettings>("/merchant/settings");
-export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[] }) =>
+export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[]; handoffResumeMinutes?: number }) =>
   call<ConversationSettings>("/merchant/settings", { method: "PATCH", body: JSON.stringify(patch) });
 
 export interface PooledNumber {
