@@ -27,6 +27,8 @@ export interface AgentInput {
   channel: "whatsapp" | "web";
   /** Stored id of the inbound message, for memory provenance. */
   inboundMessageId?: string;
+  /** The thread was waiting for a person and just came back to the bot (keyword or timeout): help, do not hand over again unasked. */
+  resumedAfterHandoff?: boolean;
   /** Consented memories about this customer at this tenant (empty when off or not consented). */
   memories: MemoryRecord[];
   /** Null when the customer was never asked; undefined when the tenant keeps no memory. */

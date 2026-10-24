@@ -134,6 +134,8 @@ export class ConversationService {
     const language = session?.language ?? customer.language ?? (spoken ? detectLanguage(spoken, blueprint.languages, tenant.defaultLanguage) : tenant.defaultLanguage);
 
     const preface: OutboundMessage[] = [];
+    // Whether this turn takes the thread back from a person, so the agent helps instead of handing over again.
+    let resumed = false;
     if (!globalFlow && conversation.status === "human") {
       // A person owns this thread. The customer must never feel dropped: a recent human reply means stay quiet (the
       // inbox shows the message); still waiting means say so and nudge staff; waiting too long means the bot steps back in.
@@ -146,9 +148,11 @@ export class ConversationService {
       this.logger.log(`conversation ${conversation.id}: no staff reply for ${handoffResumeMinutes(tenant.settings)} min, bot resumes`);
       await this.conversations.setConversationStatus(conversation.id, "bot");
       preface.push(text(t(COPY.handoffResumed, language)));
+      resumed = true;
     } else if (globalFlow && conversation.status === "human") {
       // "menu" / "hi" while a person owns the thread: the customer wants the assistant back, in either style.
       await this.conversations.setConversationStatus(conversation.id, "bot");
+      resumed = true;
     }
     // The bot will answer: show "typing…" while the flow or the model works on it.
     this.markRead(ctx, event.messageId, true);
@@ -165,7 +169,7 @@ export class ConversationService {
       if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
         // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
         // older guided message still goes to its flow; everything else is a conversation.
-        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments });
+        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments, resumedAfterHandoff: resumed });
       } else if (globalFlow) {
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
         const carried = session?.context.cart ? { cart: session.context.cart } : {};
@@ -247,7 +251,7 @@ export class ConversationService {
     language: string,
     baseContext: Record<string, unknown>,
     actionCtx: Omit<ActionContext, "language" | "context">,
-    opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[] },
+    opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[]; resumedAfterHandoff?: boolean },
   ): Promise<TurnResult> {
     try {
       const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);

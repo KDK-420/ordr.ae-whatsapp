@@ -321,6 +321,17 @@ describe("AnthropicAgent", () => {
     expect(api4.toolResults()[1]).toMatch(/^Cancelled booking #1/);
   });
 
+  it("tells the model when a thread came back from a stalled handoff", async () => {
+    const h = setup();
+    const api = fakeApi([{ text: "I'm here, what do you need?" }]);
+    const agent = new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
+    await agent.reply({ ...h.input, text: "hi", history: [], resumedAfterHandoff: true });
+    expect(JSON.stringify(api.requests[0]!.system)).toContain("This chat is back with you");
+    const api2 = fakeApi([{ text: "Hi!" }]);
+    await new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api2.fetchImpl }).reply({ ...h.input, text: "hi", history: [] });
+    expect(JSON.stringify(api2.requests[0]!.system)).not.toContain("This chat is back with you");
+  });
+
   it("surfaces API failures so the caller can fall back to the menu", async () => {
     const h = setup();
     const failing: typeof fetch = async () => new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "busy" } }), { status: 529 });

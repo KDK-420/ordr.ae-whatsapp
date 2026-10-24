@@ -93,6 +93,8 @@ describe("natural conversation style", () => {
     await send(fixtures.textMessageWebhook("anyone?", base));
     expect(sender.to(base.from).slice(-2).map(bodyOf)).toEqual([expect.stringContaining("Sorry for the wait"), "Back with you. What can I do?"]);
     expect(agent.calls).toHaveLength(2);
+    expect(agent.calls[1]?.resumedAfterHandoff).toBe(true);
+    expect(agent.calls[0]?.resumedAfterHandoff).toBe(false);
     expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
   });
 
@@ -103,6 +105,7 @@ describe("natural conversation style", () => {
     agent.next = { text: "Hi again! What can I do for you?", handoff: false };
     await send(fixtures.textMessageWebhook("Hi", base));
     expect(bodyOf(last())).toBe("Hi again! What can I do for you?");
+    expect(agent.calls.at(-1)?.resumedAfterHandoff).toBe(true);
     expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
     // The follow-up is answered by the agent too, not swallowed.
     agent.next = { text: "We offer haircuts, colour, manicures and pedicures.", handoff: false };

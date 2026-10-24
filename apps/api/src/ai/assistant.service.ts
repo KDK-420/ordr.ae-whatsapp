@@ -50,7 +50,7 @@ export class AssistantService {
    * loaded only with the customer's consent, and every run is recorded for the audit log.
    * Throws when the model fails so the caller can fall back.
    */
-  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string, opts: { channel?: "whatsapp" | "web"; inboundMessageId?: string; attachments?: AgentAttachment[] } = {}): Promise<AgentReply> {
+  async converse(tenant: Tenant, blueprint: Blueprint, customer: Customer, conversationId: string, text: string, language: string, opts: { channel?: "whatsapp" | "web"; inboundMessageId?: string; attachments?: AgentAttachment[]; resumedAfterHandoff?: boolean } = {}): Promise<AgentReply> {
     const started = Date.now();
     const memoryOn = this.memory.enabledFor(tenant);
     const [knowledge, history, memories, consent, recent] = await Promise.all([
@@ -62,7 +62,7 @@ export class AssistantService {
     ]);
     const channel = opts.channel ?? "whatsapp";
     try {
-      const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, attachments: opts.attachments, history, knowledge, channel, inboundMessageId: opts.inboundMessageId, memories, consent, recentOrders: recent });
+      const reply = await this.agent.reply({ tenant, blueprint, customer, conversationId, language, text, attachments: opts.attachments, history, knowledge, channel, inboundMessageId: opts.inboundMessageId, resumedAfterHandoff: opts.resumedAfterHandoff, memories, consent, recentOrders: recent });
       this.logger.log(`converse "${text.slice(0, 60)}"${opts.attachments?.length ? ` +${opts.attachments.length} image(s)` : ""} -> ${reply.text.length} chars${reply.handoff ? ", handoff" : ""}${reply.startFlow ? `, flow ${reply.startFlow}` : ""}${reply.trace ? `, ${reply.trace.tools.length} tool call(s)` : ""}`);
       await this.recordRun(tenant.id, conversationId, channel, opts.inboundMessageId, reply, started);
       return reply;
