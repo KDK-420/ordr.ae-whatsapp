@@ -325,10 +325,16 @@ describe("AnthropicAgent", () => {
     const h = setup();
     const api = fakeApi([{ text: "Still with the team. Anything else?" }]);
     const agent = new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
-    await agent.reply({ ...h.input, text: "any news on the valet?", history: [], openRequest: { reason: "valet service question", sinceMinutes: 4 }, businessNumber: "+971 50 939 7420" });
+    await agent.reply({ ...h.input, knowledge: { ...h.input.knowledge, profile: { ...h.input.knowledge.profile, phone: "+971 50 939 7420" } }, text: "any news on the valet?", history: [], openRequest: { reason: "valet service question", sinceMinutes: 4 }, businessNumber: "+971 50 939 7420" });
     const system = (api.requests[0]!.system as Array<{ text: string }>).map((b) => b.text).join("\n");
     expect(system).toContain('"valet service question" was passed to the team 4 minute(s) ago');
     expect(system).toContain("The customer is writing to +971 50 939 7420, which is this chat. Never tell them to call");
+    // The profile phone is that same number here, so it is not offered as "how to call".
+    expect(system).not.toContain("- Phone:");
+    // A second hand_over while the request is open tells the model it is already with the team.
+    const api3 = fakeApi([{ tool: { name: "hand_over_to_human", input: { reason: "valet service question" } } }, { text: "Still with the team." }]);
+    await new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api3.fetchImpl }).reply({ ...h.input, text: "any news?", history: [], openRequest: { reason: "valet service question", sinceMinutes: 4 }, businessNumber: "+971 50 939 7420" });
+    expect(api3.toolResults()[0]).toContain("The team already has this customer's request");
     const api2 = fakeApi([{ text: "Hi!" }]);
     await new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api2.fetchImpl }).reply({ ...h.input, text: "hi", history: [] });
     expect(JSON.stringify(api2.requests[0]!.system)).not.toContain("Open with the team");

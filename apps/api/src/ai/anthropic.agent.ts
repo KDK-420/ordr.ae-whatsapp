@@ -555,12 +555,13 @@ function photosTool(ctx: ToolContext, catalog: CatalogRepository, properties?: P
 function handoffTool(ctx: ToolContext): Tool {
   return betaZodTool({
     name: "hand_over_to_human",
-    description: "Pauses the assistant and alerts the team so a person continues this chat. Use when the customer asks for a person, complains, or asks for something the tools cannot do (refunds, special requests).",
+    description: "Sends a question or request to the team; a person answers it in this chat while you keep helping with everything else. Use when the customer asks for a person, complains, or asks something the tools and facts do not cover (refunds, special requests, unknown services). Call it again only when the customer chases an already open request.",
     inputSchema: z.object({ reason: z.string().max(200) }),
     run: traced(ctx, "hand_over_to_human", async ({ reason }) => {
       ctx.effects.handoff = true;
       ctx.effects.handoffReason = reason.trim() || undefined;
       ctx.logger.log(`handoff requested for ${ctx.input.customer.waId}: ${reason}`);
+      if (ctx.input.openRequest) return `The team already has this customer's request ("${ctx.input.openRequest.reason ?? "to speak with a person"}", ${ctx.input.openRequest.sinceMinutes} min); they are nudged at most every 10 minutes. Do not say you sent it again unless the customer asked about it; just answer their message and mention you can keep helping.`;
       return "The team has been alerted and will answer in this chat. Tell the customer briefly, and say you can keep helping with anything else meanwhile.";
     }),
   });
@@ -607,7 +608,7 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
   ];
   if (input.openRequest) {
     const r = input.openRequest;
-    lines.push("", `Open with the team: the customer's request "${r.reason ?? "to speak with a person"}" was passed to the team ${r.sinceMinutes} minute(s) ago and a person will answer it here when they pick it up. Do not escalate it again by yourself and do not promise a time. If the customer asks about it or chases, say it is still with the team and call hand_over_to_human once with the same reason so they are nudged. Keep helping with everything else as normal.`);
+    lines.push("", `Open with the team: the customer's request "${r.reason ?? "to speak with a person"}" was passed to the team ${r.sinceMinutes} minute(s) ago and a person will answer it here when they pick it up. Do not mention it or escalate it again unless the customer brings it up; never promise a time. Only when the customer asks about it or chases, say it is still with the team and call hand_over_to_human once with the same reason so they are nudged. Everything else: just answer as normal, without referring to the open request.`);
   }
   if (input.businessNumber) {
     lines.push("", `The customer is writing to ${input.businessNumber}, which is this chat. Never tell them to call, text or "check with the business" on that number, and never give it as a way to reach someone: anything you cannot answer goes to the team with hand_over_to_human, and the answer comes back in this chat.`);
@@ -620,7 +621,11 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
     if (input.memories.length) lines.push("", "What you remember about this customer (with their consent):", ...input.memories.map((m) => `- ${m.key}: ${typeof m.value === "string" ? m.value : JSON.stringify(m.value)}`));
   }
   if (input.recentOrders.length) lines.push("", "Their recent history here:", ...input.recentOrders.slice(0, 5).map((o) => `- #${o.number} ${o.kind === "booking" && o.scheduledAt ? formatWhen(new Date(o.scheduledAt), tz, "en") : o.createdAt.slice(0, 10)}: ${o.items.map((i) => `${i.quantity > 1 ? `${i.quantity} x ` : ""}${i.title}`).join(", ")} (${o.status})`));
-  const profile = profilePromptLines(k.profile ?? {});
+  // The profile phone is often the WhatsApp number itself; never offer the chat's own number as a way to reach anyone.
+  const digits = (v: string) => v.replace(/\D/g, "");
+  const ownNumber = input.businessNumber ? digits(input.businessNumber) : "";
+  const profileSource = k.profile ?? {};
+  const profile = profilePromptLines(ownNumber && profileSource.phone && digits(profileSource.phone) === ownNumber ? { ...profileSource, phone: undefined } : profileSource);
   if (profile.length) lines.push("", "Business details you may share (give the address with the map link when asked where you are; the phone when asked how to call):", ...profile);
   if (k.facts.length) lines.push("", "Business facts you may share:", ...k.facts.map((f) => `- ${f}`));
   return lines.filter((l) => l !== "").join("\n");
