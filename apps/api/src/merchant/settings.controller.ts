@@ -4,7 +4,6 @@ import { conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
-import { DEFAULT_HANDOFF_RESUME_MINUTES, handoffResumeMinutes } from "../conversation/conversation.service";
 import { handoffNumbers, MAX_HANDOFF_NUMBERS } from "../conversation/handoff-notifier";
 import type { BlueprintRegistry, TenantRepository } from "../ports";
 import { businessProfile } from "../tenant-profile";
@@ -27,8 +26,6 @@ const PatchSchema = z.object({
     .optional(),
   /** Staff WhatsApp numbers (E.164 digits, "+" and spaces tolerated) alerted when the bot hands a thread over. An empty list clears them. */
   handoffNumbers: z.array(z.string().trim().regex(/^\+?[\d\s-]{8,20}$/, "must be a phone number in international format")).max(MAX_HANDOFF_NUMBERS).optional(),
-  /** Minutes a handed-over chat may wait for a person before the bot answers again; 0 keeps it waiting. */
-  handoffResumeMinutes: z.number().int().min(0).max(7 * 24 * 60).optional(),
 });
 
 /** Tenant-level settings an owner can change: how the bot talks and what it knows. */
@@ -56,7 +53,6 @@ export class MerchantSettingsController {
     if (parsed.data.facts) patch.facts = parsed.data.facts;
     if (parsed.data.profile) patch.profile = businessProfile({ profile: parsed.data.profile });
     if (parsed.data.handoffNumbers) patch.handoffNumbers = handoffNumbers({ handoffNumbers: parsed.data.handoffNumbers });
-    if (parsed.data.handoffResumeMinutes !== undefined) patch.handoffResumeMinutes = parsed.data.handoffResumeMinutes;
     if (!(await this.tenants.updateSettings(user.tenantId, patch))) throw new NotFoundException("tenant not found");
     return this.view(user.tenantId);
   }
@@ -73,8 +69,6 @@ export class MerchantSettingsController {
       facts,
       profile: businessProfile(tenant.settings),
       handoffNumbers: handoffNumbers(tenant.settings),
-      handoffResumeMinutes: handoffResumeMinutes(tenant.settings),
-      defaultHandoffResumeMinutes: DEFAULT_HANDOFF_RESUME_MINUTES,
       /** Natural style needs the model; without the key it silently runs guided. */
       assistantAvailable: this.assistant.conversational,
     };

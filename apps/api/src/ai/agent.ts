@@ -27,8 +27,10 @@ export interface AgentInput {
   channel: "whatsapp" | "web";
   /** Stored id of the inbound message, for memory provenance. */
   inboundMessageId?: string;
-  /** The thread was waiting for a person and just came back to the bot (keyword or timeout): help, do not hand over again unasked. */
-  resumedAfterHandoff?: boolean;
+  /** The customer already has an open question with the team: keep helping, do not escalate it again. */
+  openRequest?: { reason?: string; sinceMinutes: number };
+  /** The WhatsApp number the customer is writing to, so the model never sends them "to the salon" on it. */
+  businessNumber?: string;
   /** Consented memories about this customer at this tenant (empty when off or not consented). */
   memories: MemoryRecord[];
   /** Null when the customer was never asked; undefined when the tenant keeps no memory. */

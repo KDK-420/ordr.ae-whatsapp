@@ -1,7 +1,7 @@
 import { SlotTakenError, zonedToUtc } from "@ordr/domain";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PrismaConversationRepository } from "../../src/adapters/prisma";
+import { PrismaConversationRepository, PrismaHandoffRequestRepository } from "../../src/adapters/prisma";
 import { PrismaBookingHoldRepository } from "../../src/adapters/prisma-commerce";
 import { PrismaMediaRepository, PrismaPropertyRepository, PrismaStayRepository } from "../../src/adapters/prisma-stays";
 import type { CreateStayInput } from "../../src/ports";
@@ -64,6 +64,7 @@ afterAll(async () => {
     await prisma.property.deleteMany({ where: { tenantId: id } });
     await prisma.mediaAsset.deleteMany({ where: { tenantId: id } });
     await prisma.message.deleteMany({ where: { tenantId: id } });
+    await prisma.handoffRequest.deleteMany({ where: { tenantId: id } });
     await prisma.conversation.deleteMany({ where: { tenantId: id } });
     await prisma.channel.deleteMany({ where: { tenantId: id } });
     await prisma.customer.deleteMany({ where: { tenantId: id } });
@@ -147,5 +148,21 @@ describe("Prisma stays", () => {
     await conversations.touchInbound(conv.id, at);
     expect((await conversations.lastInboundAtByWaId(tenantId, [`web:st${suffix}1`, "nobody"])).get(`web:st${suffix}1`)?.getTime()).toBe(at.getTime());
     expect((await conversations.findCustomerByWaId(tenantId, `web:st${suffix}1`))?.name).toBe("Guest 1");
+
+    // Typing hold and open requests for a person.
+    const until = new Date(Date.now() + 8000);
+    await conversations.setStaffTyping(conv.id, until);
+    expect((await conversations.findConversationById(conv.id))!.staffTypingUntil?.getTime()).toBe(until.getTime());
+    const requests = new PrismaHandoffRequestRepository(prisma);
+    expect(await requests.findOpen(conv.id)).toBeNull();
+    const req = await requests.create({ tenantId, conversationId: conv.id, customerId: `cus_st_${suffix}_1`, reason: "valet", preview: "do you have valet?" });
+    expect(req).toMatchObject({ reason: "valet", alerts: 1, resolvedAt: undefined });
+    expect((await requests.listOpen(tenantId)).map((r) => r.id)).toEqual([req.id]);
+    expect(await requests.listOpen(otherTenantId)).toEqual([]);
+    const chased = await requests.markAlerted(req.id, new Date(), { preview: "still waiting" });
+    expect(chased).toMatchObject({ alerts: 2, preview: "still waiting", reason: "valet" });
+    expect(await requests.resolve(conv.id, "user:it@test", new Date())).toBe(1);
+    expect(await requests.findOpen(conv.id)).toBeNull();
+    expect(await requests.resolve(conv.id, "user:it@test", new Date())).toBe(0);
   });
 });

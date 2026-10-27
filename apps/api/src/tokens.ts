@@ -33,4 +33,5 @@ export const TOKENS = {
   PropertyRepository: Symbol("PropertyRepository"),
   StayRepository: Symbol("StayRepository"),
   MediaRepository: Symbol("MediaRepository"),
+  HandoffRequestRepository: Symbol("HandoffRequestRepository"),
 } as const;

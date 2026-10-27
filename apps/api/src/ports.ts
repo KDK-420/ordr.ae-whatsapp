@@ -105,6 +105,8 @@ export interface ConversationRecord {
   handedOverAt?: Date;
   /** When a staff member last replied from the inbox. */
   lastStaffReplyAt?: Date;
+  /** While in the future, an operator is typing in the inbox and the bot holds its reply. */
+  staffTypingUntil?: Date;
 }
 
 export interface MessageRecord {
@@ -150,8 +152,36 @@ export interface ConversationRepository {
   touchInbound(conversationId: string, at: Date): Promise<void>;
   /** A person replied from the inbox at `at`. */
   markStaffReply(conversationId: string, at: Date): Promise<void>;
+  /** An operator is typing in the inbox: hold the bot's replies until `until`. */
+  setStaffTyping(conversationId: string, until: Date): Promise<void>;
   recordMessage(message: MessageRecord): Promise<void>;
   updateMessageStatus(providerMessageId: string, status: string): Promise<void>;
+}
+
+/** A customer's open question for a person. The bot keeps answering around it; a staff reply resolves it. */
+export interface HandoffRequestRecord {
+  id: string;
+  tenantId: string;
+  conversationId: string;
+  customerId: string;
+  reason?: string;
+  preview?: string;
+  createdAt: Date;
+  lastAlertedAt: Date;
+  alerts: number;
+  resolvedAt?: Date;
+  resolvedBy?: string;
+}
+
+export interface HandoffRequestRepository {
+  findOpen(conversationId: string): Promise<HandoffRequestRecord | null>;
+  /** Open requests of a tenant, oldest first. */
+  listOpen(tenantId: string): Promise<HandoffRequestRecord[]>;
+  create(input: { tenantId: string; conversationId: string; customerId: string; reason?: string; preview?: string }): Promise<HandoffRequestRecord>;
+  /** Staff were alerted again (the customer chased); refreshes preview and reason when given. */
+  markAlerted(id: string, at: Date, patch?: { reason?: string; preview?: string }): Promise<HandoffRequestRecord | null>;
+  /** Closes every open request of the conversation; resolves to how many. */
+  resolve(conversationId: string, by: string, at: Date): Promise<number>;
 }
 
 export interface SessionStore {

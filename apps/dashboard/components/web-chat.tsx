@@ -161,6 +161,12 @@ function Bubble({ message }: { message: WebMessage }) {
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm shadow-sm ${mine ? "rounded-br-sm bg-brand text-white" : "rounded-bl-sm bg-white text-slate-900"}`}>
+        {message.quoted ? (
+          <div className={`mb-1.5 border-l-2 pl-2 text-xs opacity-80 ${mine ? "border-white/60" : "border-brand"}`}>
+            <div className="font-semibold">{message.quoted.role === "customer" ? "You" : "Assistant"}</div>
+            <div className="line-clamp-2">{message.quoted.text}</div>
+          </div>
+        ) : null}
         {message.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={message.imageUrl} alt={message.text || "Photo"} className="-mx-2 mb-1 mt-0.5 max-h-72 rounded-xl object-cover" loading="lazy" />

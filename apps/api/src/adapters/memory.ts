@@ -4,6 +4,8 @@ import { previewOf } from "../conversation/preview";
 import type {
   ChannelInput,
   ConversationRecord,
+  HandoffRequestRecord,
+  HandoffRequestRepository,
   ConversationRepository,
   ConversationStatus,
   ConversationSummary,
@@ -257,6 +259,11 @@ export class InMemoryConversationRepository implements ConversationRepository {
     }
   }
 
+  async setStaffTyping(conversationId: string, until: Date): Promise<void> {
+    const c = this.conversations.get(conversationId);
+    if (c) c.staffTypingUntil = until;
+  }
+
   async touchInbound(conversationId: string, at: Date): Promise<void> {
     const c = this.conversations.get(conversationId);
     if (c) {
@@ -350,5 +357,47 @@ export class InMemoryDedupeStore implements DedupeStore {
     if (until && until > now) return false;
     this.seen.set(key, now + ttlSeconds * 1000);
     return true;
+  }
+}
+
+export class InMemoryHandoffRequestRepository implements HandoffRequestRepository {
+  readonly requests: HandoffRequestRecord[] = [];
+
+  async findOpen(conversationId: string): Promise<HandoffRequestRecord | null> {
+    const r = this.requests.find((x) => x.conversationId === conversationId && !x.resolvedAt);
+    return r ? { ...r } : null;
+  }
+
+  async listOpen(tenantId: string): Promise<HandoffRequestRecord[]> {
+    return this.requests.filter((x) => x.tenantId === tenantId && !x.resolvedAt).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map((r) => ({ ...r }));
+  }
+
+  async create(input: { tenantId: string; conversationId: string; customerId: string; reason?: string; preview?: string }): Promise<HandoffRequestRecord> {
+    const now = new Date();
+    const r: HandoffRequestRecord = { id: nextId("hreq"), ...input, createdAt: now, lastAlertedAt: now, alerts: 1 };
+    this.requests.push(r);
+    return { ...r };
+  }
+
+  async markAlerted(id: string, at: Date, patch: { reason?: string; preview?: string } = {}): Promise<HandoffRequestRecord | null> {
+    const r = this.requests.find((x) => x.id === id);
+    if (!r) return null;
+    r.lastAlertedAt = at;
+    r.alerts += 1;
+    if (patch.reason) r.reason = patch.reason;
+    if (patch.preview) r.preview = patch.preview;
+    return { ...r };
+  }
+
+  async resolve(conversationId: string, by: string, at: Date): Promise<number> {
+    let n = 0;
+    for (const r of this.requests) {
+      if (r.conversationId === conversationId && !r.resolvedAt) {
+        r.resolvedAt = at;
+        r.resolvedBy = by;
+        n += 1;
+      }
+    }
+    return n;
   }
 }

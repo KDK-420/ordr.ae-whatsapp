@@ -89,17 +89,27 @@ Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
   button mutes it, remembered per browser in localStorage; browsers only play it after the first
   click or key on the page) and, once "Notify me" has been allowed there, a browser notification.
   Web chat and demo customers' own ids are never alerted; staff numbers are always real.
-- **While a customer waits for a person.** `ConversationService` decides per message in a
-  `human` thread (`whileHumanOwns`): a staff reply since the handoff and inside
-  `handoffResumeMinutes` means the bot stays silent (the inbox shows the message); no reply yet
-  means the customer gets `COPY.handoffWaiting` ("your message has reached our team… send
-  *menu*…") at most once per 10 minutes (`DedupeStore` key `handoff-ack:<conversation>`) and
-  `conversation.handed_over` is published again with reason "still waiting for a reply (n min)",
-  so WhatsApp and push alerts repeat; more than `handoffResumeMinutes` (tenant setting, default
-  60, 0 disables) since the last human action means the bot sends `COPY.handoffResumed` and
-  answers the message itself, setting the thread back to `bot`. `Conversation.handedOverAt` is
-  stamped when a thread becomes `human` (bot handoff or "Take over"), `lastStaffReplyAt` on
-  every inbox reply. Owners change the minutes under Settings › Conversation.
+- **While a customer waits for a person.** A handoff (the agent's `hand_over_to_human`, or the
+  guided talk-to-us flow) is not a mode: it opens a `HandoffRequest` on the thread, alerts staff
+  and leaves the thread with the bot, which keeps answering everything else. The agent's prompt
+  carries the open request (reason, minutes waiting) so it does not escalate the same thing again,
+  says "still with the team" when asked, and nudges staff by calling the tool again when the
+  customer chases; `ConversationService.requestPerson` re-alerts at most once per 10 minutes and
+  puts "still waiting, N min" in the alert. A reply from the inbox resolves the request
+  (`resolvedBy user:<email>`); the inbox also has a Resolve button for questions handled by phone.
+  The only automatic pause is live: the dashboard composer sends `POST
+  /merchant/conversations/:id/typing` every 3 s while it holds text, which sets
+  `Conversation.staffTypingUntil` 8 s ahead; a customer message that arrives meanwhile is held
+  for up to a minute, dropped from the bot if staff reply in that time, answered by the bot
+  otherwise. "Take over" in the inbox still silences the bot until "Hand back to bot" or a
+  `menu`/`hi` keyword; a plain reply never does. There is no inactivity timer and no
+  "your message reached the team" note in either style.
+- **Reply to a specific message.** The inbox's reply arrow on a bubble quotes it: the API sends
+  the text with WhatsApp's `context.message_id` (the quoted bubble shows on the customer's phone)
+  and stores `{ quoted: { id, direction, preview } }` next to the payload, which the inbox and web
+  chat render. Web chat and demo messages have no Meta id, so for them the quote is shown but not
+  sent to Meta. `POST /merchant/conversations/:id/messages` takes `replyToMessageId` (stored
+  message id); an id outside the thread is a 404.
 - **Catalog photos.** `POST /merchant/media` takes `{ dataUrl }` (base64 JPEG or PNG, 5 MB; the
   API's JSON body limit is 8 MB for this) and stores the bytes in `MediaAsset`; `GET
   /v1/media/:id` serves them with a one-year immutable cache header, so `PUBLIC_BASE_URL/v1/media/<id>`
@@ -201,9 +211,13 @@ Still mocked or missing:
 
 Per tenant, in `tenant.settings`: `memoryEnabled` (default true; false disables memory tools
 and recall), `conversationStyle` (`natural` or `guided`), `facts`, `profile`, `handoffNumbers`
-(staff WhatsApp numbers alerted on a bot-to-human handoff, see above), `handoffResumeMinutes`
-(how long a handed-over chat waits for a person before the bot answers again; default 60, 0 never),
-and for resorts `maxNights`, `maxAdvanceDays`.
+(staff WhatsApp numbers alerted on a bot-to-human handoff, see above), and for resorts
+`maxNights`, `maxAdvanceDays`.
+
+## Data model additions (migration `20261027090000_handoff_requests_typing`)
+
+`HandoffRequest` (a customer's open question for a person: reason, preview, alerts, resolved by
+whom) and `Conversation.staffTypingUntil` (the typing hold).
 
 ## Data model additions (migration `20261024090000_handoff_media_properties_stays`)
 

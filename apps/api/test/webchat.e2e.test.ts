@@ -128,7 +128,7 @@ describe("web chat", () => {
     await expect(memory.remember(tenant, agent.calls[0]!.customer.id, { kind: "preference", key: "x", value: "y" })).rejects.toMatchObject({ code: "disabled" });
   });
 
-  it("withdrawing consent deletes what was stored; a handoff marks the thread for a person", async () => {
+  it("withdrawing consent deletes what was stored; a handoff keeps the thread with the bot", async () => {
     const a = (await http().post("/v1/chat/sessions").send({ slug: "seed" }).expect(201)).body as { sessionId: string; token: string };
     await http().post(`/v1/chat/sessions/${a.sessionId}/messages`).set("authorization", `Bearer ${a.token}`).send({ text: "hi" }).expect(200);
     const tenant = (await repo.findById("tenant_seed"))!;
@@ -141,7 +141,8 @@ describe("web chat", () => {
 
     agent.next = { text: "A colleague will take it from here.", handoff: true };
     const res = await http().post(`/v1/chat/sessions/${a.sessionId}/messages`).set("authorization", `Bearer ${a.token}`).send({ text: "I want a person" }).expect(200);
-    expect(res.body.status).toBe("human");
+    // A handoff no longer takes the thread away from the bot: the customer can keep asking while the team picks it up.
+    expect(res.body.status).toBe("bot");
     expect(res.body.messages.at(-1).text).toBe("A colleague will take it from here.");
   });
 });

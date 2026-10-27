@@ -321,15 +321,17 @@ describe("AnthropicAgent", () => {
     expect(api4.toolResults()[1]).toMatch(/^Cancelled booking #1/);
   });
 
-  it("tells the model when a thread came back from a stalled handoff", async () => {
+  it("tells the model about an open request for the team and about its own number", async () => {
     const h = setup();
-    const api = fakeApi([{ text: "I'm here, what do you need?" }]);
+    const api = fakeApi([{ text: "Still with the team. Anything else?" }]);
     const agent = new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api.fetchImpl });
-    await agent.reply({ ...h.input, text: "hi", history: [], resumedAfterHandoff: true });
-    expect(JSON.stringify(api.requests[0]!.system)).toContain("This chat is back with you");
+    await agent.reply({ ...h.input, text: "any news on the valet?", history: [], openRequest: { reason: "valet service question", sinceMinutes: 4 }, businessNumber: "+971 50 939 7420" });
+    const system = (api.requests[0]!.system as Array<{ text: string }>).map((b) => b.text).join("\n");
+    expect(system).toContain('"valet service question" was passed to the team 4 minute(s) ago');
+    expect(system).toContain("The customer is writing to +971 50 939 7420, which is this chat. Never tell them to call");
     const api2 = fakeApi([{ text: "Hi!" }]);
     await new AnthropicAgent(h.deps, { apiKey: "k", model: "claude-opus-5-5", fetch: api2.fetchImpl }).reply({ ...h.input, text: "hi", history: [] });
-    expect(JSON.stringify(api2.requests[0]!.system)).not.toContain("This chat is back with you");
+    expect(JSON.stringify(api2.requests[0]!.system)).not.toContain("Open with the team");
   });
 
   it("surfaces API failures so the caller can fall back to the menu", async () => {

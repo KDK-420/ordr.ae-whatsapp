@@ -7,14 +7,21 @@ note says where the build is and what to do next.
 
 ### Changelog
 
+- 2026-10-27: **a handoff is an open question, not a mode.** Research into how WhatsApp
+  platforms do it (Chatfuel, Meya, Intercom Fin, Velaro, Zendesk) and a field test showed that
+  silencing the bot on a handoff leaves customers unanswered. Now `hand_over_to_human` opens a
+  `HandoffRequest`, alerts staff (again when the customer chases, at most every 10 min) and the
+  bot keeps answering everything else, aware of the open request. An inbox reply resolves it;
+  Resolve covers questions handled by phone. The only pause is live: the composer's typing
+  heartbeat holds the bot for a few seconds. "Take over" remains the explicit silence. The
+  inbox gained reply-to-message (sent as a WhatsApp quoted reply) and a waiting banner; the
+  `handoffResumeMinutes` setting and the waiting/apology notes from 2026-10-24 are gone. The
+  agent is also told the number the customer is writing to, so it never sends them "to the
+  salon" on it. Migration `20261027090000_handoff_requests_typing`. See RUNBOOK ›
+  "While a customer waits for a person".
 - 2026-10-24: four changes in one round.
-  - **Nobody is left hanging after a handoff.** A customer who writes while a person owns the
-    thread gets a short "the team has your message" note (at most once per 10 minutes; `menu`
-    brings the assistant back) and staff are alerted again through `conversation.handed_over`
-    with a "still waiting" reason. After `handoffResumeMinutes` (tenant setting, default 60,
-    0 = never) with no staff reply the bot apologises and answers again. `Conversation` gained
+  - **Handoff follow-ups (superseded on 2026-10-27, see above).** `Conversation` gained
     `handedOverAt` and `lastStaffReplyAt`; the inbox stamps the latter on every reply.
-    Settings › Conversation has the field. See RUNBOOK › "Handoff alerts".
   - **Performance.** Inbox thread and media lookups are point queries instead of listing up to
     1000 conversations or messages; the agent's "recent orders" is one filtered query instead of
     100 rows scanned; availability loads bookings and holds once per window instead of two

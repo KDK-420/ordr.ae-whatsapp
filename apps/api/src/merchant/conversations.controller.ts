@@ -8,7 +8,7 @@ import type { AuthUser } from "../auth/auth.service";
 import { InboxError, InboxService } from "../inbox/inbox.service";
 import type { ConversationStatus } from "../ports";
 
-const ReplySchema = z.object({ text: z.string().trim().min(1).max(4096) });
+const ReplySchema = z.object({ text: z.string().trim().min(1).max(4096), replyToMessageId: z.string().min(1).max(200).optional() });
 const StatusSchema = z.object({ status: z.enum(["bot", "human", "closed"]) });
 const DraftSchema = z.object({ instruction: z.string().trim().max(1000).optional() });
 const STATUSES: ConversationStatus[] = ["bot", "human", "closed"];
@@ -55,7 +55,21 @@ export class MerchantConversationsController {
   reply(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     const parsed = ReplySchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("text is required");
-    return this.inbox.reply(user.tenantId, id, parsed.data.text, `user:${user.email}`).catch(rethrow);
+    return this.inbox.reply(user.tenantId, id, parsed.data.text, `user:${user.email}`, parsed.data.replyToMessageId).catch(rethrow);
+  }
+
+  /** Heartbeat from the composer: an operator is typing, so the bot holds its replies on this thread for a few seconds. */
+  @Post(":id/typing")
+  @HttpCode(204)
+  async typing(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    await this.inbox.typing(user.tenantId, id).catch(rethrow);
+  }
+
+  /** The customer's open request for a person was handled another way (phone, in person). */
+  @Post(":id/requests/resolve")
+  @HttpCode(200)
+  resolveRequest(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.inbox.resolveRequest(user.tenantId, id, `user:${user.email}`).catch(rethrow);
   }
 
   /** A reply drafted by the assistant for the agent to edit and send. */

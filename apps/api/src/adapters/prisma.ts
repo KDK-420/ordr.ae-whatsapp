@@ -6,6 +6,8 @@ import { previewOf } from "../conversation/preview";
 import type {
   ChannelInput,
   ConversationRecord,
+  HandoffRequestRecord,
+  HandoffRequestRepository,
   ConversationRepository,
   ConversationStatus,
   ConversationSummary,
@@ -242,6 +244,7 @@ export class PrismaConversationRepository implements ConversationRepository {
       lastInboundAt: row.lastInboundAt ?? undefined,
       handedOverAt: row.handedOverAt ?? undefined,
       lastStaffReplyAt: row.lastStaffReplyAt ?? undefined,
+      staffTypingUntil: row.staffTypingUntil ?? undefined,
       updatedAt: row.updatedAt,
     };
   }
@@ -266,6 +269,10 @@ export class PrismaConversationRepository implements ConversationRepository {
 
   async markStaffReply(conversationId: string, at: Date): Promise<void> {
     await this.prisma.conversation.update({ where: { id: conversationId }, data: { lastStaffReplyAt: at } });
+  }
+
+  async setStaffTyping(conversationId: string, until: Date): Promise<void> {
+    await this.prisma.conversation.updateMany({ where: { id: conversationId }, data: { staffTypingUntil: until } });
   }
 
   async findMessageById(conversationId: string, messageId: string): Promise<StoredMessage | null> {
@@ -443,5 +450,48 @@ export class PrismaDedupeStore implements DedupeStore {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return false;
       throw err;
     }
+  }
+}
+
+const toRequest = (r: { id: string; tenantId: string; conversationId: string; customerId: string; reason: string | null; preview: string | null; createdAt: Date; lastAlertedAt: Date; alerts: number; resolvedAt: Date | null; resolvedBy: string | null }): HandoffRequestRecord => ({
+  id: r.id,
+  tenantId: r.tenantId,
+  conversationId: r.conversationId,
+  customerId: r.customerId,
+  reason: r.reason ?? undefined,
+  preview: r.preview ?? undefined,
+  createdAt: r.createdAt,
+  lastAlertedAt: r.lastAlertedAt,
+  alerts: r.alerts,
+  resolvedAt: r.resolvedAt ?? undefined,
+  resolvedBy: r.resolvedBy ?? undefined,
+});
+
+export class PrismaHandoffRequestRepository implements HandoffRequestRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async findOpen(conversationId: string): Promise<HandoffRequestRecord | null> {
+    const r = await this.prisma.handoffRequest.findFirst({ where: { conversationId, resolvedAt: null }, orderBy: { createdAt: "asc" } });
+    return r ? toRequest(r) : null;
+  }
+
+  async listOpen(tenantId: string): Promise<HandoffRequestRecord[]> {
+    const rows = await this.prisma.handoffRequest.findMany({ where: { tenantId, resolvedAt: null }, orderBy: { createdAt: "asc" } });
+    return rows.map(toRequest);
+  }
+
+  async create(input: { tenantId: string; conversationId: string; customerId: string; reason?: string; preview?: string }): Promise<HandoffRequestRecord> {
+    return toRequest(await this.prisma.handoffRequest.create({ data: { tenantId: input.tenantId, conversationId: input.conversationId, customerId: input.customerId, reason: input.reason ?? null, preview: input.preview ?? null } }));
+  }
+
+  async markAlerted(id: string, at: Date, patch: { reason?: string; preview?: string } = {}): Promise<HandoffRequestRecord | null> {
+    const existing = await this.prisma.handoffRequest.findUnique({ where: { id } });
+    if (!existing) return null;
+    return toRequest(await this.prisma.handoffRequest.update({ where: { id }, data: { lastAlertedAt: at, alerts: { increment: 1 }, ...(patch.reason ? { reason: patch.reason } : {}), ...(patch.preview ? { preview: patch.preview } : {}) } }));
+  }
+
+  async resolve(conversationId: string, by: string, at: Date): Promise<number> {
+    const res = await this.prisma.handoffRequest.updateMany({ where: { conversationId, resolvedAt: null }, data: { resolvedAt: at, resolvedBy: by } });
+    return res.count;
   }
 }

@@ -4,6 +4,7 @@ import type { InboundMessage } from "@ordr/whatsapp";
 import { ConversationService } from "../conversation/conversation.service";
 import { InboundQueue } from "../conversation/inbound-queue";
 import { previewOf } from "../conversation/preview";
+import { quotedOf } from "../inbox/inbox.service";
 import type { AppConfig } from "../config";
 import type { ConversationRepository, DedupeStore, TenantContext, TenantRepository, WebSessionRecord, WebSessionRepository } from "../ports";
 import { WEB_WA_PREFIX } from "../simulator/simulator.service";
@@ -25,6 +26,8 @@ export interface WebMessageView {
   text: string;
   /** A photo the assistant sent; `text` is then its caption. */
   imageUrl?: string;
+  /** The earlier message this one replies to, when a person quoted it. */
+  quoted?: { id: string; role: "customer" | "assistant"; text: string };
   createdAt: string;
 }
 
@@ -132,7 +135,10 @@ export class WebChatService {
       tenant: { name: ctx.tenant.name, slug: ctx.tenant.slug, blueprintId: ctx.tenant.blueprintId, language: ctx.tenant.defaultLanguage },
       conversationId: session.conversationId,
       status: conversation?.status === "human" ? "human" : "bot",
-      messages: messages.map((m) => ({ id: m.id, role: m.direction === "in" ? "customer" : "assistant", ...webMessageText(m.payload), createdAt: m.createdAt.toISOString() })),
+      messages: messages.map((m) => {
+        const q = quotedOf(m.payload);
+        return { id: m.id, role: m.direction === "in" ? "customer" : "assistant", ...webMessageText(m.payload), quoted: q ? { id: q.id, role: q.direction === "in" ? "customer" : "assistant", text: q.preview } : undefined, createdAt: m.createdAt.toISOString() } as WebMessageView;
+      }),
     };
   }
 

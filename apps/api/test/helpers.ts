@@ -2,7 +2,7 @@ import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { FakeSender, fixtures } from "@ordr/whatsapp";
-import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository } from "../src/adapters/memory";
+import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryHandoffRequestRepository, InMemorySessionStore, InMemoryTenantRepository } from "../src/adapters/memory";
 import { InMemoryEventBus, InMemoryOrderRepository } from "../src/adapters/memory-catalog";
 import { AppModule, seedTenantFromConfig } from "../src/app.module";
 import { type AppConfig, loadConfig } from "../src/config";
@@ -28,6 +28,7 @@ export interface Harness {
   sender: FakeSender;
   conversations: InMemoryConversationRepository;
   tenants: InMemoryTenantRepository;
+  requests: InMemoryHandoffRequestRepository;
   sessions: InMemorySessionStore;
   orders: InMemoryOrderRepository;
   eventBus: InMemoryEventBus;
@@ -44,8 +45,9 @@ export async function createHarness(): Promise<Harness> {
   const tenants = new InMemoryTenantRepository([seedTenantFromConfig(config)]);
   const orders = new InMemoryOrderRepository();
   const eventBus = new InMemoryEventBus();
+  const requests = new InMemoryHandoffRequestRepository();
   const moduleRef = await Test.createTestingModule({
-    imports: [AppModule.register({ config, overrides: { sender, conversations, sessions, tenants, orders, eventBus, dedupe: new InMemoryDedupeStore() } })],
+    imports: [AppModule.register({ config, overrides: { sender, conversations, sessions, tenants, orders, eventBus, dedupe: new InMemoryDedupeStore(), handoffRequests: requests } })],
   }).compile();
   const app = moduleRef.createNestApplication({ rawBody: true, logger: false });
   await app.init();
@@ -55,6 +57,7 @@ export async function createHarness(): Promise<Harness> {
     sender,
     conversations,
     tenants,
+    requests,
     sessions,
     orders,
     eventBus,

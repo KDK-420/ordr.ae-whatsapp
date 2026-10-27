@@ -7,7 +7,7 @@ import { COPY, t } from "../actions/copy";
 import { type AgentAttachment, conversationStyle } from "../ai/agent";
 import { AssistantService } from "../ai/assistant.service";
 import type { AppConfig } from "../config";
-import type { BlueprintRegistry, ConversationRecord, ConversationRepository, DedupeStore, EventBus, SessionStore, TenantContext, TenantRepository } from "../ports";
+import type { BlueprintRegistry, ConversationRecord, ConversationRepository, DedupeStore, EventBus, HandoffRequestRepository, SessionStore, TenantContext, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import { InboundMediaService } from "./inbound-media.service";
 import { textOf } from "./inbound-text";
@@ -29,30 +29,16 @@ export interface HandedOverPayload {
   reason?: string;
 }
 
-/** A waiting customer is told once per this long that the team has their messages; the same cadence re-alerts staff. */
-const HANDOFF_ACK_EVERY_SECONDS = 10 * 60;
-/** Minutes a handed-over thread may wait with no reply from staff before the bot takes it back. Tenant setting `handoffResumeMinutes`; 0 disables. */
-export const DEFAULT_HANDOFF_RESUME_MINUTES = 60;
+/** Staff are alerted again about an open request at most once per this long, when the customer chases. */
+const REALERT_EVERY_MS = 10 * 60 * 1000;
+/** How long the bot holds a reply while an operator is typing in the inbox, at most. */
+const TYPING_HOLD_MAX_MS = 60 * 1000;
+const TYPING_POLL_MS = 1000;
 
-/** The `handoffResumeMinutes` tenant setting, clean. */
-export function handoffResumeMinutes(settings: Record<string, unknown>): number {
-  const v = settings.handoffResumeMinutes;
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : DEFAULT_HANDOFF_RESUME_MINUTES;
-}
-
-/**
- * What the bot does when a customer writes into a thread a person owns.
- * - resume: nobody from staff has written for `resumeMinutes` (since the handoff, or since their last reply), so the bot answers again.
- * - quiet: a staff member has replied since the handoff and is recent; the inbox shows the new message.
- * - ack: the customer is still waiting for the first human reply; tell them (rate limited) and re-alert staff.
- */
-export function whileHumanOwns(conversation: Pick<ConversationRecord, "handedOverAt" | "lastStaffReplyAt">, resumeMinutes: number, now: Date): "resume" | "quiet" | "ack" {
-  const handedOverAt = conversation.handedOverAt?.getTime();
-  const staffAt = conversation.lastStaffReplyAt?.getTime();
-  const lastHuman = Math.max(handedOverAt ?? 0, staffAt ?? 0);
-  if (lastHuman > 0 && resumeMinutes > 0 && now.getTime() - lastHuman > resumeMinutes * 60_000) return "resume";
-  if (staffAt && handedOverAt && staffAt >= handedOverAt) return "quiet";
-  return "ack";
+/** What the agent is told about a customer's open question for the team. */
+export interface OpenRequestInfo {
+  reason?: string;
+  sinceMinutes: number;
 }
 
 const APOLOGY: Record<string, string> = {
@@ -77,6 +63,7 @@ export class ConversationService {
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(AssistantService) private readonly assistant: AssistantService,
     @Inject(InboundMediaService) private readonly media: InboundMediaService,
+    @Inject(TOKENS.HandoffRequestRepository) private readonly requests: HandoffRequestRepository,
   ) {}
 
   async handleEvent(event: InboundEvent): Promise<void> {
@@ -133,26 +120,16 @@ export class ConversationService {
     const spoken = event.content.kind === "text" ? event.content.text : (received?.payload.transcript ?? received?.payload.caption);
     const language = session?.language ?? customer.language ?? (spoken ? detectLanguage(spoken, blueprint.languages, tenant.defaultLanguage) : tenant.defaultLanguage);
 
-    const preface: OutboundMessage[] = [];
-    // Whether this turn takes the thread back from a person, so the agent helps instead of handing over again.
-    let resumed = false;
     if (!globalFlow && conversation.status === "human") {
-      // A person owns this thread. The customer must never feel dropped: a recent human reply means stay quiet (the
-      // inbox shows the message); still waiting means say so and nudge staff; waiting too long means the bot steps back in.
-      const decision = whileHumanOwns(conversation, handoffResumeMinutes(tenant.settings), receivedAt);
-      if (decision !== "resume") {
-        this.markRead(ctx, event.messageId, false);
-        if (decision === "ack") await this.acknowledgeWaiting(ctx, conversation, customer, language, previewOf(received?.payload ?? event.content));
-        return;
-      }
-      this.logger.log(`conversation ${conversation.id}: no staff reply for ${handoffResumeMinutes(tenant.settings)} min, bot resumes`);
-      await this.conversations.setConversationStatus(conversation.id, "bot");
-      preface.push(text(t(COPY.handoffResumed, language)));
-      resumed = true;
-    } else if (globalFlow && conversation.status === "human") {
-      // "menu" / "hi" while a person owns the thread: the customer wants the assistant back, in either style.
-      await this.conversations.setConversationStatus(conversation.id, "bot");
-      resumed = true;
+      // Someone pressed "Take over": the bot stays out until they hand back or the customer asks for the menu.
+      this.markRead(ctx, event.messageId, false);
+      return;
+    }
+    if (globalFlow && conversation.status === "human") await this.conversations.setConversationStatus(conversation.id, "bot");
+    // An operator typing in the inbox gets a moment to send; if they do, the bot has nothing to add.
+    if (await this.staffAnsweredWhileTyping(conversation, receivedAt)) {
+      this.markRead(ctx, event.messageId, false);
+      return;
     }
     // The bot will answer: show "typing…" while the flow or the model works on it.
     this.markRead(ctx, event.messageId, true);
@@ -169,7 +146,9 @@ export class ConversationService {
       if (natural && asText !== null && !(session?.awaiting && event.content.kind !== "text")) {
         // Natural style: Claude answers like a staff member, booking through tools. A tapped button from an
         // older guided message still goes to its flow; everything else is a conversation.
-        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments, resumedAfterHandoff: resumed });
+        const open = await this.requests.findOpen(conversation.id);
+        const openRequest: OpenRequestInfo | undefined = open ? { reason: open.reason, sinceMinutes: Math.max(0, Math.round((receivedAt.getTime() - open.createdAt.getTime()) / 60_000)) } : undefined;
+        result = await this.converse(runner, blueprint, tenant, customer, conversation.id, asText, language, baseContext, actionCtx, { channel: channel.provider === "web" ? "web" : "whatsapp", inboundMessageId: event.messageId, attachments: received?.attachments, openRequest, businessNumber: channel.provider === "web" ? undefined : channel.displayPhone });
       } else if (globalFlow) {
         // Jumping to "menu" or "cart" must not throw away what the customer has already picked.
         const carried = session?.context.cart ? { cart: session.context.cart } : {};
@@ -199,22 +178,14 @@ export class ConversationService {
       return;
     }
 
-    await this.deliver(ctx, conversation.id, event.from, [...preface, ...result.outbound]);
+    await this.deliver(ctx, conversation.id, event.from, result.outbound);
 
     const finalLanguage = result.session?.language ?? language;
     if (finalLanguage !== customer.language) await this.conversations.setCustomerLanguage(customer.id, finalLanguage);
 
     if (result.handoff) {
-      await this.conversations.setConversationStatus(conversation.id, "human");
-      await this.publishHandedOver({
-        conversationId: conversation.id,
-        customerId: customer.id,
-        customerName: customer.name,
-        waId: customer.waId,
-        channelId: channel.id,
-        preview: previewOf(received?.payload ?? event.content),
-        reason: result.handoffReason,
-      }, tenant.id);
+      // A question for the team, not a mode: the bot keeps answering everything else while staff pick it up.
+      await this.requestPerson(ctx, conversation, customer, previewOf(received?.payload ?? event.content), result.handoffReason, receivedAt);
     }
 
     if (result.session) await this.sessions.set(tenant.id, event.from, result.session, this.config.SESSION_TTL_SECONDS);
@@ -222,22 +193,45 @@ export class ConversationService {
   }
 
   /**
-   * The customer wrote again while waiting for a person. At most once per HANDOFF_ACK_EVERY_SECONDS they are told
-   * the team has their message (and how to get the assistant back), and staff are alerted again through the outbox.
+   * Opens a request for a person, or when one is already open, re-alerts staff (the customer is
+   * chasing) at most once per REALERT_EVERY_MS. The alert itself goes through the outbox.
    */
-  private async acknowledgeWaiting(ctx: TenantContext, conversation: ConversationRecord, customer: Customer, language: string, preview: string): Promise<void> {
-    if (!(await this.dedupe.claim(`handoff-ack:${conversation.id}`, HANDOFF_ACK_EVERY_SECONDS))) return;
-    await this.deliver(ctx, conversation.id, customer.waId, [text(t(COPY.handoffWaiting, language))]);
-    const waitedMin = conversation.handedOverAt ? Math.round((Date.now() - conversation.handedOverAt.getTime()) / 60_000) : undefined;
-    await this.publishHandedOver({
-      conversationId: conversation.id,
-      customerId: customer.id,
-      customerName: customer.name,
-      waId: customer.waId,
-      channelId: ctx.channel.id,
-      preview,
-      reason: waitedMin !== undefined ? `still waiting for a reply (${waitedMin} min)` : "still waiting for a reply",
-    }, ctx.tenant.id);
+  private async requestPerson(ctx: TenantContext, conversation: ConversationRecord, customer: Customer, preview: string, reason: string | undefined, now: Date): Promise<void> {
+    const existing = await this.requests.findOpen(conversation.id);
+    let alert = false;
+    let effectiveReason = reason;
+    if (!existing) {
+      await this.requests.create({ tenantId: ctx.tenant.id, conversationId: conversation.id, customerId: customer.id, reason, preview });
+      alert = true;
+    } else if (now.getTime() - existing.lastAlertedAt.getTime() >= REALERT_EVERY_MS) {
+      await this.requests.markAlerted(existing.id, now, { reason, preview });
+      const waited = Math.round((now.getTime() - existing.createdAt.getTime()) / 60_000);
+      effectiveReason = `${reason ?? existing.reason ?? "needs a person"} (still waiting, ${waited} min)`;
+      alert = true;
+    } else {
+      this.logger.log(`conversation ${conversation.id}: request already open and alerted ${Math.round((now.getTime() - existing.lastAlertedAt.getTime()) / 1000)}s ago; not re-alerting`);
+    }
+    if (alert) {
+      await this.publishHandedOver({ conversationId: conversation.id, customerId: customer.id, customerName: customer.name, waId: customer.waId, channelId: ctx.channel.id, preview, reason: effectiveReason }, ctx.tenant.id);
+    }
+  }
+
+  /**
+   * While an operator is typing in the inbox (heartbeat from the dashboard), the bot waits up to a
+   * minute. Resolves true when staff sent a reply in the meantime, so the bot's turn is skipped.
+   */
+  private async staffAnsweredWhileTyping(conversation: ConversationRecord, receivedAt: Date): Promise<boolean> {
+    let current: (ConversationRecord & { lastInboundAt?: Date }) | null = conversation;
+    const deadline = Date.now() + TYPING_HOLD_MAX_MS;
+    while (current?.staffTypingUntil && current.staffTypingUntil.getTime() > Date.now() && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, TYPING_POLL_MS));
+      current = await this.conversations.findConversationById(conversation.id);
+      if (current?.lastStaffReplyAt && current.lastStaffReplyAt.getTime() >= receivedAt.getTime()) {
+        this.logger.log(`conversation ${conversation.id}: staff replied while typing; bot turn skipped`);
+        return true;
+      }
+    }
+    return false;
   }
 
   /** One natural-style turn; falls back to the guided menu when the model is unavailable. */
@@ -251,7 +245,7 @@ export class ConversationService {
     language: string,
     baseContext: Record<string, unknown>,
     actionCtx: Omit<ActionContext, "language" | "context">,
-    opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[]; resumedAfterHandoff?: boolean },
+    opts: { channel: "whatsapp" | "web"; inboundMessageId: string; attachments?: AgentAttachment[]; openRequest?: OpenRequestInfo; businessNumber?: string },
   ): Promise<TurnResult> {
     try {
       const reply = await this.assistant.converse(tenant, blueprint, customer, conversationId, text_, language, opts);

@@ -109,6 +109,8 @@ model Conversation {
   handedOverAt     DateTime?
   /// When a staff member last replied from the inbox
   lastStaffReplyAt DateTime?
+  /// While this is in the future an operator is typing in the inbox; the bot holds its reply
+  staffTypingUntil DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -116,8 +118,33 @@ model Conversation {
   channel  Channel   @relation(fields: [channelId], references: [id])
   customer Customer  @relation(fields: [customerId], references: [id])
   messages Message[]
+  handoffRequests HandoffRequest[]
 
   @@index([tenantId, customerId, status])
+}
+
+/// A customer's open question for a person. The bot keeps answering around it; staff replying from the inbox resolves it.
+model HandoffRequest {
+  id             String    @id @default(cuid())
+  tenantId       String
+  conversationId String
+  customerId     String
+  /// Why the bot (or the customer) asked for a person
+  reason         String?
+  /// The customer's message at the time, for the alert and the inbox
+  preview        String?
+  createdAt      DateTime  @default(now())
+  /// Last time staff were alerted about it (repeated when the customer chases)
+  lastAlertedAt  DateTime  @default(now())
+  alerts         Int       @default(1)
+  resolvedAt     DateTime?
+  /// user:<email> for an inbox reply or Resolve, or system
+  resolvedBy     String?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([tenantId, resolvedAt, createdAt])
+  @@index([conversationId, resolvedAt])
 }
 
 model Message {

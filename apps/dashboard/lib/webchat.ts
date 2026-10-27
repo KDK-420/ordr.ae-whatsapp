@@ -6,6 +6,8 @@ export interface WebMessage {
   text: string;
   /** A photo the assistant sent; `text` is its caption. */
   imageUrl?: string;
+  /** The earlier message this one answers, when a person quoted it. */
+  quoted?: { id: string; role: "customer" | "assistant"; text: string };
   createdAt: string;
 }
 

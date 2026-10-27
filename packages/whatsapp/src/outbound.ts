@@ -19,9 +19,15 @@ export const LIMITS = {
   rowId: 200,
 } as const;
 
+/** Quotes an earlier message in the thread (WhatsApp shows it above the reply). */
+export interface ReplyContext {
+  message_id: string;
+}
+
 export interface TextMessage {
   type: "text";
   text: { body: string; preview_url?: boolean };
+  context?: ReplyContext;
 }
 
 export interface ReplyButton {
@@ -83,6 +89,7 @@ export interface TemplateMessage {
 export interface ImageMessage {
   type: "image";
   image: { link?: string; id?: string; caption?: string };
+  context?: ReplyContext;
 }
 
 export type OutboundMessage =
@@ -113,10 +120,12 @@ export function clip(value: string, max: number): string {
   return value.length <= max ? value : value.slice(0, max);
 }
 
-export function text(body: string, opts: { previewUrl?: boolean } = {}): TextMessage {
+export function text(body: string, opts: { previewUrl?: boolean; replyTo?: string } = {}): TextMessage {
   assertNotEmpty(body, "text body");
   assertMax(body, LIMITS.textBody, "text body");
-  return { type: "text", text: { body, preview_url: opts.previewUrl ?? false } };
+  const msg: TextMessage = { type: "text", text: { body, preview_url: opts.previewUrl ?? false } };
+  if (opts.replyTo) msg.context = { message_id: opts.replyTo };
+  return msg;
 }
 
 export function buttons(

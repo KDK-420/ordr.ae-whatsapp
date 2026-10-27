@@ -12,7 +12,7 @@ import { AnthropicAssistant } from "./ai/anthropic.assistant";
 import { type Assistant, NoopAssistant } from "./ai/assistant";
 import { AssistantService } from "./ai/assistant.service";
 import { createTranscriber, type Transcriber } from "./ai/transcriber";
-import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryNumberPoolRepository, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
+import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryHandoffRequestRepository, InMemoryNumberPoolRepository, InMemorySessionStore, InMemoryTenantRepository, InMemoryUserRepository } from "./adapters/memory";
 import { InMemoryCatalogRepository, InMemoryEventBus, InMemoryOrderRepository, InMemoryOutboxStore, InMemoryResourceRepository } from "./adapters/memory-catalog";
 import {
   InMemoryAgentRunRepository,
@@ -53,6 +53,7 @@ import { PrismaCatalogRepository, PrismaOrderRepository, PrismaResourceRepositor
 import {
   PrismaConversationRepository,
   PrismaDedupeStore,
+  PrismaHandoffRequestRepository,
   PrismaService,
   PrismaSessionStore,
   PrismaTenantRepository,
@@ -108,6 +109,7 @@ import type {
   NumberPoolRepository,
   PropertyRepository,
   MediaRepository,
+  HandoffRequestRepository,
 } from "./ports";
 import { RootController } from "./root.controller";
 import { TOKENS } from "./tokens";
@@ -145,6 +147,7 @@ export interface AppOptions {
     pushSender: WebPushSender;
     properties: PropertyRepository;
     media: MediaRepository;
+    handoffRequests: HandoffRequestRepository;
   }>;
 }
 
@@ -291,6 +294,7 @@ export class AppModule {
         { provide: TOKENS.PropertyRepository, useValue: overrides.properties ?? new InMemoryPropertyRepository(demo.properties) },
         { provide: TOKENS.StayRepository, useValue: new InMemoryStayRepository(memoryOrders, holds) },
         { provide: TOKENS.MediaRepository, useValue: overrides.media ?? new InMemoryMediaRepository() },
+        { provide: TOKENS.HandoffRequestRepository, useValue: overrides.handoffRequests ?? new InMemoryHandoffRequestRepository() },
         { provide: TOKENS.CartRepository, useValue: new InMemoryCartRepository() },
         { provide: TOKENS.PaymentIntentRepository, useValue: new InMemoryPaymentIntentRepository() },
         { provide: TOKENS.WebhookReceiptRepository, useValue: new InMemoryWebhookReceiptRepository() },
@@ -358,6 +362,9 @@ export class AppModule {
         overrides.media
           ? { provide: TOKENS.MediaRepository, useValue: overrides.media }
           : { provide: TOKENS.MediaRepository, useFactory: (p: PrismaService) => new PrismaMediaRepository(p), inject: [PrismaService] },
+        overrides.handoffRequests
+          ? { provide: TOKENS.HandoffRequestRepository, useValue: overrides.handoffRequests }
+          : { provide: TOKENS.HandoffRequestRepository, useFactory: (p: PrismaService) => new PrismaHandoffRequestRepository(p), inject: [PrismaService] },
         { provide: TOKENS.CartRepository, useFactory: (p: PrismaService) => new PrismaCartRepository(p), inject: [PrismaService] },
         { provide: TOKENS.PaymentIntentRepository, useFactory: (p: PrismaService) => new PrismaPaymentIntentRepository(p), inject: [PrismaService] },
         { provide: TOKENS.WebhookReceiptRepository, useFactory: (p: PrismaService) => new PrismaWebhookReceiptRepository(p), inject: [PrismaService] },

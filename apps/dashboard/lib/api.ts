@@ -123,6 +123,8 @@ export interface ConversationView {
   lastMessage?: { direction: "in" | "out"; kind: string; preview: string; createdAt: string };
   windowOpen: boolean;
   windowClosesAt?: string;
+  /** The customer is waiting for a person; a reply from the inbox resolves it. */
+  openRequest?: { id: string; reason?: string; preview?: string; createdAt: string; lastAlertedAt: string; alerts: number };
 }
 
 export interface MessageView {
@@ -133,6 +135,8 @@ export interface MessageView {
   payload: unknown;
   status?: string;
   createdAt: string;
+  /** The message this one replies to, when it was sent as a quoted reply. */
+  quoted?: { id: string; direction: "in" | "out"; preview: string };
 }
 
 export type LocalizedText = Record<string, string>;
@@ -219,8 +223,11 @@ export const syncTemplates = () => call<{ templates: MessageTemplate[] }>("/merc
 export const listConversations = (status?: ConversationStatus) =>
   call<{ conversations: ConversationView[] }>(`/merchant/conversations${status ? `?status=${status}` : ""}`);
 export const getThread = (id: string) => call<{ conversation: ConversationView; messages: MessageView[] }>(`/merchant/conversations/${encodeURIComponent(id)}`);
-export const replyToConversation = (id: string, text: string) =>
-  call<MessageView>(`/merchant/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+export const replyToConversation = (id: string, text: string, replyToMessageId?: string) =>
+  call<MessageView>(`/merchant/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text, replyToMessageId }) });
+/** Heartbeat while the composer is in use: the bot holds its replies on this thread for a few seconds. */
+export const typingInConversation = (id: string) => call<void>(`/merchant/conversations/${encodeURIComponent(id)}/typing`, { method: "POST" });
+export const resolveConversationRequest = (id: string) => call<ConversationView>(`/merchant/conversations/${encodeURIComponent(id)}/requests/resolve`, { method: "POST" });
 export const draftReply = (id: string, instruction?: string) =>
   call<{ text: string }>(`/merchant/conversations/${encodeURIComponent(id)}/draft`, { method: "POST", body: JSON.stringify({ instruction }) });
 export const setConversationStatus = (id: string, status: ConversationStatus) =>
@@ -285,13 +292,10 @@ export interface ConversationSettings {
   profile: BusinessProfile;
   /** Staff WhatsApp numbers (digits only) alerted when the bot hands a thread over; at most 5. */
   handoffNumbers: string[];
-  /** Minutes a handed-over chat waits for a person before the bot answers again; 0 keeps it waiting. */
-  handoffResumeMinutes: number;
-  defaultHandoffResumeMinutes: number;
   assistantAvailable: boolean;
 }
 export const getConversationSettings = () => call<ConversationSettings>("/merchant/settings");
-export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[]; handoffResumeMinutes?: number }) =>
+export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[] }) =>
   call<ConversationSettings>("/merchant/settings", { method: "PATCH", body: JSON.stringify(patch) });
 
 export interface PooledNumber {

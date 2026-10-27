@@ -76,42 +76,20 @@ describe("natural conversation style", () => {
     expect((await conversations.listMessages(agent.calls[2]!.conversationId)).at(-1)?.direction).toBe("out");
   });
 
-  it("hands the thread to a person when the agent asks, then acknowledges the customer instead of calling the model", async () => {
-    agent.next = { text: "A colleague will reply here shortly.", handoff: true };
-    await send(fixtures.textMessageWebhook("I want to talk to someone", base));
-    expect(bodyOf(last())).toBe("A colleague will reply here shortly.");
+  it("a handoff opens a request and the agent keeps answering, told about the open request and its own number", async () => {
+    agent.next = { text: "I've passed the valet question to the team; meanwhile, anything else?", handoff: true, handoffReason: "valet service question" };
+    await send(fixtures.textMessageWebhook("do you have valet?", base));
+    expect(bodyOf(last())).toContain("passed the valet question");
     const [conv] = await conversations.listConversations("tenant_seed");
-    expect(conv?.status).toBe("human");
-    await send(fixtures.textMessageWebhook("hello?", base));
-    expect(sender.to(base.from)).toHaveLength(2);
-    expect(bodyOf(last())).toContain("your message has reached our team");
-    expect(agent.calls).toHaveLength(1);
-    // Waiting too long: the agent is back, with an apology first.
-    const record = [...conversations.conversations.values()][0]!;
-    record.handedOverAt = new Date(Date.now() - 2 * 60 * 60_000);
-    agent.next = { text: "Back with you. What can I do?", handoff: false };
-    await send(fixtures.textMessageWebhook("anyone?", base));
-    expect(sender.to(base.from).slice(-2).map(bodyOf)).toEqual([expect.stringContaining("Sorry for the wait"), "Back with you. What can I do?"]);
-    expect(agent.calls).toHaveLength(2);
-    expect(agent.calls[1]?.resumedAfterHandoff).toBe(true);
-    expect(agent.calls[0]?.resumedAfterHandoff).toBe(false);
-    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
-  });
+    expect(conv?.status).toBe("bot");
+    expect(agent.calls[0]?.openRequest).toBeUndefined();
+    expect(agent.calls[0]?.businessNumber).toBe("+971500000000");
 
-  it("'hi' or 'menu' while a person owns the thread brings the agent back for good, not for one message", async () => {
-    agent.next = { text: "A colleague will reply here shortly.", handoff: true };
-    await send(fixtures.textMessageWebhook("I need a human", base));
-    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("human");
-    agent.next = { text: "Hi again! What can I do for you?", handoff: false };
-    await send(fixtures.textMessageWebhook("Hi", base));
-    expect(bodyOf(last())).toBe("Hi again! What can I do for you?");
-    expect(agent.calls.at(-1)?.resumedAfterHandoff).toBe(true);
-    expect((await conversations.listConversations("tenant_seed"))[0]?.status).toBe("bot");
-    // The follow-up is answered by the agent too, not swallowed.
-    agent.next = { text: "We offer haircuts, colour, manicures and pedicures.", handoff: false };
-    await send(fixtures.textMessageWebhook("ok let's understand available services", base));
-    expect(bodyOf(last())).toBe("We offer haircuts, colour, manicures and pedicures.");
-    expect(agent.calls).toHaveLength(3);
+    agent.next = { text: "We open 10:00 to 20:00. Your valet question is still with the team.", handoff: false };
+    await send(fixtures.textMessageWebhook("tell me your working hours", base));
+    expect(bodyOf(last())).toContain("10:00 to 20:00");
+    expect(agent.calls[1]?.openRequest).toMatchObject({ reason: "valet service question", sinceMinutes: 0 });
+    expect(agent.calls).toHaveLength(2);
   });
 
   it("falls back to the guided menu when the model fails", async () => {

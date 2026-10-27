@@ -9,7 +9,6 @@ export default function ConversationSettingsPage() {
   const [facts, setFacts] = useState("");
   const [profile, setProfile] = useState<BusinessProfile>({});
   const [handoffNumbers, setHandoffNumbers] = useState("");
-  const [resumeMinutes, setResumeMinutes] = useState("60");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +21,6 @@ export default function ConversationSettingsPage() {
       setFacts(s.facts.join("\n"));
       setProfile(s.profile ?? {});
       setHandoffNumbers((s.handoffNumbers ?? []).map((n) => `+${n}`).join("\n"));
-      setResumeMinutes(String(s.handoffResumeMinutes ?? 60));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
@@ -44,7 +42,6 @@ export default function ConversationSettingsPage() {
         facts: facts.split("\n").map((f) => f.trim()).filter(Boolean),
         profile: { address: profile.address ?? "", mapsUrl: profile.mapsUrl ?? "", phone: profile.phone ?? "", hours: profile.hours ?? "" },
         handoffNumbers: handoffNumbers.split("\n").map((n) => n.trim()).filter(Boolean),
-        handoffResumeMinutes: Math.max(0, Math.floor(Number(resumeMinutes) || 0)),
       });
       setSettings(s);
       setSaved(true);
@@ -113,18 +110,7 @@ export default function ConversationSettingsPage() {
         <label className="block text-sm font-medium">
           Who to alert on WhatsApp when the bot hands over
           <textarea value={handoffNumbers} onChange={(e) => setHandoffNumbers(e.target.value)} rows={3} placeholder={"One number per line, e.g.\n+971 50 123 4567"} inputMode="tel" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand" />
-          <span className="mt-1 block text-xs font-normal text-slate-500">Up to 5 staff numbers in international format. Each gets a WhatsApp message from your business number with the customer&apos;s last message and a link to the inbox. Outside the 24-hour window this uses the &quot;ordr_handoff_alert&quot; template, which must be approved under WhatsApp templates.</span>
-        </label>
-
-        <label className="block text-sm font-medium">
-          Bot takes over again after
-          <div className="mt-1 flex items-center gap-2">
-            <input type="number" min={0} max={10080} value={resumeMinutes} onChange={(e) => setResumeMinutes(e.target.value)} className="w-28 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand" />
-            <span className="text-sm font-normal text-slate-600">minutes without a reply from your team</span>
-          </div>
-          <span className="mt-1 block text-xs font-normal text-slate-500">
-            While a chat waits for a person, every further message from the customer gets a short &quot;the team has your message&quot; note (at most one every 10 minutes) and your numbers are alerted again. After this many minutes with nobody replying the assistant steps back in so the customer is never left hanging. 0 keeps the chat waiting for a person indefinitely.
-          </span>
+          <span className="mt-1 block text-xs font-normal text-slate-500">Up to 5 staff numbers in international format. Each gets a WhatsApp message from your business number with the customer&apos;s last message and a link to the inbox, and again if the customer chases (at most every 10 minutes). The bot keeps answering everything else while the question waits; replying from the inbox resolves it. Outside the 24-hour window this uses the &quot;ordr_handoff_alert&quot; template, which must be approved under WhatsApp templates.</span>
         </label>
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}

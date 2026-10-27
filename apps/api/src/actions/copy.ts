@@ -1,14 +1,6 @@
 /** Small localized strings used by action handlers when composing text for the customer. */
 export const COPY = {
   handoff: { en: "One of our team will reply here shortly.", ar: "سيرد عليك أحد أعضاء فريقنا هنا قريباً." },
-  handoffWaiting: {
-    en: "Thanks, your message has reached our team and a person will reply to you here. Send *menu* any time to go back to the assistant.",
-    ar: "شكراً، وصلت رسالتك إلى فريقنا وسيرد عليك أحد الموظفين هنا. أرسل *القائمة* في أي وقت للعودة إلى المساعد.",
-  },
-  handoffResumed: {
-    en: "Sorry for the wait, nobody from the team has been able to pick this up yet, so I'm back to help in the meantime.",
-    ar: "عذراً على الانتظار، لم يتمكن أحد من الفريق من الرد حتى الآن، لذا عدتُ لمساعدتك في هذه الأثناء.",
-  },
   cartTitle: { en: "Your cart:", ar: "سلتك:" },
   cartEmpty: { en: "Your cart is empty.", ar: "سلتك فارغة." },
   subtotal: { en: "Subtotal", ar: "المجموع الفرعي" },

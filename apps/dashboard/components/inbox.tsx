@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, setConversationStatus } from "@/lib/api";
+import { ApiError, type ConversationView, draftReply, getThread, listConversations, type MessageView, replyToConversation, resolveConversationRequest, setConversationStatus, typingInConversation } from "@/lib/api";
 import { isMuted, playChime, setMuted, unlockChime } from "@/lib/chime";
 import { age } from "@/lib/format";
 import { waFormat } from "@/lib/wa-format";
@@ -20,12 +20,17 @@ function sentImageLink(payload: unknown): string | null {
 
 const LIST_POLL_MS = 8000;
 const THREAD_POLL_MS = 4000;
+/** While the composer holds text, this heartbeat keeps the bot from answering the thread. The API holds for ~8 s per beat. */
+const TYPING_BEAT_MS = 3000;
 
 const STATUS_BADGE: Record<ConversationView["status"], { label: string; cls: string }> = {
   bot: { label: "Bot", cls: "bg-slate-100 text-slate-600" },
-  human: { label: "Agent", cls: "bg-amber-100 text-amber-800" },
+  human: { label: "Taken over", cls: "bg-amber-100 text-amber-800" },
   closed: { label: "Closed", cls: "bg-slate-200 text-slate-500" },
 };
+
+/** A customer is waiting for a person on this thread. */
+const waiting = (c: ConversationView) => !!c.openRequest;
 
 const isWebId = (waId: string | undefined) => !!waId && waId.startsWith("web:");
 const name = (c: ConversationView) => c.customer?.name || (isWebId(c.customer?.waId) ? "Web visitor" : c.customer?.waId ? `+${c.customer.waId}` : "Customer");
@@ -38,7 +43,7 @@ const isNarrow = () => typeof window !== "undefined" && window.matchMedia("(max-
 function notifyHandoff(c: ConversationView): void {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
-    const n = new Notification(`${name(c)} needs a person`, { body: c.lastMessage?.preview ?? "Open the inbox to reply", tag: `handoff-${c.id}` });
+    const n = new Notification(`${name(c)} needs a person`, { body: c.openRequest?.reason ?? c.lastMessage?.preview ?? "Open the inbox to reply", tag: `handoff-${c.id}` });
     n.onclick = () => window.focus();
   } catch {
     // Some browsers throw from the constructor outside a service worker; nothing to do.
@@ -53,7 +58,7 @@ export function Inbox() {
   const [loaded, setLoaded] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPermission | "unsupported">("unsupported");
   const [muted, setMutedState] = useState(false);
-  /** Threads already seen as "human", so only a new handoff notifies; null until the first list has loaded. */
+  /** Open requests already seen, so only a new one notifies; null until the first list has loaded. */
   const seenHuman = useRef<Set<string> | null>(null);
 
   useEffect(() => {
@@ -99,13 +104,13 @@ export function Inbox() {
       const data = await listConversations();
       setConversations(data.conversations);
       setError(null);
-      const human = data.conversations.filter((c) => c.status === "human");
+      const human = data.conversations.filter(waiting);
       if (seenHuman.current) {
-        const fresh = human.filter((c) => !seenHuman.current!.has(c.id));
+        const fresh = human.filter((c) => !seenHuman.current!.has(c.openRequest!.id));
         if (fresh.length > 0) playChime();
         for (const c of fresh) notifyHandoff(c);
       }
-      seenHuman.current = new Set(human.map((c) => c.id));
+      seenHuman.current = new Set(human.map((c) => c.openRequest!.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load conversations");
     } finally {
@@ -170,20 +175,26 @@ export function Inbox() {
                 >
                   <span
                     aria-hidden="true"
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${c.status === "human" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${waiting(c) || c.status === "human" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}
                   >
                     {initial(c)}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
-                      <span className={`truncate text-sm ${c.status === "human" ? "font-semibold" : "font-medium"}`}>{name(c)}</span>
+                      <span className={`truncate text-sm ${waiting(c) ? "font-semibold" : "font-medium"}`}>{name(c)}</span>
                       <span className="shrink-0 text-xs text-slate-400">{c.lastMessage ? age(c.lastMessage.createdAt) : age(c.updatedAt)}</span>
                     </span>
                     <span className="mt-1 flex items-center justify-between gap-2">
                       <span className="truncate text-xs text-slate-500" dir="auto">
                         {c.lastMessage ? `${c.lastMessage.direction === "out" ? "You: " : ""}${c.lastMessage.preview}` : "No messages"}
                       </span>
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
+                      {waiting(c) ? (
+                        <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title={c.openRequest?.reason}>
+                          Waiting {age(c.openRequest!.createdAt)}
+                        </span>
+                      ) : (
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
+                      )}
                     </span>
                   </span>
                 </button>
@@ -215,10 +226,21 @@ export function Inbox() {
 
 function Thread({ conversation, messages, onBack, onChange }: { conversation: ConversationView; messages: MessageView[]; onBack: () => void; onChange: () => Promise<void> }) {
   const [draft, setDraft] = useState("");
+  const [replyTo, setReplyTo] = useState<MessageView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const lastId = messages.at(-1)?.id;
+
+  // While there is text in the composer, tell the API someone is typing so the bot holds its reply on this thread.
+  useEffect(() => {
+    if (!draft.trim()) return;
+    const beat = () => void typingInConversation(conversation.id).catch(() => undefined);
+    beat();
+    const t = setInterval(beat, TYPING_BEAT_MS);
+    return () => clearInterval(t);
+  }, [draft, conversation.id]);
 
   useEffect(() => {
     // Scroll the message list itself, not every ancestor: scrollIntoView would also drag the page and hide the header.
@@ -232,8 +254,9 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
     setBusy(true);
     setError(null);
     try {
-      await replyToConversation(conversation.id, draft.trim());
+      await replyToConversation(conversation.id, draft.trim(), replyTo?.id);
       setDraft("");
+      setReplyTo(null);
       await onChange();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send");
@@ -254,6 +277,24 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resolve() {
+    setBusy(true);
+    setError(null);
+    try {
+      await resolveConversationRequest(conversation.id);
+      await onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not resolve");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function quote(m: MessageView) {
+    setReplyTo(m);
+    composer.current?.focus();
   }
 
   async function setStatus(status: ConversationView["status"]) {
@@ -316,15 +357,36 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
         </div>
       </header>
 
+      {conversation.openRequest ? (
+        <div className="flex shrink-0 items-start gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 md:px-4">
+          <div className="min-w-0 flex-1">
+            <span className="font-semibold">Waiting for a person for {age(conversation.openRequest.createdAt)}</span>
+            {conversation.openRequest.reason ? <span> · {conversation.openRequest.reason}</span> : null}
+            {conversation.openRequest.preview ? <div className="truncate text-amber-800/80">&ldquo;{conversation.openRequest.preview}&rdquo;</div> : null}
+            <div className="text-amber-800/70">The bot keeps answering everything else. Replying here resolves it; use Resolve if you handled it by phone.</div>
+          </div>
+          <button type="button" disabled={busy} onClick={() => void resolve()} className="shrink-0 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-900 hover:border-amber-400 disabled:opacity-50">
+            Resolve
+          </button>
+        </div>
+      ) : null}
+
       <div ref={list} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-slate-50 px-3 py-3 md:px-4 md:py-4">
         {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+          <div key={m.id} className={`group flex items-end gap-1 ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+            {m.direction === "out" && conversation.windowOpen ? <ReplyButton onClick={() => quote(m)} /> : null}
             <div
               dir="auto"
               className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm shadow-sm md:max-w-[75%] ${
                 m.direction === "out" ? "rounded-br-sm bg-green-100 text-green-950" : "rounded-bl-sm bg-white text-slate-900"
               }`}
             >
+              {m.quoted ? (
+                <div className={`mb-1.5 border-l-2 pl-2 text-xs ${m.direction === "out" ? "border-green-600/50 text-green-900/80" : "border-slate-400 text-slate-600"}`}>
+                  <div className="font-semibold">{m.quoted.direction === "in" ? name(conversation) : "You"}</div>
+                  <div className="line-clamp-2">{m.quoted.preview}</div>
+                </div>
+              ) : null}
               {m.direction === "in" && isImage(m.payload) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={`/merchant/conversations/${encodeURIComponent(conversation.id)}/media/${encodeURIComponent(m.id)}`} alt={m.preview} className="mb-1 max-h-64 rounded-lg" loading="lazy" />
@@ -339,15 +401,30 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
                 {m.direction === "out" && m.status ? ` · ${m.status}` : ""}
               </div>
             </div>
+            {m.direction === "in" && conversation.windowOpen ? <ReplyButton onClick={() => quote(m)} /> : null}
           </div>
         ))}
       </div>
 
       {/* Bottom padding clears the iPhone home indicator when the dashboard runs from the home screen. */}
-      <form onSubmit={send} className="shrink-0 border-t border-slate-200 bg-white px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-3">
+      <form onSubmit={send} className="relative shrink-0 border-t border-slate-200 bg-white px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:p-3">
         {conversation.windowOpen ? (
           <div className="flex items-end gap-1.5 md:gap-2">
+            {replyTo ? (
+              <div className="absolute inset-x-2 -translate-y-full md:inset-x-3">
+                <div className="mb-1 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+                  <div className="min-w-0 flex-1 border-l-2 border-brand pl-2">
+                    <div className="font-semibold text-slate-700">Replying to {replyTo.direction === "in" ? name(conversation) : "yourself"}</div>
+                    <div className="truncate text-slate-500">{replyTo.preview || `[${replyTo.kind}]`}</div>
+                  </div>
+                  <button type="button" onClick={() => setReplyTo(null)} className="px-1 text-slate-400 hover:text-slate-700" aria-label="Cancel reply">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <textarea
+              ref={composer}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -398,5 +475,23 @@ function Thread({ conversation, messages, onBack, onChange }: { conversation: Co
         {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
       </form>
     </>
+  );
+}
+
+/** Small "reply to this message" affordance next to a bubble; always visible on phones, on hover elsewhere. */
+function ReplyButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Reply to this message"
+      aria-label="Reply to this message"
+      className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-700 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 17l-5-5 5-5" />
+        <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+      </svg>
+    </button>
   );
 }

@@ -5,7 +5,7 @@ import { addItem, emptyCart } from "@ordr/domain";
 import { FakeSender } from "@ordr/whatsapp";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionStore, InMemoryTenantRepository } from "../src/adapters/memory";
+import { InMemoryConversationRepository, InMemoryDedupeStore, InMemoryHandoffRequestRepository, InMemorySessionStore, InMemoryTenantRepository } from "../src/adapters/memory";
 import { InMemoryEventBus, InMemoryOrderRepository } from "../src/adapters/memory-catalog";
 import { AppModule, seedTenantFromConfig } from "../src/app.module";
 import { loadConfig } from "../src/config";
@@ -18,6 +18,7 @@ interface Harness {
   app: INestApplication;
   sender: FakeSender;
   conversations: InMemoryConversationRepository;
+  requests: InMemoryHandoffRequestRepository;
   orders: OrderService;
   tenantId: string;
 }
@@ -35,6 +36,7 @@ async function createHarness(): Promise<Harness> {
   const seed = seedTenantFromConfig(config);
   const sender = new FakeSender();
   const conversations = new InMemoryConversationRepository();
+  const requests = new InMemoryHandoffRequestRepository();
   const moduleRef = await Test.createTestingModule({
     imports: [
       AppModule.register({
@@ -42,6 +44,7 @@ async function createHarness(): Promise<Harness> {
         overrides: {
           sender,
           conversations,
+          handoffRequests: requests,
           sessions: new InMemorySessionStore(),
           tenants: new InMemoryTenantRepository([seed]),
           orders: new InMemoryOrderRepository(),
@@ -53,7 +56,7 @@ async function createHarness(): Promise<Harness> {
   }).compile();
   const app = moduleRef.createNestApplication({ rawBody: true, logger: false });
   await app.init();
-  return { app, sender, conversations, orders: app.get(OrderService), tenantId: seed.tenant.id };
+  return { app, sender, conversations, requests, orders: app.get(OrderService), tenantId: seed.tenant.id };
 }
 
 /** A customer who messaged `minutesAgo` minutes ago, with one placed order. */
@@ -177,15 +180,37 @@ describe("merchant API", () => {
     const open = list.body.conversations.find((c: { customer: { waId: string } }) => c.customer.waId === "971500000001");
     expect(open).toMatchObject({ status: "bot", windowOpen: true, customer: { name: "Sara" } });
 
-    const reply = await request(server()).post(`/merchant/conversations/${open.id}/messages`).set(auth).send({ text: "On its way!" });
+    // The customer asked for a person: the thread shows the open request until someone replies.
+    await h.requests.create({ tenantId: h.tenantId, conversationId: open.id, customerId: open.customer.id, reason: "wants a refund", preview: "I want a refund" });
+    const waiting = (await request(server()).get("/merchant/conversations").set(auth)).body.conversations.find((c: { id: string }) => c.id === open.id);
+    expect(waiting.openRequest).toMatchObject({ reason: "wants a refund", preview: "I want a refund", alerts: 1 });
+    expect(waiting.status).toBe("bot");
+
+    // Typing holds the bot briefly (204, no body); replying resolves the request and does not silence the bot.
+    expect((await request(server()).post(`/merchant/conversations/${open.id}/typing`).set(auth)).status).toBe(204);
+    expect((await h.conversations.findConversationById(open.id))?.staffTypingUntil?.getTime()).toBeGreaterThan(Date.now());
+    await h.conversations.recordMessage({ tenantId: h.tenantId, conversationId: open.id, direction: "in", providerMessageId: "wamid.in.refund", kind: "text", payload: { kind: "text", text: "I want a refund" }, createdAt: new Date() });
+    const inbound = (await request(server()).get(`/merchant/conversations/${open.id}`).set(auth)).body.messages.find((m: { direction: string }) => m.direction === "in");
+    const reply = await request(server()).post(`/merchant/conversations/${open.id}/messages`).set(auth).send({ text: "On its way!", replyToMessageId: inbound.id });
     expect(reply.status).toBe(201);
-    expect(reply.body).toMatchObject({ direction: "out", kind: "text", preview: "On its way!" });
-    expect(h.sender.to("971500000001").at(-1)).toMatchObject({ type: "text", text: { body: "On its way!" } });
+    expect(reply.body).toMatchObject({ direction: "out", kind: "text", preview: "On its way!", quoted: { id: inbound.id, direction: "in", preview: inbound.preview } });
+    expect(h.sender.to("971500000001").at(-1)).toMatchObject({ type: "text", text: { body: "On its way!" }, context: { message_id: expect.stringMatching(/^wamid\./) } });
 
     const thread = await request(server()).get(`/merchant/conversations/${open.id}`).set(auth);
-    expect(thread.body.conversation).toMatchObject({ status: "human" });
-    expect(thread.body.messages.at(-1)).toMatchObject({ direction: "out", preview: "On its way!" });
+    expect(thread.body.conversation).toMatchObject({ status: "bot" });
+    expect(thread.body.conversation.openRequest).toBeUndefined();
+    expect(thread.body.messages.at(-1)).toMatchObject({ direction: "out", preview: "On its way!", quoted: { direction: "in" } });
+    expect(await h.requests.findOpen(open.id)).toBeNull();
+    expect((await request(server()).post(`/merchant/conversations/${open.id}/messages`).set(auth).send({ text: "x", replyToMessageId: "nope" })).status).toBe(404);
 
+    // Resolve without replying (handled by phone), and explicit take over / hand back still work.
+    await h.requests.create({ tenantId: h.tenantId, conversationId: open.id, customerId: open.customer.id, reason: "parking" });
+    const resolved = await request(server()).post(`/merchant/conversations/${open.id}/requests/resolve`).set(auth);
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.openRequest).toBeUndefined();
+    expect((await h.requests.findOpen(open.id))).toBeNull();
+    const taken = await request(server()).post(`/merchant/conversations/${open.id}/status`).set(auth).send({ status: "human" });
+    expect(taken.body.status).toBe("human");
     const back = await request(server()).post(`/merchant/conversations/${open.id}/status`).set(auth).send({ status: "bot" });
     expect(back.body.status).toBe("bot");
 

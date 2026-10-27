@@ -36,12 +36,12 @@ export function Shell({ children }: { children: ReactNode }) {
       .catch(() => undefined);
   }, []);
 
-  // Threads the bot handed to a person: the badge next to Inbox so staff see them from any page.
+  // Customers waiting for a person (open requests, or threads someone took over): the badge next to Inbox on every page.
   useEffect(() => {
     if (!session?.tenant) return;
     const count = () =>
-      listConversations("human")
-        .then((r) => setWaiting(r.conversations.length))
+      listConversations()
+        .then((r) => setWaiting(r.conversations.filter((c) => c.openRequest || c.status === "human").length))
         .catch(() => undefined);
     void count();
     const t = setInterval(count, HUMAN_COUNT_POLL_MS);
