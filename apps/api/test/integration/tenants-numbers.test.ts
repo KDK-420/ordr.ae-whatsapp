@@ -15,6 +15,17 @@ afterAll(async () => {
 });
 
 describe("Prisma tenants, channels and the number pool", () => {
+  it("survives simultaneous first visitors creating the same channel", async () => {
+    const tenants = new PrismaTenantRepository(prisma, 0);
+    const t = await tenants.create({ name: "Race", slug: `race-${suffix}`, blueprintId: "sports" });
+    const input = { provider: "web" as const, phoneNumberId: `web:race-${suffix}`, wabaId: "web", displayPhone: "web chat", accessToken: "" };
+    const channels = await Promise.all(Array.from({ length: 8 }, () => tenants.attachChannel(t.id, input)));
+    expect(new Set(channels.map((c) => c.id)).size).toBe(1);
+    // Cleaned up here, not through `created`: the next test counts that list.
+    await prisma.channel.deleteMany({ where: { tenantId: t.id } });
+    await prisma.tenant.delete({ where: { id: t.id } });
+  });
+
   it("creates tenants, moves a number between them and stops routing when released", async () => {
     const tenants = new PrismaTenantRepository(prisma, 0);
     const pool = new PrismaNumberPoolRepository(prisma);

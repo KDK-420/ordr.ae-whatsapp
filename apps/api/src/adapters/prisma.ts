@@ -121,11 +121,17 @@ export class PrismaTenantRepository implements TenantRepository {
   async attachChannel(tenantId: string, input: ChannelInput): Promise<Channel> {
     // Only the channel fields: callers may pass a richer object such as a pooled number.
     const fields = { wabaId: input.wabaId, displayPhone: input.displayPhone, accessToken: input.accessToken, provider: input.provider ?? "meta_cloud" };
-    const c = await this.prisma.channel.upsert({
-      where: { phoneNumberId: input.phoneNumberId },
-      update: { tenantId, ...fields, status: "active" },
-      create: { tenantId, phoneNumberId: input.phoneNumberId, ...fields, status: "active" },
-      include: { tenant: true },
+    const write = () =>
+      this.prisma.channel.upsert({
+        where: { phoneNumberId: input.phoneNumberId },
+        update: { tenantId, ...fields, status: "active" },
+        create: { tenantId, phoneNumberId: input.phoneNumberId, ...fields, status: "active" },
+        include: { tenant: true },
+      });
+    // Two first visitors can both find no channel and both create it; the loser's retry takes the update path.
+    const c = await write().catch((err: unknown) => {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return write();
+      throw err;
     });
     this.cache.delete(input.phoneNumberId);
     return toContext(c).channel;
