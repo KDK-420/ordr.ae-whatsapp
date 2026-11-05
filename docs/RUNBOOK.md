@@ -53,6 +53,31 @@ lock, conditional stock decrements, tenant scoping of every new table).
 
 Pages: `/chat/<tenant-slug>` (web chat), `/pay/<intent>` (hosted checkout).
 
+## Sports courts (blueprint `sports`)
+
+Courts run on the same booking engine as the salon. A court is a resource of type `asset` with
+weekly hours; each sport and duration is an offering with its own price; `skills` keep padel on
+the padel courts. The state machine starts at `confirmed`, so a booking needs no staff approval
+and the customer's confirmation carries the address and map link. `settings.resourceNoun: "court"`
+switches the wording ("on Padel Court 1", "Any free court"). Seed the demo venue with
+`SEED_BLUEPRINT_ID=sports` or pick it in Admin › New merchant. Not built: peak and off-peak
+prices (one price per offering), recurring bookings, player counts, deposits and split payments.
+
+## Customer pages (`<tenant slug>.ordr.ae`)
+
+Every tenant can have a public page built from its catalog, properties and business details.
+Settings › Website publishes it and sets the headline, description and main photo
+(`tenant.settings.site`); until `published` is true the page, its API and its certificate all
+answer 404. `GET /v1/sites/:slug?lang=en|ar` is the public read model, built field by field in
+`SiteService` so tokens and staff numbers cannot ride along. `apps/dashboard/proxy.ts` maps the
+host to `/site/<slug>`, keeps dashboard paths off customer hosts, and reserves `app`, `www`, `api`,
+`admin`, `mail`, `staging` and `demo`. Test locally at `http://<slug>.localhost:3001`.
+
+Production needs one wildcard DNS record, `*.ordr.ae` A `<server ip>`. Caddy then gets a
+certificate per subdomain on its first visit (on-demand TLS), after asking
+`GET /v1/sites/tls-check?domain=<host>`, which allows only published sites on `SITE_BASE_DOMAIN`.
+The subdomain is the tenant's slug.
+
 ## What is mocked and how to replace it
 
 - **Payments.** `MockPaymentProvider` (`apps/api/src/payments/payment-provider.ts`) implements

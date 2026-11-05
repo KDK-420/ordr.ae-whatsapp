@@ -5,8 +5,10 @@ import { AssistantService } from "../ai/assistant.service";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
 import { handoffNumbers, MAX_HANDOFF_NUMBERS } from "../conversation/handoff-notifier";
+import type { AppConfig } from "../config";
 import type { BlueprintRegistry, TenantRepository } from "../ports";
 import { businessProfile } from "../tenant-profile";
+import { siteSettings } from "../site/site.service";
 import { TOKENS } from "../tokens";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional();
@@ -24,6 +26,15 @@ const PatchSchema = z.object({
       hours: optionalText(300),
     })
     .optional(),
+  /** The public page at <slug>.<base domain>. Nothing is visible until `published` is true. */
+  site: z
+    .object({
+      published: z.boolean(),
+      headline: optionalText(120),
+      about: optionalText(1200),
+      heroImageUrl: z.union([z.string().trim().url().max(500), z.literal("")]).optional(),
+    })
+    .optional(),
   /** Staff WhatsApp numbers (E.164 digits, "+" and spaces tolerated) alerted when the bot hands a thread over. An empty list clears them. */
   handoffNumbers: z.array(z.string().trim().regex(/^\+?[\d\s-]{8,20}$/, "must be a phone number in international format")).max(MAX_HANDOFF_NUMBERS).optional(),
 });
@@ -33,6 +44,7 @@ const PatchSchema = z.object({
 @UseGuards(AuthGuard)
 export class MerchantSettingsController {
   constructor(
+    @Inject(TOKENS.Config) private readonly config: AppConfig,
     @Inject(TOKENS.TenantRepository) private readonly tenants: TenantRepository,
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(AssistantService) private readonly assistant: AssistantService,
@@ -52,6 +64,7 @@ export class MerchantSettingsController {
     if (parsed.data.conversationStyle) patch.conversationStyle = parsed.data.conversationStyle;
     if (parsed.data.facts) patch.facts = parsed.data.facts;
     if (parsed.data.profile) patch.profile = businessProfile({ profile: parsed.data.profile });
+    if (parsed.data.site) patch.site = siteSettings({ site: parsed.data.site });
     if (parsed.data.handoffNumbers) patch.handoffNumbers = handoffNumbers({ handoffNumbers: parsed.data.handoffNumbers });
     if (!(await this.tenants.updateSettings(user.tenantId, patch))) throw new NotFoundException("tenant not found");
     return this.view(user.tenantId);
@@ -68,6 +81,8 @@ export class MerchantSettingsController {
       defaultStyle: blueprint && (blueprint.settings as Record<string, unknown>).conversationStyle === "natural" ? "natural" : "guided",
       facts,
       profile: businessProfile(tenant.settings),
+      site: siteSettings(tenant.settings),
+      siteUrl: `https://${tenant.slug}.${this.config.SITE_BASE_DOMAIN}`,
       handoffNumbers: handoffNumbers(tenant.settings),
       /** Natural style needs the model; without the key it silently runs guided. */
       assistantAvailable: this.assistant.conversational,

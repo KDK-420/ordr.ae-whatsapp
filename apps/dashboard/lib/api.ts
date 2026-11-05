@@ -285,17 +285,26 @@ export interface BusinessProfile {
   phone?: string;
   hours?: string;
 }
+export interface SiteSettings {
+  published: boolean;
+  headline?: string;
+  about?: string;
+  heroImageUrl?: string;
+}
 export interface ConversationSettings {
   conversationStyle: "guided" | "natural";
   defaultStyle: "guided" | "natural";
   facts: string[];
   profile: BusinessProfile;
+  /** The public page: what the merchant set, and where it lives. */
+  site: SiteSettings;
+  siteUrl: string;
   /** Staff WhatsApp numbers (digits only) alerted when the bot hands a thread over; at most 5. */
   handoffNumbers: string[];
   assistantAvailable: boolean;
 }
 export const getConversationSettings = () => call<ConversationSettings>("/merchant/settings");
-export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[] }) =>
+export const updateConversationSettings = (patch: { conversationStyle?: "guided" | "natural"; facts?: string[]; profile?: BusinessProfile; handoffNumbers?: string[]; site?: SiteSettings }) =>
   call<ConversationSettings>("/merchant/settings", { method: "PATCH", body: JSON.stringify(patch) });
 
 export interface PooledNumber {

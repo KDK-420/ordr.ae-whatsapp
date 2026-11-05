@@ -43,6 +43,8 @@ import { PaymentsController } from "./payments/payments.controller";
 import { HandoffPushNotifier } from "./push/handoff-push-notifier";
 import { MerchantPushController } from "./push/push.controller";
 import { VapidWebPushSender, type WebPushSender } from "./push/web-push";
+import { SiteController } from "./site/site.controller";
+import { SiteService } from "./site/site.service";
 import { WebChatController } from "./webchat/webchat.controller";
 import { WebChatService } from "./webchat/webchat.service";
 import { InMemoryMediaRepository, InMemoryPropertyRepository, InMemoryStayRepository } from "./adapters/memory-stays";
@@ -200,6 +202,7 @@ export class AppModule {
       CommerceService,
       MemoryService,
       WebChatService,
+      SiteService,
       MaintenanceService,
       OutboxRelay,
       {
@@ -414,6 +417,7 @@ export class AppModule {
               MerchantCatalogController,
               MerchantUsersController,
               WebChatController,
+              SiteController,
               PaymentsController,
               MerchantPushController,
               MediaController,

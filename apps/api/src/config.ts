@@ -43,6 +43,8 @@ const EnvSchema = z.object({
   WEB_PUSH_PUBLIC_KEY: z.string().min(1).optional(),
   WEB_PUSH_PRIVATE_KEY: z.string().min(1).optional(),
   WEB_PUSH_SUBJECT: z.string().regex(/^(mailto:|https:)/, "mailto: or https: URL").default("mailto:hello@ordr.ae"),
+  /** Customer pages live on <tenant slug>.<this>. */
+  SITE_BASE_DOMAIN: z.string().default("ordr.ae"),
   /** Where the dashboard (web chat, mock checkout page) is reachable by customers. */
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:3001"),
   /** "mock" ships a hosted-looking checkout page that signs its own webhook; real providers plug in behind the same port. */

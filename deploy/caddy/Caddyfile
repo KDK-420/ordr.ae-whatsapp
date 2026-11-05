@@ -1,7 +1,16 @@
-# Caddy terminates TLS (automatic Let's Encrypt certificate for DOMAIN) and routes:
+# Caddy terminates TLS and routes:
 #   /health, /webhooks/*, /merchant/*, /v1/*  -> the API
 #   everything else                           -> the dashboard (landing page, web chat, checkout, login, orders board)
-{$DOMAIN} {
+#
+# DOMAIN gets a normal certificate. Customer pages (<slug>.ordr.ae) get theirs on the first visit, but only
+# after the API confirms that host belongs to a published site, so a random subdomain issues nothing.
+{
+	on_demand_tls {
+		ask http://api:3000/v1/sites/tls-check
+	}
+}
+
+(routes) {
 	encode gzip
 
 	@api path /health /webhooks/* /merchant/* /v1/*
@@ -12,4 +21,15 @@
 	handle {
 		reverse_proxy dashboard:3001
 	}
+}
+
+{$DOMAIN} {
+	import routes
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	import routes
 }

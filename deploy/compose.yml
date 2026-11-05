@@ -90,6 +90,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: "3001"
+      # Server-rendered customer pages read their data from here.
+      API_INTERNAL_URL: http://api:3000
       # Shown as the "try the demo" button on the landing page.
       WHATSAPP_NUMBER: ${SEED_DISPLAY_PHONE:-}
       # "Book a demo" opens a WhatsApp chat with this number (digits, international); falls back to CONTACT_EMAIL.
