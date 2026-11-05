@@ -1,0 +1,144 @@
+{
+  "id": "sports",
+  "version": 1,
+  "name": "Court booking",
+  "description": "Court booking by sport and duration for padel, tennis, football and multi-sport venues.",
+  "defaultLanguage": "en",
+  "languages": [
+    "en",
+    "ar"
+  ],
+  "offeringType": "service",
+  "fulfillmentTypes": [
+    "in_store"
+  ],
+  "orderStates": {
+    "initial": "confirmed",
+    "states": [
+      "confirmed",
+      "checked_in",
+      "completed",
+      "cancelled",
+      "no_show"
+    ],
+    "transitions": [
+      {
+        "from": "confirmed",
+        "to": "checked_in",
+        "on": "check_in"
+      },
+      {
+        "from": "confirmed",
+        "to": "cancelled",
+        "on": "cancel"
+      },
+      {
+        "from": "confirmed",
+        "to": "no_show",
+        "on": "no_show"
+      },
+      {
+        "from": "checked_in",
+        "to": "completed",
+        "on": "complete"
+      }
+    ],
+    "terminal": [
+      "completed",
+      "cancelled",
+      "no_show"
+    ]
+  },
+  "entryFlow": "main_menu",
+  "fallbackFlow": "main_menu",
+  "globalCommands": [
+    {
+      "keywords": [
+        "menu",
+        "hi",
+        "hello",
+        "start",
+        "book",
+        "court",
+        "القائمة",
+        "مرحبا",
+        "السلام عليكم",
+        "حجز",
+        "ملعب"
+      ],
+      "flow": "main_menu"
+    },
+    {
+      "keywords": [
+        "photos",
+        "pictures",
+        "catalog",
+        "catalogue",
+        "صور",
+        "الكتالوج"
+      ],
+      "flow": "photos"
+    },
+    {
+      "keywords": [
+        "bookings",
+        "my bookings",
+        "appointments",
+        "حجوزاتي",
+        "مواعيدي"
+      ],
+      "flow": "my_bookings"
+    },
+    {
+      "keywords": [
+        "agent",
+        "help",
+        "موظف",
+        "مساعدة"
+      ],
+      "flow": "talk_to_us"
+    },
+    {
+      "keywords": [
+        "language",
+        "lang",
+        "اللغة",
+        "لغة"
+      ],
+      "flow": "language"
+    },
+    {
+      "keywords": [
+        "cancel",
+        "stop",
+        "إلغاء"
+      ],
+      "flow": "main_menu"
+    }
+  ],
+  "dashboardModules": [
+    "calendar",
+    "resources",
+    "catalog",
+    "customers",
+    "inbox"
+  ],
+  "settings": {
+    "currency": "AED",
+    "vatRate": 0.05,
+    "vatInclusive": true,
+    "paymentMethods": [
+      "cash"
+    ],
+    "slotStepMinutes": 30,
+    "bufferMinutes": 0,
+    "leadMinutes": 30,
+    "maxAdvanceDays": 14,
+    "reminderMinutes": [
+      1440,
+      120
+    ],
+    "conversationStyle": "natural",
+    "resourceNoun": "court"
+  }
+}

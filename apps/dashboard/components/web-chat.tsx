@@ -120,7 +120,7 @@ export function WebChat({ slug }: { slug: string }) {
         <div className="mx-auto flex max-w-2xl flex-col gap-2">
           {session && messages.length === 0 ? (
             <p className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-              Hi! Ask about {session.tenant.blueprintId === "retail" ? "products, prices and delivery, or order right here" : session.tenant.blueprintId === "resort" ? "our resorts, rooms and dates, or book your stay right here" : "services, prices and free times, or book right here"}.
+              Hi! Ask about {session.tenant.blueprintId === "retail" ? "products, prices and delivery, or order right here" : session.tenant.blueprintId === "resort" ? "our resorts, rooms and dates, or book your stay right here" : session.tenant.blueprintId === "sports" ? "courts, prices and free times, or book your game right here" : "services, prices and free times, or book right here"}.
             </p>
           ) : null}
           {messages.map((m) => (

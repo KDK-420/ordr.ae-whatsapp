@@ -47,7 +47,7 @@ on:
       seed:
         description: Reseed the demo tenant as this vertical (no = leave data alone; setup mode always seeds)
         type: choice
-        options: ["no", restaurant, salon, retail, resort]
+        options: ["no", restaurant, salon, retail, resort, sports]
         default: "no"
 
 concurrency:
@@ -218,6 +218,7 @@ jobs:
               salon) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Salon" ;;
               restaurant) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Restaurant" ;;
               retail) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Shop" ;;
+              sports) [ -n "$SEED_TENANT_NAME" ] || add SEED_TENANT_NAME "Demo Courts" ;;
             esac
           fi
           # The landing page links to the seeded tenant's web chat unless DEMO_CHAT_SLUG is already set on the server.

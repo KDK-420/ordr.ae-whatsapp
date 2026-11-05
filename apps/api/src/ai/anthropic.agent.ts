@@ -8,7 +8,7 @@ import { statusLabel } from "../actions/copy";
 import { CommerceError, type CommerceService } from "../commerce/commerce.service";
 import { MemoryError, type MemoryService } from "../memory/memory.service";
 import { formatDay, formatTime, formatWhen } from "../scheduling/format";
-import { ANY_RESOURCE, BookingError, type Period, type SchedulingService } from "../scheduling/scheduling.service";
+import { ANY_RESOURCE, atResource, BookingError, type Period, resourceNoun, type SchedulingService } from "../scheduling/scheduling.service";
 import { StayError, type StayService } from "../stays/stay.service";
 import type { AgentAttachment, AgentInput, AgentPhoto, AgentReply, ConversationAgent, ToolTrace } from "./agent";
 import type { CatalogRepository, PropertyRepository } from "../ports";
@@ -155,6 +155,9 @@ function errorText(err: unknown): string {
 function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
   const { tz } = ctx;
   const lang = ctx.input.language;
+  const noun = resourceNoun(ctx.input.blueprint.settings as Record<string, unknown>);
+  /** "with Sara on Tue 20 Oct", but "on Court 2, Tue 20 Oct". */
+  const joiner = noun === "court" ? "," : " on";
   const tenantId = ctx.input.tenant.id;
   const customerId = ctx.input.customer.id;
   const conversationId = ctx.input.conversationId;
@@ -171,11 +174,11 @@ function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
     }),
     betaZodTool({
       name: "list_staff",
-      description: "Team members who can do a service. 'any' is always allowed as staff_id and means whoever is free first.",
+      description: noun === "court" ? "Courts that can host a service, with their ids (used as staff_id). 'any' is always allowed as staff_id and means the first free court." : "Team members who can do a service. 'any' is always allowed as staff_id and means whoever is free first.",
       inputSchema: z.object({ service_id: z.string().describe("Service id from list_services") }),
       run: traced(ctx, "list_staff", async ({ service_id }) => {
         const staff = await scheduling.staffFor(tenantId, service_id).catch(() => []);
-        if (staff.length === 0) return "Nobody is available for that service id; check list_services.";
+        if (staff.length === 0) return noun === "court" ? "No court hosts that service id; check list_services." : "Nobody is available for that service id; check list_services.";
         return staff.map((r) => `${r.id}: ${localized(r.name, lang)}`).join("\n");
       }),
     }),
@@ -195,7 +198,7 @@ function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
       run: traced(ctx, "available_times", async ({ service_id, date, staff_id, period }) => {
         const slots = await scheduling.slots(tenantId, service_id, staff_id, date, { period: period as Period | undefined, forCustomerId: customerId });
         if (slots.length === 0) return `No free times on ${date}${period ? ` in the ${period}` : ""}. Try another part of the day or another date (available_days).`;
-        return slots.map((s) => `${formatTime(s.startAt, tz, lang)} with ${localized(s.resource.name, lang)} (staff_id ${s.resource.id})`).join("\n");
+        return slots.map((s) => `${formatTime(s.startAt, tz, lang)} ${atResource(noun, localized(s.resource.name, lang))} (staff_id ${s.resource.id})`).join("\n");
       }),
     }),
     betaZodTool({
@@ -205,7 +208,7 @@ function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
       run: traced(ctx, "hold_slot", async ({ service_id, date, time, staff_id }) => {
         try {
           const { hold, offering, resource } = await scheduling.hold({ tenantId, customerId, conversationId, offeringId: service_id, resourceId: staff_id, startAt: zonedToUtc(date, time, tz) });
-          return `Held (hold_id ${hold.id}) until ${formatTime(new Date(hold.expiresAt), tz, lang)}: ${localized(offering.name, lang)} with ${localized(resource.name, lang)} on ${formatWhen(new Date(hold.startAt), tz, lang)}, ${formatMoney(offering.priceMinor, offering.currency)}. Confirm with confirm_booking once the customer says yes.`;
+          return `Held (hold_id ${hold.id}) until ${formatTime(new Date(hold.expiresAt), tz, lang)}: ${localized(offering.name, lang)} ${atResource(noun, localized(resource.name, lang))}${joiner} ${formatWhen(new Date(hold.startAt), tz, lang)}, ${formatMoney(offering.priceMinor, offering.currency)}. Confirm with confirm_booking once the customer says yes.`;
         } catch (err) {
           if (err instanceof BookingError && err.code === "slot_taken") return "That time is not available (just taken or outside working hours). Call available_times again and offer the nearest alternatives.";
           throw err;
@@ -219,7 +222,7 @@ function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
       run: traced(ctx, "confirm_booking", async ({ hold_id, notes }) => {
         const { order, resource } = await scheduling.confirmHold({ tenantId, customerId, holdId: hold_id, language: lang, notes, source: ctx.input.channel === "web" ? "web" : "whatsapp" });
         const where = locationLines(ctx.input.knowledge.profile ?? {});
-        return `Booked. Booking number ${order.number}, ${order.items[0]?.title ?? "service"} with ${localized(resource.name, lang)} on ${formatWhen(new Date(order.scheduledAt!), tz, lang)}, total ${formatMoney(order.totalMinor, order.currency)}. Status: ${statusLabel(order.status, lang)}.${where.length ? ` Tell the customer where to come: ${where.join(" ")}` : ""}`;
+        return `Booked. Booking number ${order.number}, ${order.items[0]?.title ?? "service"} ${atResource(noun, localized(resource.name, lang))}${joiner} ${formatWhen(new Date(order.scheduledAt!), tz, lang)}, total ${formatMoney(order.totalMinor, order.currency)}. Status: ${statusLabel(order.status, lang)}.${where.length ? ` Tell the customer where to come: ${where.join(" ")}` : ""}`;
       }),
     }),
     betaZodTool({
@@ -248,7 +251,7 @@ function bookingTools(ctx: ToolContext, scheduling: SchedulingService): Tool[] {
       run: traced(ctx, "reschedule_booking", async ({ booking_id, date, time, staff_id }) => {
         try {
           const { order, resource } = await scheduling.reschedule({ tenantId, customerId, orderId: booking_id, resourceId: staff_id, startAt: zonedToUtc(date, time, tz) });
-          return `Moved booking #${order.number} to ${formatWhen(new Date(order.scheduledAt!), tz, lang)} with ${localized(resource.name, lang)}.`;
+          return `Moved booking #${order.number} to ${formatWhen(new Date(order.scheduledAt!), tz, lang)} ${atResource(noun, localized(resource.name, lang))}.`;
         } catch (err) {
           if (err instanceof BookingError && err.code === "slot_taken") return "That time is not available. Call available_times and offer alternatives.";
           throw err;
@@ -574,8 +577,9 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
   const web = input.channel === "web";
   const selling = input.blueprint.offeringType === "product";
   const staying = input.blueprint.offeringType === "stay";
+  const court = resourceNoun(input.blueprint.settings as Record<string, unknown>) === "court";
   const lines = [
-    `You are the ${web ? "website chat" : "WhatsApp"} assistant of ${k.tenantName}, a ${staying ? "resort group (one or more properties booked through this same number)" : `${k.blueprintId} business`} (timezone ${tz}). You chat with customers exactly like a friendly, efficient member of ${staying ? "the reservations team" : "staff"} would.`,
+    `You are the ${web ? "website chat" : "WhatsApp"} assistant of ${k.tenantName}, a ${staying ? "resort group (one or more properties booked through this same number)" : court ? "sports venue with bookable courts" : `${k.blueprintId} business`} (timezone ${tz}). You chat with customers exactly like a friendly, efficient member of ${staying ? "the reservations team" : "staff"} would.`,
     `Now: ${formatWhen(now, tz, "en")}. Dates for the coming days: ${calendar.join("; ")}.`,
     `The customer is ${input.customer.name || "a customer"} and seems to write in ${LANGUAGE_NAMES[input.language] ?? input.language}. Always answer in the language of their latest message (Arabic or English).`,
     "",
@@ -589,12 +593,16 @@ function systemPrompt(input: AgentInput, tz: string, now: Date, memoryOn: boolea
       ? "- To book a stay you need: which resort (ask only when there is more than one and they have not said), check-in and check-out dates, and how many guests. Ask for what is missing in one question, then call search_stays and offer two or three fitting rooms with the total for the stay; say when something is full."
       : selling
         ? "- Suggest two or three concrete products with prices instead of asking the customer to browse; mention when something is low or out of stock."
-        : "- Offer a few concrete times instead of asking the customer to guess; prefer 'any' staff unless they name someone.",
+        : court
+          ? "- To book you need the sport and how long they want to play; each sport and duration is its own service in list_services, so ask only for what they have not said. Offer a few concrete times instead of asking them to guess, and prefer 'any' court unless they name one. The tools call a court 'staff': staff_id is the court's id."
+          : "- Offer a few concrete times instead of asking the customer to guess; prefer 'any' staff unless they name someone.",
     staying
       ? "- Hold the room as soon as they pick it, restate resort, room, dates, guests and total in one or two lines, ask for the name for the reservation and a yes. Once they agree, confirm immediately; do not ask twice. Payment is at the property unless the business facts say otherwise."
       : selling
         ? "- Before checkout, show the cart total and ask for a yes. Once they agree, call checkout and send the payment link in your own words; do not invent an order number."
-        : "- Hold the time as soon as they pick it, restate service, staff, date and time in one line and ask for a yes. Once they agree, confirm immediately; do not ask twice.",
+        : court
+          ? "- Hold the court as soon as they pick a time, restate sport, duration, court, date, time and price in one line and ask for a yes. Once they agree, confirm immediately; do not ask twice. A court is confirmed the moment you book it: never say the venue still has to confirm."
+          : "- Hold the time as soon as they pick it, restate service, staff, date and time in one line and ask for a yes. Once they agree, confirm immediately; do not ask twice.",
     "- After any booking or order, repeat the confirmation from the tool (number, time or total). Never promise what the tool did not confirm.",
     "- Items marked [photo] have a picture. When the customer asks to see something, asks for the catalog, menu or pictures, or you recommend one or two such items, call send_photos with their ids; the pictures follow your message by themselves, so keep the text to one line.",
     "",

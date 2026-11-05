@@ -28,7 +28,8 @@ export function registerBookingActions(registry: MapActionRegistry, scheduling: 
   registry.register("booking.staff", async (params, ctx): Promise<DynamicRow[]> => {
     const staff = await scheduling.staffFor(ctx.tenantId, String(params.serviceId ?? ""));
     if (staff.length === 0) return [];
-    return [{ id: ANY_RESOURCE, title: t(COPY.anyone, ctx.language) }, ...staff.map((r) => ({ id: r.id, title: localized(r.name, ctx.language) }))];
+    const { resourceNoun } = await scheduling.settings(ctx.tenantId);
+    return [{ id: ANY_RESOURCE, title: t(resourceNoun === "court" ? COPY.anyCourt : COPY.anyone, ctx.language) }, ...staff.map((r) => ({ id: r.id, title: localized(r.name, ctx.language) }))];
   });
 
   registry.register("booking.days", async (params, ctx): Promise<DynamicRow[]> => {
@@ -62,17 +63,14 @@ export function registerBookingActions(registry: MapActionRegistry, scheduling: 
       language: ctx.language,
     });
     const when = formatWhen(startAt, settings.tz, ctx.language);
+    const values = { service: localized(offering.name, ctx.language), staff: localized(resource.name, ctx.language), when, total: formatMoney(order.totalMinor, order.currency) };
     return {
       id: order.id,
       number: order.number,
       status: order.status,
       when,
-      text: t(COPY.bookingPlaced, ctx.language, {
-        service: localized(offering.name, ctx.language),
-        staff: localized(resource.name, ctx.language),
-        when,
-        total: formatMoney(order.totalMinor, order.currency),
-      }),
+      // A court is confirmed on the spot, so this message is the customer's confirmation and carries the address.
+      text: settings.resourceNoun === "court" ? [t(COPY.courtBooked, ctx.language, { ...values, number: order.number }), ...settings.location].join("\n") : t(COPY.bookingPlaced, ctx.language, values),
     };
   });
 

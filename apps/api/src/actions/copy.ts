@@ -20,6 +20,11 @@ export const COPY = {
   bookingReminder: { en: "Reminder: your booking at {{tenant}} is on *{{when}}*. Reply here if you need to change it.", ar: "تذكير: حجزك في {{tenant}} في *{{when}}*. راسلنا هنا إذا أردت تغييره." },
   minutes: { en: "min", ar: "دقيقة" },
   anyone: { en: "Anyone available", ar: "أي موظف متاح" },
+  anyCourt: { en: "Any free court", ar: "أي ملعب متاح" },
+  courtBooked: {
+    en: "Booked! {{service}} on *{{staff}}*, *{{when}}*. Total {{total}}. Booking number {{number}}. We will remind you before you play.",
+    ar: "تم الحجز! {{service}} في *{{staff}}*، *{{when}}*. الإجمالي {{total}}. رقم الحجز {{number}}. سنذكّرك قبل موعد اللعب.",
+  },
   bookingPlaced: {
     en: "Booked! {{service}} with {{staff}} on {{when}}. Total {{total}}. We will confirm shortly and remind you before your visit.",
     ar: "تم الحجز! {{service}} مع {{staff}} في {{when}}. الإجمالي {{total}}. سنؤكد الحجز قريباً ونذكّرك قبل موعدك.",

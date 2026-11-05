@@ -20,6 +20,7 @@ import {
 import { OrderService } from "../orders/order.service";
 import type { AppConfig } from "../config";
 import type { BlueprintRegistry, BookingHoldRecord, BookingHoldRepository, CatalogRepository, OrderRepository, ResourceRepository } from "../ports";
+import { businessProfile, locationLines } from "../tenant-profile";
 import { TOKENS } from "../tokens";
 
 /** Pseudo resource id meaning "whoever is free". */
@@ -40,6 +41,22 @@ export interface SchedulingSettings {
   machine: StateMachine;
   defaultLanguage: string;
   fulfillmentType: string;
+  /** What is being booked: a person, or a court ("on Court 2" rather than "with Sara"). */
+  resourceNoun: ResourceNoun;
+  /** Address and map link lines for messages that confirm a booking on the spot. */
+  location: string[];
+}
+
+export type ResourceNoun = "staff" | "court";
+
+/** Read from the blueprint's `settings.resourceNoun`; anything else means people. */
+export function resourceNoun(blueprintSettings: Record<string, unknown>): ResourceNoun {
+  return blueprintSettings.resourceNoun === "court" ? "court" : "staff";
+}
+
+/** "with Sara" or "on Padel Court 1". */
+export function atResource(noun: ResourceNoun, name: string): string {
+  return noun === "court" ? `on ${name}` : `with ${name}`;
 }
 
 export interface Slot {
@@ -186,6 +203,8 @@ export class SchedulingService {
       machine: blueprint.orderStates,
       defaultLanguage: s.tenant.defaultLanguage,
       fulfillmentType: blueprint.fulfillmentTypes[0] ?? "in_store",
+      resourceNoun: resourceNoun(blueprint.settings as Record<string, unknown>),
+      location: locationLines(businessProfile(s.tenant.settings as Record<string, unknown>)),
     };
   }
 
