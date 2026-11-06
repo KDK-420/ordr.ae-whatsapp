@@ -2,7 +2,8 @@
 #   /health, /webhooks/*, /merchant/*, /v1/*  -> the API
 #   everything else                           -> the dashboard (landing page, web chat, checkout, login, orders board)
 #
-# ordr.ae is the product website: the static files in website/, served from the checkout on the server.
+# ordr.ae, pos.ordr.ae and booking.ordr.ae are the product website: static files from website/ in the
+# checkout on the server, with the two product sites in website/pos and website/booking.
 #
 # DOMAIN gets a normal certificate. Customer pages (<slug>.ordr.ae) get theirs on the first visit, but only
 # after the API confirms that host belongs to a published site, so a random subdomain issues nothing.
@@ -29,12 +30,49 @@
 	import routes
 }
 
+(product) {
+	encode gzip
+	handle /assets/* {
+		root * /srv/website
+		file_server
+	}
+	handle {
+		root * /srv/website/{args[0]}
+		file_server
+	}
+}
+
 ordr.ae {
 	root * /srv/website
 	encode gzip
+
+	# The product sites have their own hosts, and these pages moved there.
+	redir /pos/* https://pos.ordr.ae/ permanent
+	redir /booking/* https://booking.ordr.ae/ permanent
+	redir /whatsapp-booking-system/ https://booking.ordr.ae/ permanent
+	redir /salon-booking-software/ https://booking.ordr.ae/salons/ permanent
+	redir /padel-court-booking-system/ https://booking.ordr.ae/padel/ permanent
+	redir /hotel-whatsapp-booking/ https://booking.ordr.ae/hotels/ permanent
+	redir /restaurant-whatsapp-ordering/ https://pos.ordr.ae/restaurants/ permanent
+	redir /sell-on-whatsapp/ https://pos.ordr.ae/shops/ permanent
+	redir /ar/whatsapp-booking-system/ https://booking.ordr.ae/ar/ permanent
+	redir /ar/salon-booking-software/ https://booking.ordr.ae/ar/salons/ permanent
+	redir /ar/padel-court-booking-system/ https://booking.ordr.ae/ar/padel/ permanent
+	redir /ar/hotel-whatsapp-booking/ https://booking.ordr.ae/ar/hotels/ permanent
+	redir /ar/restaurant-whatsapp-ordering/ https://pos.ordr.ae/ar/restaurants/ permanent
+	redir /ar/sell-on-whatsapp/ https://pos.ordr.ae/ar/shops/ permanent
+
 	file_server {
 		hide README.md
 	}
+}
+
+pos.ordr.ae {
+	import product pos
+}
+
+booking.ordr.ae {
+	import product booking
 }
 
 www.ordr.ae {

@@ -6,13 +6,13 @@ const APP_PREFIXES = ["/orders", "/calendar", "/inbox", "/catalog", "/settings",
 /** Customer pages live on <tenant slug>.<base domain>; `localhost` makes them testable as demo-salon.localhost:3001. */
 const SITE_BASE_DOMAINS = [process.env.SITE_BASE_DOMAIN ?? "ordr.ae", "localhost"];
 /** Subdomains that are ours, never a customer's. */
-const RESERVED = new Set(["app", "www", "api", "admin", "mail", "staging", "demo"]);
+const RESERVED = new Set(["app", "www", "api", "admin", "mail", "staging", "demo", "pos", "booking"]);
 
 /** The old marketing pages on the app host moved to the product website. */
 const MOVED_PAGES: Record<string, string> = {
-  "/for/resorts": "/hotel-whatsapp-booking/",
-  "/for/salons": "/salon-booking-software/",
-  "/for/restaurants": "/restaurant-whatsapp-ordering/",
+  "/for/resorts": "https://booking.ordr.ae/hotels/",
+  "/for/salons": "https://booking.ordr.ae/salons/",
+  "/for/restaurants": "https://pos.ordr.ae/restaurants/",
 };
 
 /** The product website for a request on one of our own hosts, such as app.ordr.ae. Local hosts keep the old pages. */
@@ -64,7 +64,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (website && (pathname === "/" || pathname === "/for" || pathname.startsWith("/for/"))) {
-    return NextResponse.redirect(`${website}${MOVED_PAGES[pathname] ?? "/"}`, 301);
+    return NextResponse.redirect(MOVED_PAGES[pathname] ?? `${website}/`, 301);
   }
 
   if (isApp && !signedIn) {

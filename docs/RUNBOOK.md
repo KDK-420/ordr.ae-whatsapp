@@ -71,24 +71,25 @@ Settings › Website publishes it and sets the headline, description and main ph
 answer 404. `GET /v1/sites/:slug?lang=en|ar` is the public read model, built field by field in
 `SiteService` so tokens and staff numbers cannot ride along. `apps/dashboard/proxy.ts` maps the
 host to `/site/<slug>`, keeps dashboard paths off customer hosts, and reserves `app`, `www`, `api`,
-`admin`, `mail`, `staging` and `demo`. Test locally at `http://<slug>.localhost:3001`.
+`admin`, `mail`, `staging`, `demo`, `pos` and `booking`. Test locally at `http://<slug>.localhost:3001`.
 
 Production needs one wildcard DNS record, `*.ordr.ae` A `<server ip>`. Caddy then gets a
 certificate per subdomain on its first visit (on-demand TLS), after asking
 `GET /v1/sites/tls-check?domain=<host>`, which allows only published sites on `SITE_BASE_DOMAIN`.
 The subdomain is the tenant's slug.
 
-## Product website (`ordr.ae`)
+## Product website (`ordr.ae`, `pos.ordr.ae`, `booking.ordr.ae`)
 
 The marketing site is the static files in `website/`, served by Caddy straight from the checkout
-on the server (`/opt/ordr/website`, mounted at `/srv/website`); `www` redirects to it. DNS: `@` and
+on the server (`/opt/ordr/website`, mounted at `/srv/website`); `www` redirects to it. The two product
+sites are `website/pos` and `website/booking`, on their own hosts, reached through the `*.ordr.ae` record. DNS: `@` and
 `www` are A records to the server. A push to `main` that changes `website/` runs
 `.github/workflows/website.yml`, which updates only that folder on the server, so no container
 restarts. The old WordPress install on Hostinger is no longer public; pointing `@` back at Hostinger
 restores it.
 
 The marketing pages in the dashboard (`/`, `/for/*`) now only show locally: on `app.ordr.ae`,
-`proxy.ts` sends them to the matching page on `ordr.ae` with a 301, and a signed-in `/` goes to `/orders`.
+`proxy.ts` sends them to the matching website page with a 301, and a signed-in `/` goes to `/orders`.
 
 ## What is mocked and how to replace it
 
