@@ -31,6 +31,11 @@ summary.faq-q::-webkit-details-marker{display:none}
 .modal-actions a{background:var(--green);border:1px solid var(--green);padding:11px 15px;border-radius:13px;color:#082c1c;font-weight:700}
 .copyright a:hover{color:var(--green)}
 
+/* Booking a demo is the first thing on every page, so its header button stays filled and stays on phones. */
+.outline-link.demo-link{background:var(--green);border-color:var(--green);color:#082c1c;font-weight:700;white-space:nowrap}
+.outline-link.demo-link:hover{background:#51e99e;border-color:#51e99e}
+@media(max-width:960px){.outline-link.demo-link{display:inline-block;padding:10px 15px;font-size:13px}.nav-right{gap:10px}}
+
 /* Inner pages */
 .stage-page{grid-template-columns:minmax(0,1.3fr) minmax(285px,.7fr);gap:70px;min-height:640px}
 .stage-text{grid-template-columns:minmax(0,1fr);min-height:0;padding:54px 0 96px}

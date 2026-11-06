@@ -12,6 +12,11 @@ const SITE = HOSTS.main;
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "website");
 const UPDATED = "2026-11-06";
 const BROWSER_DEMO = "https://app.ordr.ae/chat/demo-salon";
+// Where "Book a demo" goes, on every page: the team's WhatsApp, not the demo bot's number in UI.whatsapp.
+const DEMO_REQUEST = {
+  en: "https://wa.me/971501122420?text=Hi%2C%20I%27d%20like%20a%20demo%20of%20ordr%20for%20my%20business.",
+  ar: "https://wa.me/971501122420?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7%D9%8B%D8%8C%20%D8%A3%D9%88%D8%AF%20%D8%AD%D8%AC%D8%B2%20%D8%B9%D8%B1%D8%B6%20%D8%AA%D8%AC%D8%B1%D9%8A%D8%A8%D9%8A%20%D9%85%D9%86%20ordr%20%D9%84%D8%B9%D9%85%D9%84%D9%8A.",
+};
 const FONTS = {
   en: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap",
   ar: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap",
@@ -21,7 +26,7 @@ const UI = {
   en: {
     dir: "ltr", locale: "en_AE", whatsapp: "https://wa.me/971509397420?text=Hi", next: "→", out: "↗", back: "‹",
     home: "Home", nav: "Primary", openNav: "Open navigation", products: "Products", howItWorks: "How it works", industries: "Industries", questions: "Questions",
-    otherLang: "العربية", otherLangCode: "ar", tryFree: "Try ordr Free", browser: "Try it in your browser",
+    otherLang: "العربية", otherLangCode: "ar", bookDemo: "Book a demo", browser: "Try it in your browser",
     note: "Arabic and English. Nothing for your customers to install.", messagePlaceholder: "Message...", online: "online · AI assistant",
     faqLabel: "Frequently asked", faqTitle: "Questions?<br>We have answers.", faqIntro: "Straight answers about how this works in practice.",
     related: "Keep reading", relatedTitle: "More from ordr.", detail: "In detail", closing: "Your next customer is already on WhatsApp.", closingSub: "Give them a better way to reach your business.",
@@ -32,7 +37,7 @@ const UI = {
   ar: {
     dir: "rtl", locale: "ar_AE", whatsapp: "https://wa.me/971509397420?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7", next: "←", out: "↖", back: "›",
     home: "الرئيسية", nav: "القائمة الرئيسية", openNav: "فتح القائمة", products: "المنتجات", howItWorks: "كيف يعمل", industries: "القطاعات", questions: "الأسئلة",
-    otherLang: "English", otherLangCode: "en", tryFree: "جرّب ordr مجاناً", browser: "جرّبه من المتصفح",
+    otherLang: "English", otherLangCode: "en", bookDemo: "احجز عرضاً تجريبياً", browser: "جرّبه من المتصفح",
     note: "بالعربية والإنجليزية. لا يحتاج عملاؤك إلى تثبيت أي شيء.", messagePlaceholder: "اكتب رسالة...", online: "متصل · مساعد ذكي",
     faqLabel: "الأسئلة الشائعة", faqTitle: "لديك أسئلة؟<br>لدينا الإجابات.", faqIntro: "إجابات مباشرة عن طريقة عمله على أرض الواقع.",
     related: "تابع القراءة", relatedTitle: "المزيد من ordr.", detail: "بالتفصيل", closing: "عميلك القادم موجود على واتساب بالفعل.", closingSub: "امنحه طريقة أفضل للوصول إلى عملك.",
@@ -131,7 +136,7 @@ function topbar(lang, { base, logoHref, otherHref }) {
   const item = (slug) => `<a href="${urlOf(slug, lang)}">${byId(slug).label[lang]}</a>`;
   const productLinks = ["whatsapp-ordering-system", "whatsapp-booking-system"].map(item).join("");
   const industryLinks = ["restaurant-whatsapp-ordering", "grocery-whatsapp-ordering", "sell-on-whatsapp", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking", "industries"].map(item).join("");
-  return `<header class="topbar"><a class="logo" href="${logoHref}" aria-label="${ui.homeLabel}">ordr<b>.ae</b></a><nav class="mainnav" aria-label="${ui.nav}"><div class="nav-drop"><a href="${base}#products">${ui.products} ⌄</a><div class="nav-menu"><div>${productLinks}</div></div></div><div class="nav-drop"><a href="${base}#industries">${ui.industries} ⌄</a><div class="nav-menu"><div>${industryLinks}</div></div></div><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a></nav><div class="nav-right"><a class="lang" href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a><a class="outline-link" href="${ui.whatsapp}" target="_blank" rel="noopener">${ui.tryFree} ${ui.out}</a><button class="mobile-toggle" id="menuBtn" type="button" aria-label="${ui.openNav}" aria-expanded="false">☰</button></div><nav class="mobile-panel" id="mobilePanel" aria-label="${ui.nav}">${productLinks}<a href="${urlOf("industries", lang)}">${ui.industries}</a><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a><a href="${ui.whatsapp}" target="_blank" rel="noopener">${ui.tryFree}</a><a href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a></nav></header>`;
+  return `<header class="topbar"><a class="logo" href="${logoHref}" aria-label="${ui.homeLabel}">ordr<b>.ae</b></a><nav class="mainnav" aria-label="${ui.nav}"><div class="nav-drop"><a href="${base}#products">${ui.products} ⌄</a><div class="nav-menu"><div>${productLinks}</div></div></div><div class="nav-drop"><a href="${base}#industries">${ui.industries} ⌄</a><div class="nav-menu"><div>${industryLinks}</div></div></div><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a></nav><div class="nav-right"><a class="lang" href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a><a class="outline-link demo-link" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} ${ui.out}</a><button class="mobile-toggle" id="menuBtn" type="button" aria-label="${ui.openNav}" aria-expanded="false">☰</button></div><nav class="mobile-panel" id="mobilePanel" aria-label="${ui.nav}">${productLinks}<a href="${urlOf("industries", lang)}">${ui.industries}</a><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a><a href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo}</a><a href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a></nav></header>`;
 }
 
 function phone(lang, { attrs, avatar, name, back, area, form }) {
@@ -155,7 +160,7 @@ function staticPhone(chat, lang) {
 
 function endCta(lang) {
   const ui = UI[lang];
-  return `<section class="end-cta" id="get-started"><div class="shell"><div class="cta-panel"><div><h2>${ui.closing}</h2><p>${ui.closingSub}</p></div><a class="button-primary" href="${ui.whatsapp}" target="_blank" rel="noopener">${ui.tryFree} <span>${ui.out}</span></a></div></div></section>`;
+  return `<section class="end-cta" id="get-started"><div class="shell"><div class="cta-panel"><div><h2>${ui.closing}</h2><p>${ui.closingSub}</p></div><a class="button-primary" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} <span>${ui.out}</span></a></div></div></section>`;
 }
 
 function footer(lang) {
@@ -188,7 +193,7 @@ function homePage(lang) {
     form: `<form class="chat-form" id="chatForm"><label class="sr-only" for="chatInput">${t.messageLabel}</label><input id="chatInput" placeholder="${t.messagePlaceholder}" autocomplete="off"><button class="send" type="submit" aria-label="${t.send}">➤</button></form>`,
   });
   const feature = (href, icon, name, line) => `<a class="feature-trigger" href="${href}"><span class="feature-icon">${ICONS[icon]}</span><div><h3>${name}</h3><p>${line}</p></div><span class="feature-arrow">${ui.next}</span></a>`;
-  const body = `<section class="hero" id="home"><div class="shell">${topbar(lang, { base: "", logoHref: "#home", otherHref: homeOf(ui.otherLangCode) })}<div class="stage"><div class="hero-copy"><div class="eyebrow">${t.eyebrow}</div><h1>${t.h1}</h1><p>${t.lead}</p><div class="cta-row"><a class="button-primary" href="${ui.whatsapp}" target="_blank" rel="noopener">${ui.tryFree} <span>${ui.next}</span></a><button class="watch" id="watchDemo" type="button"><span class="watch-icon">▶</span> <span>${t.watch}</span></button></div></div>${phoneBlock}<div class="feature-stack">${feature(posUrl, "pos", ui.posName, t.pos)}${feature(bookingUrl, "booking", ui.bookingName, t.booking)}</div></div><div class="industry-rail"><span>${t.rail}</span>${t.railItems.map(([key, label], i) => `<button type="button" data-industry="${key}"${i === 0 ? ' class="active"' : ""}>${label}</button>`).join("")}<a href="#industries" aria-label="${t.railMore}">${ui.next}</a></div></div></section>
+  const body = `<section class="hero" id="home"><div class="shell">${topbar(lang, { base: "", logoHref: "#home", otherHref: homeOf(ui.otherLangCode) })}<div class="stage"><div class="hero-copy"><div class="eyebrow">${t.eyebrow}</div><h1>${t.h1}</h1><p>${t.lead}</p><div class="cta-row"><a class="button-primary" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} <span>${ui.next}</span></a><button class="watch" id="watchDemo" type="button"><span class="watch-icon">▶</span> <span>${t.watch}</span></button></div></div>${phoneBlock}<div class="feature-stack">${feature(posUrl, "pos", ui.posName, t.pos)}${feature(bookingUrl, "booking", ui.bookingName, t.booking)}</div></div><div class="industry-rail"><span>${t.rail}</span>${t.railItems.map(([key, label], i) => `<button type="button" data-industry="${key}"${i === 0 ? ' class="active"' : ""}>${label}</button>`).join("")}<a href="#industries" aria-label="${t.railMore}">${ui.next}</a></div></div></section>
 <main>
 <section class="stats" aria-label="${t.statsLabel}"><div class="shell stats-row">${t.stats.map(([a, b]) => `<div class="stat"><strong>${a}</strong><p>${b}</p></div>`).join("")}</div></section>
 <section class="section process" id="how"><div class="shell process-grid"><div><p class="section-label">${t.how.label}</p><h2>${t.how.h2}</h2><p class="section-intro">${t.how.intro}</p></div><div class="steps">${t.how.steps.map(([num, h, p], i) => `<article class="step"><span class="step-num">${num}</span>${ICONS[["connect", "spark", "grow"][i]]}<h3>${h}</h3><p>${p}</p></article>`).join("")}</div></div></section>
@@ -230,7 +235,7 @@ function page(p, lang) {
     graph.push({ "@type": "Article", headline: plain(c.h1), description: c.description, inLanguage: lang, datePublished: UPDATED, dateModified: UPDATED, mainEntityOfPage: url, image: `${SITE}/assets/og.png`, author: { "@type": "Organization", name: "ordr.ae", url: SITE }, publisher: { "@type": "Organization", name: "ordr.ae", logo: { "@type": "ImageObject", url: `${SITE}/assets/og.png` } } });
   }
   const sections = c.sections.map((s) => `<h2>${s.h}</h2><p>${links(s.p, lang)}</p>${s.ticks ? `<ul class="ticks">${s.ticks.map((t) => `<li>${t}</li>`).join("")}</ul>` : ""}`).join("");
-  const body = `<section class="hero hero-page" id="home"><div class="shell">${topbar(lang, { base, logoHref: base, otherHref: urlOf(p.slug, other) })}<div class="stage ${c.chat ? "stage-page" : "stage-text"}"><div class="hero-copy"><nav class="crumbs" aria-label="${ui.crumbs}"><a href="${base}">${ui.home}</a> <span aria-hidden="true">/</span> ${parent ? `<a href="${urlOf(parent.slug, lang)}">${parent.label[lang]}</a> <span aria-hidden="true">/</span> ` : ""}<span aria-current="page">${p.label[lang]}</span></nav><h1>${c.h1}</h1><p>${c.lead}</p><div class="cta-row"><a class="button-primary" href="${ui.whatsapp}" target="_blank" rel="noopener">${ui.tryFree} <span>${ui.next}</span></a><a class="watch" href="${BROWSER_DEMO}"><span class="watch-icon">▶</span> <span>${ui.browser}</span></a></div><p class="hero-note">${ui.note}</p></div>${c.chat ? staticPhone(c.chat, lang) : ""}</div></div></section>
+  const body = `<section class="hero hero-page" id="home"><div class="shell">${topbar(lang, { base, logoHref: base, otherHref: urlOf(p.slug, other) })}<div class="stage ${c.chat ? "stage-page" : "stage-text"}"><div class="hero-copy"><nav class="crumbs" aria-label="${ui.crumbs}"><a href="${base}">${ui.home}</a> <span aria-hidden="true">/</span> ${parent ? `<a href="${urlOf(parent.slug, lang)}">${parent.label[lang]}</a> <span aria-hidden="true">/</span> ` : ""}<span aria-current="page">${p.label[lang]}</span></nav><h1>${c.h1}</h1><p>${c.lead}</p><div class="cta-row"><a class="button-primary" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} <span>${ui.next}</span></a><a class="watch" href="${BROWSER_DEMO}"><span class="watch-icon">▶</span> <span>${ui.browser}</span></a></div><p class="hero-note">${ui.note}</p></div>${c.chat ? staticPhone(c.chat, lang) : ""}</div></div></section>
 <main>
 ${children ? `<section class="section products-section"><div class="shell"><div class="section-header"><div><p class="section-label">${ui.industries}</p><h2>${c.childrenTitle}</h2></div></div><div class="industry-cards">${children}</div><p class="also"><strong>${ui.alsoFor}</strong> ${c.also} <a href="${urlOf("industries", lang)}">${ui.allIndustries}</a></p></div></section>
 ` : ""}<section class="section"><div class="shell faq-grid"><div class="article-side"><p class="section-label">${ui.detail}</p><p class="article-title">${p.label[lang]}</p></div><div class="article">${sections}</div></div></section>
