@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { home } from "./home.mjs";
+import { ICONS } from "./icons.mjs";
 import { pages } from "./pages.mjs";
 
 const HOSTS = { main: "https://ordr.ae", pos: "https://pos.ordr.ae", booking: "https://booking.ordr.ae" };
@@ -47,22 +48,6 @@ const UI = {
   },
 };
 
-const stroke = (viewBox, paths) => `<svg viewBox="${viewBox}" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">${paths}</svg>`;
-const ICONS = {
-  pos: stroke("0 0 32 32", `<path d="M5 12h22v15H5zM9 12V7h14v5M10 18h12M10 22h5m4 0h3"/>`),
-  booking: stroke("0 0 32 32", `<rect x="4" y="7" width="24" height="21" rx="2"/><path d="M10 3v8m12-8v8M4 14h24M10 20h4m4 0h4m-12 5h4"/>`),
-  connect: stroke("0 0 32 32", `<path d="M16 4a12 12 0 0 0-10.7 17.5L4 28l6.7-1.7A12 12 0 1 0 16 4z"/><path d="M12 11c1 6 4 9 9 10"/>`),
-  spark: stroke("0 0 32 32", `<path d="m16 2 3 10 11 4-11 4-3 10-3-10-11-4 11-4z"/>`),
-  grow: stroke("0 0 32 32", `<path d="M5 26V16h6v10zm8 0V11h6v15zm8 0V5h6v21z"/>`),
-  salon: stroke("0 0 30 30", `<path d="m4 4 22 22M26 4 4 26M9 9l5 5m2 2 5 5"/><circle cx="7" cy="23" r="3"/><circle cx="23" cy="23" r="3"/>`),
-  spa: stroke("0 0 30 30", `<path d="M15 25c-6-4-8-9-6-15 4 1 6 4 6 8 0-4 3-7 7-8 1 6-1 11-7 15zM3 18c6-1 10 2 12 7M27 18c-6-1-10 2-12 7"/>`),
-  restaurant: stroke("0 0 30 30", `<path d="M7 3v10m4-10v10M4 3v7c0 3 2 4 5 4v13M22 3c-4 5-4 11 0 14h4V3h-4zm2 14v10"/>`),
-  shop: stroke("0 0 30 30", `<path d="M5 11h20l-2 16H7L5 11zm5 0V8a5 5 0 0 1 10 0v3"/>`),
-  padel: stroke("0 0 30 30", `<ellipse cx="13" cy="11" rx="8" ry="10" transform="rotate(35 13 11)"/><path d="m18 19 9 9M9 7h1m4 0h1M9 12h1m4 0h1"/>`),
-  resort: stroke("0 0 30 30", `<path d="M3 22h24M6 22v-8h18v8M8 14V8h14v6M11 8V4h8v4M10 18h4m3 0h4"/>`),
-  grocery: stroke("0 0 30 30", `<path d="M3 5h4l3 15h14l3-11H8.5"/><circle cx="12" cy="25" r="2"/><circle cx="22" cy="25" r="2"/>`),
-  grid: stroke("0 0 30 30", `<rect x="4" y="4" width="9" height="9" rx="2"/><rect x="17" y="4" width="9" height="9" rx="2"/><rect x="4" y="17" width="9" height="9" rx="2"/><rect x="17" y="17" width="9" height="9" rx="2"/>`),
-};
 const PAGE_ICON = {
   "whatsapp-chatbot": "connect", "guides/whatsapp-business-api-uae": "spark", industries: "grid",
   "whatsapp-ordering-system": "pos", "restaurant-whatsapp-ordering": "restaurant", "grocery-whatsapp-ordering": "grocery", "sell-on-whatsapp": "shop",
