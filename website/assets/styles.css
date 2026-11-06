@@ -267,3 +267,30 @@ html[dir="rtl"] .day li { padding: 18px 24px 18px 0; }
 .site-footer nav { display: flex; flex-wrap: wrap; gap: 18px; }
 .site-footer a { text-decoration: none; }
 .site-footer a:hover { color: #fff; }
+
+/* Inner pages */
+.hero-sub h1 { font-size: clamp(2.2rem, 4.8vw, 3.6rem); }
+.hero-text .wrap { grid-template-columns: minmax(0, 1fr); }
+.hero-text .hero-lead { max-width: 44rem; }
+.crumbs { margin-block-end: 18px; font-size: 0.9rem; color: rgba(255, 255, 255, 0.66); }
+.crumbs a { color: rgba(255, 255, 255, 0.86); }
+.chat-static { height: auto; min-height: 360px; }
+.article { max-width: 46rem; }
+.article h2 { font-size: clamp(1.55rem, 3vw, 2rem); margin-block-start: clamp(32px, 5vw, 48px); }
+.article h2:first-child { margin-block-start: 0; }
+.article p { margin-block-start: 12px; color: var(--muted); }
+.article a, .faq a { color: var(--pine-2); text-decoration: underline; text-underline-offset: 2px; }
+.band-soft { background: var(--mint); }
+.card h3 a { color: inherit; text-decoration: none; }
+.card h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Footer with page links */
+.site-footer .wrap { display: block; }
+.footer-links { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 28px; padding-block-end: 24px; margin-block-end: 20px; border-block-end: 1px solid rgba(255, 255, 255, 0.14); }
+.footer-links h2 { font-family: var(--font-body); font-size: 0.82rem; font-weight: 600; letter-spacing: 0; color: #fff; }
+.footer-links ul { margin: 10px 0 0; padding: 0; list-style: none; columns: 2; column-gap: 28px; }
+.footer-links > div:last-child ul { columns: 1; }
+.footer-links li { margin-block-end: 6px; break-inside: avoid; }
+.footer-base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+.footer-base nav { display: flex; flex-wrap: wrap; gap: 16px; }
+@media (max-width: 620px) { .footer-links { grid-template-columns: minmax(0, 1fr); } .footer-links ul { columns: 1; } }
