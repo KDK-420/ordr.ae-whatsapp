@@ -1,6 +1,5 @@
-# Publish website/ to the `hostinger` branch, which Hostinger's Git deployment checks out into
-# the ordr.ae web root (hPanel: Websites, ordr.ae, Advanced, Git; branch `hostinger`, auto-deployment on).
-# Hostinger runs no build and must never deploy `main`, which would put the whole monorepo in public_html.
+# Publish website/ to ordr.ae. Caddy serves the folder straight from the checkout on the server, so
+# this updates only those files: no build, no container restart, and the app is not touched.
 name: Website
 
 on:
@@ -11,29 +10,43 @@ on:
       - .github/workflows/website.yml
   workflow_dispatch:
 
+# Shares the group with vps.yml, so the two never change the checkout at the same time.
 concurrency:
-  group: website
+  group: vps-200.141.6.31
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HOST: 200.141.6.31
     steps:
-      - uses: actions/checkout@v4
-      - name: Check the site
-        run: test -f website/index.html && test -f website/ar/index.html && test -f website/assets/styles.css
-      - name: Push the site to the hostinger branch
-        working-directory: website
+      - name: Update the files on the server
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          rm README.md
-          git init -q -b hostinger
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Deploy ${GITHUB_SHA::7} from ${GITHUB_REF_NAME}"
-          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" hostinger
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vps_key && chmod 600 ~/.ssh/vps_key
+          # The fetch reaches GitHub from the server, which has timed out before, so try a few times.
+          for attempt in 1 2 3; do
+            if ssh -i ~/.ssh/vps_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "root@$HOST" \
+              "cd /opt/ordr && git fetch --quiet origin main && git restore --source=origin/main --staged --worktree -- website"; then
+              exit 0
+            fi
+            echo "attempt $attempt failed"
+            sleep 15
+          done
+          exit 1
+
+      - name: Check the live site
+        run: |
+          set -euo pipefail
+          page="$(curl -fsS --max-time 20 "https://ordr.ae/?v=$GITHUB_SHA")"
+          case "$page" in *ordr.ae*) ;; *) echo "::error::https://ordr.ae/ did not return the site"; exit 1 ;; esac
+          curl -fsS -o /dev/null --max-time 20 https://ordr.ae/ar/
+          curl -fsS -o /dev/null --max-time 20 https://ordr.ae/assets/styles.css
