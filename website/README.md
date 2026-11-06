@@ -1,0 +1,16 @@
+# ordr.ae product website
+
+The public marketing site for ordr.ae, in English (`index.html`) and Arabic (`ar/index.html`).
+Plain HTML, CSS and JavaScript: no build step, no dependencies. It is separate from the product,
+which lives in `apps/`.
+
+Run it locally:
+
+    python3 -m http.server 3200 --directory website
+
+Deploy by copying the contents of this folder to the web root of ordr.ae. Links to the product
+point at https://app.ordr.ae (sign in, web chat demo, privacy policy).
+
+The hero conversations are in `assets/site.js`, with the first one also in each HTML file so the
+page reads fully without JavaScript. Keep claims to what the product does today: see the
+"what is mocked" section of docs/RUNBOOK.md before adding one.
