@@ -125,6 +125,7 @@ services:
     volumes:
       # A directory mount, not a file mount: git replaces files by inode and a file mount would go stale.
       - ./caddy:/etc/caddy:ro
+      - ../website:/srv/website:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

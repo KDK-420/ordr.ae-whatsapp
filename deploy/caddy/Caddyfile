@@ -2,6 +2,8 @@
 #   /health, /webhooks/*, /merchant/*, /v1/*  -> the API
 #   everything else                           -> the dashboard (landing page, web chat, checkout, login, orders board)
 #
+# ordr.ae is the product website: the static files in website/, served from the checkout on the server.
+#
 # DOMAIN gets a normal certificate. Customer pages (<slug>.ordr.ae) get theirs on the first visit, but only
 # after the API confirms that host belongs to a published site, so a random subdomain issues nothing.
 {
@@ -25,6 +27,18 @@
 
 {$DOMAIN} {
 	import routes
+}
+
+ordr.ae {
+	root * /srv/website
+	encode gzip
+	file_server {
+		hide README.md
+	}
+}
+
+www.ordr.ae {
+	redir https://ordr.ae{uri} permanent
 }
 
 https:// {

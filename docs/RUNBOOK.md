@@ -78,6 +78,15 @@ certificate per subdomain on its first visit (on-demand TLS), after asking
 `GET /v1/sites/tls-check?domain=<host>`, which allows only published sites on `SITE_BASE_DOMAIN`.
 The subdomain is the tenant's slug.
 
+## Product website (`ordr.ae`)
+
+The marketing site is the static files in `website/`, served by Caddy straight from the checkout
+on the server (`/opt/ordr/website`, mounted at `/srv/website`); `www` redirects to it. DNS: `@` and
+`www` are A records to the server. A push to `main` that changes `website/` runs
+`.github/workflows/website.yml`, which updates only that folder on the server, so no container
+restarts. The old WordPress install on Hostinger is no longer public; pointing `@` back at Hostinger
+restores it.
+
 ## What is mocked and how to replace it
 
 - **Payments.** `MockPaymentProvider` (`apps/api/src/payments/payment-provider.ts`) implements
