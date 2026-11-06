@@ -87,6 +87,9 @@ on the server (`/opt/ordr/website`, mounted at `/srv/website`); `www` redirects 
 restarts. The old WordPress install on Hostinger is no longer public; pointing `@` back at Hostinger
 restores it.
 
+The marketing pages in the dashboard (`/`, `/for/*`) now only show locally: on `app.ordr.ae`,
+`proxy.ts` sends them to the matching page on `ordr.ae` with a 301, and a signed-in `/` goes to `/orders`.
+
 ## What is mocked and how to replace it
 
 - **Payments.** `MockPaymentProvider` (`apps/api/src/payments/payment-provider.ts`) implements
