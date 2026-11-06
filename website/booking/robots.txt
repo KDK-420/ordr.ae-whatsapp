@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://booking.ordr.ae/sitemap.xml

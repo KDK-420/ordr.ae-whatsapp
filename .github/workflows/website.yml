@@ -1,4 +1,4 @@
-# Publish website/ to ordr.ae. Caddy serves the folder straight from the checkout on the server, so
+# Publish website/ to ordr.ae, pos.ordr.ae and booking.ordr.ae. Caddy serves the folder straight from the checkout on the server, so
 # this updates only those files: no build, no container restart, and the app is not touched.
 name: Website
 
@@ -50,3 +50,6 @@ jobs:
           case "$page" in *ordr.ae*) ;; *) echo "::error::https://ordr.ae/ did not return the site"; exit 1 ;; esac
           curl -fsS -o /dev/null --max-time 20 https://ordr.ae/ar/
           curl -fsS -o /dev/null --max-time 20 https://ordr.ae/assets/styles.css
+          curl -fsS -o /dev/null --max-time 20 https://pos.ordr.ae/
+          curl -fsS -o /dev/null --max-time 20 https://booking.ordr.ae/
+          curl -fsS -o /dev/null --max-time 20 https://booking.ordr.ae/assets/styles.css

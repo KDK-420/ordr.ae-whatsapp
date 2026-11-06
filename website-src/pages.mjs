@@ -5,6 +5,8 @@
 export const pages = [
   {
     slug: "whatsapp-chatbot",
+    host: "main",
+    path: "/whatsapp-chatbot/",
     label: { en: "AI WhatsApp chatbot", ar: "شات بوت واتساب بالذكاء الاصطناعي" },
     en: {
       title: "AI WhatsApp Chatbot for UAE Businesses | ordr.ae",
@@ -24,7 +26,7 @@ export const pages = [
         { h: "Answers come from your data", p: "The assistant works from your catalog, calendar and business details. If the answer isn't there, it says so and asks your team, so it doesn't invent a price or promise a time you don't have.", ticks: ["Prices and services from your catalog", "Free times from your live calendar", "Address, hours and parking from your business details"] },
         { h: "Arabic and English, typed or spoken", p: "It follows the language of the customer's latest message, so a chat can switch between Arabic and English without anyone choosing a setting. Voice notes are transcribed and answered, and photos are understood too." },
         { h: "Your team stays in charge", p: "When a customer needs a person, the assistant says so and alerts your staff on WhatsApp and on their phones. It keeps answering everything else in the meantime. Your team can read any conversation in the shared inbox and take over whenever they want." },
-        { h: "Built for how you sell", p: "The same assistant works differently for each kind of business: <a href=\"{{salon-booking-software}}\">salons and spas</a>, <a href=\"{{padel-court-booking-system}}\">padel and sports courts</a>, <a href=\"{{hotel-whatsapp-booking}}\">resorts and hotels</a>, <a href=\"{{restaurant-whatsapp-ordering}}\">restaurants and cafés</a>, and <a href=\"{{sell-on-whatsapp}}\">shops</a>." },
+        { h: "Built for how you sell", p: "The same assistant works differently for each kind of business: <a href=\"{{salon-booking-software}}\">salons and spas</a>, <a href=\"{{padel-court-booking-system}}\">padel and sports courts</a>, <a href=\"{{hotel-whatsapp-booking}}\">resorts and hotels</a>, <a href=\"{{restaurant-whatsapp-ordering}}\">restaurants and cafés</a>, and <a href=\"{{sell-on-whatsapp}}\">shops</a>. <a href=\"{{industries}}\">See all industries</a>." },
       ],
       faq: [
         ["Does it use the official WhatsApp API?", "Yes. ordr.ae connects to the WhatsApp Business Platform from Meta. Our <a href=\"{{guides/whatsapp-business-api-uae}}\">guide to the WhatsApp Business API in the UAE</a> explains what that involves."],
@@ -52,7 +54,7 @@ export const pages = [
         { h: "الإجابات من بياناتك أنت", p: "يعمل المساعد من الكتالوج والتقويم وبيانات نشاطك التجاري. وإذا لم يجد الإجابة قال ذلك وسأل فريقك، فلا يخترع سعراً ولا يعد بموعد غير متاح.", ticks: ["الأسعار والخدمات من الكتالوج", "الأوقات المتاحة من تقويمك المباشر", "العنوان وساعات العمل والمواقف من بيانات نشاطك"] },
         { h: "بالعربية والإنجليزية، كتابةً وصوتاً", p: "يتبع المساعد لغة آخر رسالة من العميل، فتنتقل المحادثة بين العربية والإنجليزية دون أي إعداد. ويحوّل الرسائل الصوتية إلى نص ويرد عليها، ويفهم الصور أيضاً." },
         { h: "فريقك يبقى صاحب القرار", p: "عندما يحتاج العميل إلى موظف، يخبره المساعد بذلك وينبّه فريقك عبر واتساب وعلى هواتفهم، ويواصل الرد على بقية الأسئلة في الوقت نفسه. ويمكن لفريقك قراءة أي محادثة في صندوق الوارد المشترك والتدخل متى شاء." },
-        { h: "مصمم لطريقة بيعك", p: "يعمل المساعد نفسه بطريقة مختلفة لكل نشاط: <a href=\"{{salon-booking-software}}\">الصالونات والسبا</a>، و<a href=\"{{padel-court-booking-system}}\">ملاعب البادل والرياضة</a>، و<a href=\"{{hotel-whatsapp-booking}}\">المنتجعات والفنادق</a>، و<a href=\"{{restaurant-whatsapp-ordering}}\">المطاعم والمقاهي</a>، و<a href=\"{{sell-on-whatsapp}}\">المتاجر</a>." },
+        { h: "مصمم لطريقة بيعك", p: "يعمل المساعد نفسه بطريقة مختلفة لكل نشاط: <a href=\"{{salon-booking-software}}\">الصالونات والسبا</a>، و<a href=\"{{padel-court-booking-system}}\">ملاعب البادل والرياضة</a>، و<a href=\"{{hotel-whatsapp-booking}}\">المنتجعات والفنادق</a>، و<a href=\"{{restaurant-whatsapp-ordering}}\">المطاعم والمقاهي</a>، و<a href=\"{{sell-on-whatsapp}}\">المتاجر</a>. <a href=\"{{industries}}\">جميع القطاعات</a>." },
       ],
       faq: [
         ["هل يستخدم واجهة واتساب الرسمية؟", "نعم، يتصل ordr.ae بمنصة واتساب للأعمال من Meta. ويشرح <a href=\"{{guides/whatsapp-business-api-uae}}\">دليلنا لواجهة واتساب للأعمال في الإمارات</a> ما يتطلبه ذلك."],
@@ -65,9 +67,14 @@ export const pages = [
 
   {
     slug: "whatsapp-booking-system",
-    label: { en: "WhatsApp booking system", ar: "نظام الحجز عبر واتساب" },
+    host: "booking",
+    path: "/",
+    children: ["salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking"],
+    label: { en: "ordr Booking", ar: "ordr Booking" },
     en: {
-      title: "WhatsApp Booking System for UAE Businesses | ordr.ae",
+      title: "ordr Booking: WhatsApp Booking System for the UAE",
+      childrenTitle: "Made for businesses that sell time.",
+      also: "barbershops, nail bars, tennis and football courts, guesthouses and more.",
       description: "Let customers book appointments, courts and rooms on WhatsApp. Real availability, no double bookings, automatic reminders, in Arabic and English.",
       h1: "A booking system that lives <em>in WhatsApp.</em>",
       lead: "Your customers already message you to ask for a time. ordr.ae answers them, offers real free slots, and confirms the booking in the same chat, with no app or form for them to fill in.",
@@ -87,15 +94,17 @@ export const pages = [
         { h: "One calendar for your team", p: "Every booking sits on your calendar by person or resource, in a dashboard you can use on a laptop or phone. Staff can see the day at a glance and step into any conversation." },
       ],
       faq: [
-        ["Which businesses is it for?", "Any business that sells time: <a href=\"{{salon-booking-software}}\">salons and spas</a>, <a href=\"{{padel-court-booking-system}}\">sports courts</a> and <a href=\"{{hotel-whatsapp-booking}}\">resorts and hotels</a> are ready today."],
+        ["Which businesses is it for?", "Any business that sells time. <a href=\"{{salon-booking-software}}\">Salons and spas</a>, <a href=\"{{padel-court-booking-system}}\">sports courts</a> and <a href=\"{{hotel-whatsapp-booking}}\">hotels and resorts</a> are ready today, and <a href=\"{{industries}}\">many others</a> can run on the same system."],
         ["Can two customers book the same slot?", "No. A slot is held while a customer decides, so two people can't take the same one."],
         ["Do customers need to install anything?", "No. It happens inside WhatsApp. There's also a web chat with the same assistant for people who prefer a browser."],
         ["Can I take a deposit when someone books?", "Not yet. Online payment isn't available, so customers pay at your venue or however you take payment today."],
       ],
-      related: ["whatsapp-chatbot", "salon-booking-software", "padel-court-booking-system"],
+      related: ["whatsapp-chatbot", "whatsapp-ordering-system", "guides/whatsapp-business-api-uae"],
     },
     ar: {
-      title: "نظام حجز مواعيد عبر واتساب للشركات في الإمارات | ordr.ae",
+      title: "ordr Booking: نظام حجز مواعيد عبر واتساب في الإمارات",
+      childrenTitle: "مصمم للأنشطة التي تبيع الوقت.",
+      also: "صالونات الحلاقة والأظافر، وملاعب التنس وكرة القدم، وبيوت الضيافة وغيرها.",
       description: "دع عملاءك يحجزون المواعيد والملاعب والغرف عبر واتساب. أوقات متاحة فعلياً، بلا حجز مزدوج، وتذكيرات تلقائية، بالعربية والإنجليزية.",
       h1: "نظام حجز يعمل <em>داخل واتساب.</em>",
       lead: "عملاؤك يراسلونك أصلاً للسؤال عن موعد. يرد عليهم ordr.ae، ويعرض الأوقات المتاحة فعلياً، ويؤكد الحجز في المحادثة نفسها، دون تطبيق أو نموذج.",
@@ -115,7 +124,7 @@ export const pages = [
         { h: "تقويم واحد لفريقك", p: "يظهر كل حجز في تقويمك بحسب الموظف أو المورد، في لوحة تحكم تعمل على الحاسوب والهاتف. يرى فريقك اليوم كله بنظرة واحدة ويدخل أي محادثة متى شاء." },
       ],
       faq: [
-        ["لأي الأنشطة يصلح؟", "لأي نشاط يبيع الوقت: <a href=\"{{salon-booking-software}}\">الصالونات والسبا</a> و<a href=\"{{padel-court-booking-system}}\">الملاعب الرياضية</a> و<a href=\"{{hotel-whatsapp-booking}}\">المنتجعات والفنادق</a> جاهزة اليوم."],
+        ["لأي الأنشطة يصلح؟", "لأي نشاط يبيع الوقت. <a href=\"{{salon-booking-software}}\">الصالونات والسبا</a> و<a href=\"{{padel-court-booking-system}}\">الملاعب الرياضية</a> و<a href=\"{{hotel-whatsapp-booking}}\">الفنادق والمنتجعات</a> جاهزة اليوم، و<a href=\"{{industries}}\">أنشطة كثيرة أخرى</a> يمكنها العمل على النظام نفسه."],
         ["هل يمكن أن يحجز عميلان الموعد نفسه؟", "لا. يبقى الموعد محجوزاً مؤقتاً بينما يقرر العميل، فلا يمكن لشخصين أخذ الموعد نفسه."],
         ["هل يحتاج العملاء إلى تثبيت أي شيء؟", "لا، كل شيء يتم داخل واتساب. وتتوفر أيضاً محادثة عبر الموقع بالمساعد نفسه لمن يفضل المتصفح."],
         ["هل يمكنني أخذ عربون عند الحجز؟", "ليس بعد. الدفع الإلكتروني غير متاح حالياً، فيدفع العملاء في مقر النشاط أو بالطريقة التي تعتمدها اليوم."],
@@ -125,7 +134,10 @@ export const pages = [
 
   {
     slug: "salon-booking-software",
-    label: { en: "Salon booking software", ar: "برنامج حجز للصالونات" },
+    host: "booking",
+    path: "/salons/",
+    parent: "whatsapp-booking-system",
+    label: { en: "Salons and spas", ar: "الصالونات والسبا" },
     en: {
       title: "Salon Booking Software on WhatsApp, Dubai and UAE | ordr.ae",
       description: "Salon and spa booking on WhatsApp for the UAE. Clients book, move and cancel by message, in Arabic or English, with reminders and a shared calendar.",
@@ -185,7 +197,10 @@ export const pages = [
 
   {
     slug: "padel-court-booking-system",
-    label: { en: "Padel court booking system", ar: "نظام حجز ملاعب البادل" },
+    host: "booking",
+    path: "/padel/",
+    parent: "whatsapp-booking-system",
+    label: { en: "Padel and sports courts", ar: "ملاعب البادل والرياضة" },
     en: {
       title: "Padel Court Booking System on WhatsApp, UAE | ordr.ae",
       description: "A WhatsApp booking system for padel, tennis and football courts in the UAE. Players book by message at any hour, with instant confirmation and no double bookings.",
@@ -239,7 +254,10 @@ export const pages = [
 
   {
     slug: "hotel-whatsapp-booking",
-    label: { en: "Hotel WhatsApp booking", ar: "حجز الفنادق عبر واتساب" },
+    host: "booking",
+    path: "/hotels/",
+    parent: "whatsapp-booking-system",
+    label: { en: "Hotels and resorts", ar: "الفنادق والمنتجعات" },
     en: {
       title: "WhatsApp Booking for Hotels and Resorts in the UAE | ordr.ae",
       description: "A WhatsApp assistant for UAE hotels and resorts. Guests check dates, see room photos and reserve in Arabic or English, with one number for several properties.",
@@ -297,7 +315,10 @@ export const pages = [
 
   {
     slug: "restaurant-whatsapp-ordering",
-    label: { en: "Restaurant WhatsApp ordering", ar: "طلبات المطاعم عبر واتساب" },
+    host: "pos",
+    path: "/restaurants/",
+    parent: "whatsapp-ordering-system",
+    label: { en: "Restaurants and cafés", ar: "المطاعم والمقاهي" },
     en: {
       title: "WhatsApp Ordering System for Restaurants in the UAE | ordr.ae",
       description: "Take restaurant orders on WhatsApp in the UAE. Customers browse the menu, build a cart and choose delivery or pickup, with order updates at each step.",
@@ -323,7 +344,7 @@ export const pages = [
         ["How do customers pay?", "On delivery, at pickup, or however you take payment today. Online card payment isn't available yet."],
         ["Does it work for cloud kitchens and cafés?", "Yes. It's built for restaurants, cafés and cloud kitchens."],
       ],
-      related: ["sell-on-whatsapp", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"],
+      related: ["grocery-whatsapp-ordering", "sell-on-whatsapp", "guides/whatsapp-business-api-uae"],
     },
     ar: {
       title: "نظام طلبات واتساب للمطاعم في الإمارات | ordr.ae",
@@ -355,7 +376,10 @@ export const pages = [
 
   {
     slug: "sell-on-whatsapp",
-    label: { en: "Sell on WhatsApp", ar: "البيع عبر واتساب" },
+    host: "pos",
+    path: "/shops/",
+    parent: "whatsapp-ordering-system",
+    label: { en: "Shops", ar: "المتاجر" },
     en: {
       title: "Sell on WhatsApp in the UAE: AI Shop Assistant | ordr.ae",
       description: "Sell on WhatsApp in the UAE. An AI assistant suggests products, checks live stock, builds the cart and takes delivery or pickup details, in Arabic and English.",
@@ -378,7 +402,7 @@ export const pages = [
         ["Can customers pay by card in the chat?", "Not yet. Customers pay on delivery, at pickup, or however you take payment today."],
         ["Is this the same as the WhatsApp catalog?", "No. The catalog in the WhatsApp Business app is a list of items. ordr.ae has a conversation, checks stock and builds the order."],
       ],
-      related: ["restaurant-whatsapp-ordering", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"],
+      related: ["grocery-whatsapp-ordering", "restaurant-whatsapp-ordering", "guides/whatsapp-business-api-uae"],
     },
     ar: {
       title: "البيع عبر واتساب في الإمارات: مساعد ذكي لمتجرك | ordr.ae",
@@ -407,6 +431,8 @@ export const pages = [
 
   {
     slug: "guides/whatsapp-business-api-uae",
+    host: "main",
+    path: "/guides/whatsapp-business-api-uae/",
     guide: true,
     label: { en: "WhatsApp Business API guide", ar: "دليل واجهة واتساب للأعمال" },
     en: {
@@ -428,7 +454,7 @@ export const pages = [
         ["Can I send bulk promotions?", "Only as approved marketing templates, to people who've agreed to hear from you. Sending messages people don't want can get your number restricted."],
         ["How does ordr.ae fit in?", "ordr.ae connects to the platform and adds the assistant, inbox and calendar. See how the <a href=\"{{whatsapp-chatbot}}\">AI WhatsApp chatbot</a> works."],
       ],
-      related: ["whatsapp-chatbot", "whatsapp-booking-system", "sell-on-whatsapp"],
+      related: ["whatsapp-chatbot", "whatsapp-booking-system", "whatsapp-ordering-system"],
     },
     ar: {
       title: "واجهة واتساب للأعمال في الإمارات: دليل مبسط | ordr.ae",
@@ -448,6 +474,174 @@ export const pages = [
         ["هل أحتاج إلى رخصة تجارية؟", "يطلب توثيق Meta مستندات تثبت أن نشاطك حقيقي، والرخصة التجارية الإماراتية هي المستند المعتاد الذي يُستحسن تجهيزه."],
         ["هل يمكنني إرسال عروض جماعية؟", "فقط عبر قوالب تسويقية معتمدة، إلى من وافقوا على استقبالها. وقد يؤدي إرسال رسائل غير مرغوبة إلى تقييد رقمك."],
         ["أين يأتي دور ordr.ae؟", "يتصل ordr.ae بالمنصة ويضيف المساعد وصندوق الوارد والتقويم. تعرّف على طريقة عمل <a href=\"{{whatsapp-chatbot}}\">شات بوت واتساب</a>."],
+      ],
+    },
+  },
+
+  {
+    slug: "whatsapp-ordering-system",
+    host: "pos",
+    path: "/",
+    children: ["restaurant-whatsapp-ordering", "grocery-whatsapp-ordering", "sell-on-whatsapp"],
+    label: { en: "ordr POS", ar: "ordr POS" },
+    en: {
+      title: "ordr POS: WhatsApp Ordering System for UAE Businesses",
+      description: "Take orders and sell on WhatsApp in the UAE. Customers browse, build a cart and choose delivery or pickup, in Arabic or English, with a live orders board.",
+      h1: "Take orders and sell <em>on WhatsApp.</em>",
+      lead: "ordr POS turns WhatsApp into your sales counter. Customers browse your menu or products in the chat, check prices and stock, build a cart, and your team sees the order straight away.",
+      childrenTitle: "Made for businesses that sell products.",
+      also: "bakeries, cloud kitchens, flower shops, butchers, coffee roasters and more.",
+      chat: { name: "Bella Pasta", at: "19:31", lines: [
+        [1, "hi, can I order for pickup?"],
+        [0, "Of course! Here's our menu. Pick a category: Pizza, Pasta or Desserts."],
+        [1, "Pizza"],
+        [0, "Margherita AED 42, Pepperoni AED 48. Which one would you like?"],
+        [1, "Margherita"],
+        [0, "Added to your cart: 1 Margherita, AED 42. Anything else, or shall we check out?"],
+      ] },
+      sections: [
+        { h: "Your counter, open all day", p: "Customers already message you to ask what you have and how much it costs. ordr POS answers at any hour from your real catalog and turns the chat into an order, so a sale doesn't depend on someone being free to reply." },
+        { h: "From chat to order", p: "Customers see your categories, items, variants and prices in the chat. The assistant checks stock, builds the cart and takes the delivery or pickup details.", ticks: ["Menu or product catalog in Arabic and English", "Variants such as size or weight", "Live stock, so nobody orders what's sold out"] },
+        { h: "One board for every order", p: "New orders land on your orders board, on a laptop or phone. Your team accepts them and moves them along, and customers get an update at each step." },
+        { h: "Prices the way you run them", p: "Set your delivery fee and whether your prices include VAT. Change a price in your catalog and the assistant uses it straight away." },
+      ],
+      faq: [
+        ["Is it a full point-of-sale system?", "Not yet. ordr POS handles orders and sales on WhatsApp and the web chat. It doesn't run a till, print receipts or take card payments, so you keep your current till for walk-in customers."],
+        ["How do customers pay?", "On delivery, at pickup, or however you take payment today. Online card payment isn't available yet."],
+        ["Does it connect to my till or to delivery apps?", "Not today. Orders arrive on the ordr.ae orders board, and your team works from there."],
+        ["Can I use it next to ordr Booking?", "Yes, talk to us if your business takes both orders and bookings."],
+      ],
+      related: ["whatsapp-booking-system", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"],
+    },
+    ar: {
+      title: "ordr POS: نظام طلبات عبر واتساب للشركات في الإمارات",
+      description: "استقبل الطلبات وبِع عبر واتساب في الإمارات. يتصفح العملاء ويكوّنون السلة ويختارون التوصيل أو الاستلام، بالعربية أو الإنجليزية، مع لوحة طلبات مباشرة.",
+      h1: "استقبل الطلبات وبِع <em>عبر واتساب.</em>",
+      lead: "يحوّل ordr POS واتساب إلى منفذ بيع لنشاطك. يتصفح العملاء قائمتك أو منتجاتك داخل المحادثة، ويتحققون من الأسعار والمخزون، ويكوّنون السلة، ويرى فريقك الطلب فوراً.",
+      childrenTitle: "مصمم للأنشطة التي تبيع المنتجات.",
+      also: "المخابز والمطابخ السحابية ومحلات الزهور والملاحم ومحامص القهوة وغيرها.",
+      chat: { name: "بيلا باستا", at: "19:31", lines: [
+        [1, "مرحبا، أقدر أطلب استلام؟"],
+        [0, "بالتأكيد! هذه قائمتنا. اختر الفئة: بيتزا أو باستا أو حلويات."],
+        [1, "بيتزا"],
+        [0, "مارجريتا 42 درهم، بيبروني 48 درهم. أيهما تفضل؟"],
+        [1, "مارجريتا"],
+        [0, "تمت الإضافة إلى سلتك: 1 مارجريتا، 42 درهم. شيء آخر أم ننتقل إلى إتمام الطلب؟"],
+      ] },
+      sections: [
+        { h: "منفذ بيعك مفتوح طوال اليوم", p: "عملاؤك يراسلونك أصلاً للسؤال عما لديك وعن سعره. يرد ordr POS في أي وقت من كتالوجك الفعلي ويحوّل المحادثة إلى طلب، فلا تعتمد عملية البيع على وجود من يرد." },
+        { h: "من المحادثة إلى الطلب", p: "يرى العملاء الفئات والأصناف والخيارات والأسعار داخل المحادثة. يتحقق المساعد من المخزون، ويكوّن السلة، ويأخذ تفاصيل التوصيل أو الاستلام.", ticks: ["قائمة أو كتالوج منتجات بالعربية والإنجليزية", "خيارات مثل الحجم أو الوزن", "مخزون مباشر فلا يطلب أحد ما نفد"] },
+        { h: "لوحة واحدة لكل الطلبات", p: "تصل الطلبات الجديدة إلى لوحة الطلبات على الحاسوب أو الهاتف. يقبلها فريقك ويتابعها، ويتلقى العميل تحديثاً عند كل خطوة." },
+        { h: "أسعارك كما تديرها", p: "حدد رسوم التوصيل وما إذا كانت أسعارك شاملة ضريبة القيمة المضافة. وعند تغيير السعر في الكتالوج يستخدمه المساعد فوراً." },
+      ],
+      faq: [
+        ["هل هو نظام نقاط بيع كامل؟", "ليس بعد. يتولى ordr POS الطلبات والمبيعات عبر واتساب والمحادثة على الموقع. ولا يشغّل صندوق الدفع ولا يطبع الإيصالات ولا يستقبل مدفوعات البطاقات، فتحتفظ بنظامك الحالي لعملاء المحل."],
+        ["كيف يدفع العملاء؟", "عند التوصيل أو عند الاستلام أو بالطريقة التي تعتمدها اليوم. الدفع الإلكتروني بالبطاقة غير متاح بعد."],
+        ["هل يتصل بصندوق الدفع أو تطبيقات التوصيل؟", "ليس حالياً. تصل الطلبات إلى لوحة الطلبات في ordr.ae، ويعمل فريقك منها."],
+        ["هل يمكنني استخدامه مع ordr Booking؟", "نعم، تحدث إلينا إذا كان نشاطك يستقبل الطلبات والحجوزات معاً."],
+      ],
+    },
+  },
+
+  {
+    slug: "grocery-whatsapp-ordering",
+    host: "pos",
+    path: "/grocery/",
+    parent: "whatsapp-ordering-system",
+    label: { en: "Grocery stores", ar: "البقالات والسوبرماركت" },
+    en: {
+      title: "WhatsApp Ordering for Grocery Stores in the UAE | ordr POS",
+      description: "Take grocery orders on WhatsApp in the UAE. Customers ask for items in their own words, the assistant checks stock and builds the order for delivery or pickup.",
+      h1: "Grocery orders on WhatsApp, <em>without the back and forth.</em>",
+      lead: "Neighbourhood customers already send their shopping lists by message. ordr POS reads them, checks your stock and prices, and hands your team a clean order to pack.",
+      chat: { name: "Al Noor Grocery", at: "18:05", lines: [
+        [1, "do you have full fat milk 2L and eggs?"],
+        [0, "Yes. Full fat milk 2 L is AED 13 and a tray of 30 eggs is AED 28. Add both to your cart?"],
+        [1, "yes and deliver please"],
+        [0, "Added. Your total is AED 41 plus AED 5 delivery. Shall I confirm the order?"],
+        [1, "yes"],
+        [0, "Order 58 is confirmed. We'll message you when it's on the way."],
+      ] },
+      sections: [
+        { h: "Stop copying lists by hand", p: "When orders come in as free-form messages, someone has to read each one, check the shelves, work out the total and reply. The assistant does that first part, so your staff can get on with packing." },
+        { h: "Products, sizes and stock", p: "Add your products with their sizes and prices. Customers ask in their own words, and the assistant finds the match, tells them the price, and says so honestly when something is out of stock.", ticks: ["Variants such as size or weight", "Stock checked before it offers an item", "Delivery or pickup, with your delivery fee"] },
+        { h: "Arabic and English", p: "Customers can write or send a voice note in either language, and they get an answer in the same one." },
+        { h: "Keep your regulars on your number", p: "Orders come straight to your own WhatsApp number and your orders board, and your team can step into any chat." },
+      ],
+      faq: [
+        ["Can it handle thousands of products?", "Your catalog lives in ordr.ae, and every product needs adding with its price and stock. Talk to us about your range before you start."],
+        ["Does stock sync with my till?", "Not today. You keep stock up to date in ordr.ae."],
+        ["How do customers pay?", "On delivery, at pickup, or however you take payment today. Online card payment isn't available yet."],
+      ],
+      related: ["whatsapp-ordering-system", "sell-on-whatsapp", "restaurant-whatsapp-ordering"],
+    },
+    ar: {
+      title: "طلبات البقالة عبر واتساب في الإمارات | ordr POS",
+      description: "استقبل طلبات البقالة عبر واتساب في الإمارات. يطلب العملاء بأسلوبهم، ويتحقق المساعد من المخزون ويكوّن الطلب للتوصيل أو الاستلام.",
+      h1: "طلبات البقالة عبر واتساب <em>دون أخذ ورد.</em>",
+      lead: "عملاء الحي يرسلون قوائم مشترياتهم بالرسائل أصلاً. يقرأها ordr POS، ويتحقق من المخزون والأسعار، ويسلّم فريقك طلباً واضحاً للتجهيز.",
+      chat: { name: "بقالة النور", at: "18:05", lines: [
+        [1, "عندكم حليب كامل الدسم 2 لتر وبيض؟"],
+        [0, "نعم. الحليب 2 لتر بـ 13 درهم وطبق 30 بيضة بـ 28 درهم. أضيفهما إلى سلتك؟"],
+        [1, "نعم ووصلها لو سمحت"],
+        [0, "تمت الإضافة. الإجمالي 41 درهم و5 دراهم للتوصيل. أأكد الطلب؟"],
+        [1, "نعم"],
+        [0, "تم تأكيد الطلب 58. سنراسلك عندما يكون في الطريق."],
+      ] },
+      sections: [
+        { h: "كفى نسخ القوائم يدوياً", p: "عندما تصل الطلبات رسائل حرة، لا بد أن يقرأها أحد ويراجع الرفوف ويحسب الإجمالي ويرد. يتولى المساعد هذا الجزء الأول، ليتفرغ موظفوك للتجهيز." },
+        { h: "المنتجات والأحجام والمخزون", p: "أضف منتجاتك بأحجامها وأسعارها. يسأل العميل بأسلوبه، فيجد المساعد المنتج ويخبره بالسعر، ويقول بصدق إذا كان قد نفد.", ticks: ["خيارات مثل الحجم أو الوزن", "التحقق من المخزون قبل عرض الصنف", "التوصيل أو الاستلام مع رسوم التوصيل التي تحددها"] },
+        { h: "بالعربية والإنجليزية", p: "يكتب العميل أو يرسل رسالة صوتية بأي من اللغتين ويتلقى الرد باللغة نفسها." },
+        { h: "عملاؤك الدائمون على رقمك أنت", p: "تصل الطلبات مباشرة إلى رقم واتساب الخاص بك ولوحة الطلبات، ويستطيع فريقك التدخل في أي محادثة." },
+      ],
+      faq: [
+        ["هل يتعامل مع آلاف المنتجات؟", "يوجد كتالوجك في ordr.ae، ويجب إضافة كل منتج بسعره ومخزونه. تحدث إلينا عن تشكيلتك قبل البدء."],
+        ["هل يتزامن المخزون مع صندوق الدفع؟", "ليس حالياً. تحدّث المخزون في ordr.ae."],
+        ["كيف يدفع العملاء؟", "عند التوصيل أو عند الاستلام أو بالطريقة التي تعتمدها اليوم. الدفع الإلكتروني بالبطاقة غير متاح بعد."],
+      ],
+    },
+  },
+
+  {
+    slug: "industries",
+    host: "main",
+    path: "/industries/",
+    label: { en: "All industries", ar: "جميع القطاعات" },
+    en: {
+      title: "Industries We Serve in the UAE: WhatsApp Orders and Bookings | ordr.ae",
+      description: "If customers ask you about prices and availability on WhatsApp, ordr.ae can help. See which industries use ordr POS for orders and ordr Booking for bookings.",
+      h1: "If customers message you, <em>this is for you.</em>",
+      lead: "Every business fits one of two patterns. If you sell products, you need ordr POS. If you sell time, you need ordr Booking. Here's where your industry fits.",
+      sections: [
+        { h: "Selling products: ordr POS", p: "<a href=\"{{whatsapp-ordering-system}}\">ordr POS</a> is ready today for these businesses:", ticks: ["<a href=\"{{restaurant-whatsapp-ordering}}\">Restaurants, cafés and cloud kitchens</a>", "<a href=\"{{grocery-whatsapp-ordering}}\">Grocery stores and supermarkets</a>", "<a href=\"{{sell-on-whatsapp}}\">Shops selling products with sizes and stock</a>"] },
+        { h: "Also a good fit for ordr POS", p: "These businesses sell the same way, so they can run on the same system. Tell us about yours and we'll set it up with you.", ticks: ["Bakeries and sweet shops", "Coffee roasters", "Butchers and fish shops", "Flower and gift shops", "Water and gas delivery", "Laundry with pickup and delivery"] },
+        { h: "Selling time: ordr Booking", p: "<a href=\"{{whatsapp-booking-system}}\">ordr Booking</a> is ready today for these businesses:", ticks: ["<a href=\"{{salon-booking-software}}\">Salons, spas, barbershops and nail bars</a>", "<a href=\"{{padel-court-booking-system}}\">Padel, tennis and football courts</a>", "<a href=\"{{hotel-whatsapp-booking}}\">Hotels, resorts and guesthouses</a>"] },
+        { h: "Also a good fit for ordr Booking", p: "These businesses book time with a person or a resource, so they can run on the same system. Tell us about yours and we'll set it up with you.", ticks: ["Car wash and detailing", "Pet grooming", "Tutors and music teachers", "Photography studios", "Massage and wellness centres", "Meeting rooms and event spaces"] },
+        { h: "Not sure where you fit?", p: "If customers ask you about prices and availability, we can probably help. <a href=\"mailto:hello@ordr.ae?subject=ordr.ae%20for%20my%20business\">Write to us</a> and tell us how you sell today." },
+      ],
+      faq: [
+        ["What's the difference between ordr POS and ordr Booking?", "ordr POS is for products: menus, carts, stock, delivery and pickup. ordr Booking is for time: appointments, courts and rooms on a calendar."],
+        ["My industry isn't listed. Can I still use it?", "Probably. If you sell products or time, the same system usually fits. Write to us and we'll tell you honestly."],
+        ["Is everything on this page ready today?", "The businesses in the \"ready today\" lists are. The \"also a good fit\" lists run on the same system, but we'll want to look at how you work first."],
+      ],
+      related: ["whatsapp-ordering-system", "whatsapp-booking-system", "whatsapp-chatbot"],
+    },
+    ar: {
+      title: "القطاعات التي نخدمها في الإمارات: طلبات وحجوزات واتساب | ordr.ae",
+      description: "إذا كان عملاؤك يسألونك عن الأسعار والتوفر عبر واتساب، فإن ordr.ae يساعدك. تعرّف على القطاعات التي تناسب ordr POS للطلبات وordr Booking للحجوزات.",
+      h1: "إذا كان عملاؤك يراسلونك، <em>فهذا لك.</em>",
+      lead: "كل نشاط يندرج تحت أحد نمطين. إذا كنت تبيع منتجات فأنت تحتاج إلى ordr POS، وإذا كنت تبيع الوقت فأنت تحتاج إلى ordr Booking. هنا تجد موقع قطاعك.",
+      sections: [
+        { h: "بيع المنتجات: ordr POS", p: "<a href=\"{{whatsapp-ordering-system}}\">ordr POS</a> جاهز اليوم لهذه الأنشطة:", ticks: ["<a href=\"{{restaurant-whatsapp-ordering}}\">المطاعم والمقاهي والمطابخ السحابية</a>", "<a href=\"{{grocery-whatsapp-ordering}}\">البقالات والسوبرماركت</a>", "<a href=\"{{sell-on-whatsapp}}\">المتاجر التي تبيع منتجات بأحجام ومخزون</a>"] },
+        { h: "يناسب ordr POS أيضاً", p: "هذه الأنشطة تبيع بالطريقة نفسها، فيمكنها العمل على النظام نفسه. أخبرنا عن نشاطك ونجهزه معك.", ticks: ["المخابز ومحلات الحلويات", "محامص القهوة", "الملاحم ومحلات الأسماك", "محلات الزهور والهدايا", "توصيل المياه والغاز", "المغاسل مع الاستلام والتوصيل"] },
+        { h: "بيع الوقت: ordr Booking", p: "<a href=\"{{whatsapp-booking-system}}\">ordr Booking</a> جاهز اليوم لهذه الأنشطة:", ticks: ["<a href=\"{{salon-booking-software}}\">الصالونات والسبا وصالونات الحلاقة والأظافر</a>", "<a href=\"{{padel-court-booking-system}}\">ملاعب البادل والتنس وكرة القدم</a>", "<a href=\"{{hotel-whatsapp-booking}}\">الفنادق والمنتجعات وبيوت الضيافة</a>"] },
+        { h: "يناسب ordr Booking أيضاً", p: "هذه الأنشطة تحجز وقتاً مع شخص أو مورد، فيمكنها العمل على النظام نفسه. أخبرنا عن نشاطك ونجهزه معك.", ticks: ["غسيل السيارات وتلميعها", "العناية بالحيوانات الأليفة", "المدرسون ومعلمو الموسيقى", "استوديوهات التصوير", "مراكز المساج والعافية", "قاعات الاجتماعات والمناسبات"] },
+        { h: "لست متأكداً من موقعك؟", p: "إذا كان عملاؤك يسألونك عن الأسعار والتوفر، فالأرجح أننا نستطيع المساعدة. <a href=\"mailto:hello@ordr.ae?subject=ordr.ae%20for%20my%20business\">راسلنا</a> وأخبرنا كيف تبيع اليوم." },
+      ],
+      faq: [
+        ["ما الفرق بين ordr POS وordr Booking؟", "ordr POS للمنتجات: القوائم والسلال والمخزون والتوصيل والاستلام. أما ordr Booking فللوقت: المواعيد والملاعب والغرف في تقويم."],
+        ["قطاعي غير مذكور، فهل يمكنني استخدامه؟", "على الأرجح نعم. إذا كنت تبيع منتجات أو وقتاً، فالنظام نفسه يناسبك عادة. راسلنا وسنخبرك بصراحة."],
+        ["هل كل ما في هذه الصفحة جاهز اليوم؟", "الأنشطة في قوائم \"جاهز اليوم\" جاهزة. أما قوائم \"يناسب أيضاً\" فتعمل على النظام نفسه، لكننا نود الاطلاع على طريقة عملك أولاً."],
       ],
     },
   },

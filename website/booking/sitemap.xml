@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://booking.ordr.ae/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/ar/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/salons/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/salons/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/salons/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/salons/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/ar/salons/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/salons/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/salons/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/salons/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/padel/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/padel/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/padel/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/padel/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/ar/padel/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/padel/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/padel/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/padel/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/hotels/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/hotels/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/hotels/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/hotels/"/>
+  </url>
+  <url>
+    <loc>https://booking.ordr.ae/ar/hotels/</loc>
+    <lastmod>2026-11-06</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://booking.ordr.ae/hotels/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://booking.ordr.ae/ar/hotels/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://booking.ordr.ae/hotels/"/>
+  </url>
+</urlset>

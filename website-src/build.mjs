@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pages } from "./pages.mjs";
 
-const SITE = "https://ordr.ae";
+const HOSTS = { main: "https://ordr.ae", pos: "https://pos.ordr.ae", booking: "https://booking.ordr.ae" };
+const SITE = HOSTS.main;
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "website");
 const UPDATED = "2026-11-06";
 const WHATSAPP = "https://wa.me/971509397420?text=Hi";
@@ -16,24 +17,28 @@ const UI = {
     dir: "ltr", home: "Home", nav: "Main", howItWorks: "How it works", industries: "Industries", team: "For your team", questions: "Questions",
     otherLang: "العربية", otherLangCode: "ar", tryIt: "Try it", demo: "Message our demo on WhatsApp", browser: "Try it in your browser",
     note: "Arabic and English. Nothing for your customers to install.", online: "online", faq: "Questions", faqTitle: "Good questions.",
-    related: "Keep reading", more: "Read more", closing: "The fastest way to judge it is to message it.", demoShort: "Message our demo", talk: "Talk to us",
-    solutions: "Solutions", guides: "Guides", company: "ordr.ae", privacy: "Privacy", signIn: "Sign in", footer: "© 2026 ordr.ae, by Kdk420 General Trading LLC, Dubai", crumbs: "Breadcrumb", exampleChat: "Example WhatsApp conversation",
+    related: "Keep reading", more: "More", closing: "The fastest way to judge it is to message it.", demoShort: "Message our demo", talk: "Talk to us",
+    posName: "ordr POS", bookingName: "ordr Booking", alsoFor: "Also for:", allIndustries: "See all industries",  privacy: "Privacy", signIn: "Sign in", footer: "© 2026 ordr.ae, by Kdk420 General Trading LLC, Dubai", crumbs: "Breadcrumb", exampleChat: "Example WhatsApp conversation",
   },
   ar: {
     dir: "rtl", home: "الرئيسية", nav: "القائمة الرئيسية", howItWorks: "كيف يعمل", industries: "القطاعات", team: "لفريقك", questions: "الأسئلة",
     otherLang: "English", otherLangCode: "en", tryIt: "جرّبه", demo: "راسل النسخة التجريبية عبر واتساب", browser: "جرّبه من المتصفح",
     note: "بالعربية والإنجليزية. لا يحتاج عملاؤك إلى تثبيت أي شيء.", online: "متصل", faq: "الأسئلة", faqTitle: "أسئلة في محلها.",
-    related: "تابع القراءة", more: "اقرأ المزيد", closing: "أسرع طريقة للحكم عليه أن تراسله.", demoShort: "راسل النسخة التجريبية", talk: "تحدث إلينا",
-    solutions: "الحلول", guides: "الأدلة", company: "ordr.ae", privacy: "الخصوصية", signIn: "تسجيل الدخول", footer: "© 2026 ordr.ae، من شركة Kdk420 General Trading LLC، دبي", crumbs: "مسار التنقل", exampleChat: "مثال على محادثة واتساب",
+    related: "تابع القراءة", more: "المزيد", closing: "أسرع طريقة للحكم عليه أن تراسله.", demoShort: "راسل النسخة التجريبية", talk: "تحدث إلينا",
+    posName: "ordr POS", bookingName: "ordr Booking", alsoFor: "ويناسب أيضاً:", allIndustries: "جميع القطاعات",  privacy: "الخصوصية", signIn: "تسجيل الدخول", footer: "© 2026 ordr.ae، من شركة Kdk420 General Trading LLC، دبي", crumbs: "مسار التنقل", exampleChat: "مثال على محادثة واتساب",
   },
 };
 
-const pathOf = (slug, lang) => `${lang === "ar" ? "/ar" : ""}/${slug}/`;
-const homeOf = (lang) => (lang === "ar" ? "/ar/" : "/");
-const links = (text, lang) => text.replace(/\{\{([^}]+)\}\}/g, (_, slug) => {
-  if (!pages.some((p) => p.slug === slug)) throw new Error(`unknown page in link: ${slug}`);
-  return pathOf(slug, lang);
-});
+const byId = (slug) => {
+  const p = pages.find((x) => x.slug === slug);
+  if (!p) throw new Error(`unknown page: ${slug}`);
+  return p;
+};
+// The path of a page on its own host, and its full address.
+const localPath = (p, lang) => `${lang === "ar" ? "/ar" : ""}${p.path}`;
+const urlOf = (slug, lang) => { const p = byId(slug); return HOSTS[p.host] + localPath(p, lang); };
+const homeOf = (lang) => `${SITE}${lang === "ar" ? "/ar/" : "/"}`;
+const links = (text, lang) => text.replace(/\{\{([^}]+)\}\}/g, (_, slug) => urlOf(slug, lang));
 const plain = (html) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 const attr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 const text = (s) => s.replace(/&(?!amp;)/g, "&amp;");
@@ -62,10 +67,11 @@ function phone(chat, ui) {
 
 export function footerLinks(lang) {
   const ui = UI[lang];
-  const list = (items) => items.map((p) => `<li><a href="${pathOf(p.slug, lang)}">${p.label[lang]}</a></li>`).join("");
+  const list = (slugs) => slugs.map((slug) => `<li><a href="${urlOf(slug, lang)}">${byId(slug).label[lang]}</a></li>`).join("");
   return `<div class="footer-links">
-        <div><h2>${ui.solutions}</h2><ul>${list(pages.filter((p) => !p.guide))}</ul></div>
-        <div><h2>${ui.guides}</h2><ul>${list(pages.filter((p) => p.guide))}</ul></div>
+        <div><h2>${ui.posName}</h2><ul>${list(["whatsapp-ordering-system", "restaurant-whatsapp-ordering", "grocery-whatsapp-ordering", "sell-on-whatsapp"])}</ul></div>
+        <div><h2>${ui.bookingName}</h2><ul>${list(["whatsapp-booking-system", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking"])}</ul></div>
+        <div><h2>${ui.more}</h2><ul>${list(["industries", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"])}</ul></div>
       </div>`;
 }
 
@@ -73,13 +79,17 @@ function page(p, lang) {
   const ui = UI[lang];
   const c = p[lang];
   const other = ui.otherLangCode;
-  const url = SITE + pathOf(p.slug, lang);
-  const related = (p.en.related ?? []).map((slug) => {
-    const r = pages.find((x) => x.slug === slug);
-    return `<article class="card"><h3><a href="${pathOf(slug, lang)}">${r.label[lang]}</a></h3><p>${attr(r[lang].description)}</p></article>`;
-  }).join("\n          ");
+  const url = urlOf(p.slug, lang);
+  const card = (slug) => {
+    const r = byId(slug);
+    return `<article class="card"><h3><a href="${urlOf(slug, lang)}">${r.label[lang]}</a></h3><p>${attr(r[lang].description)}</p></article>`;
+  };
+  const related = (p.en.related ?? []).map(card).join("\n          ");
+  const children = (p.children ?? []).map(card).join("\n          ");
+  const parent = p.parent ? byId(p.parent) : null;
   const breadcrumb = [
-    { name: ui.home, item: SITE + homeOf(lang) },
+    { name: ui.home, item: homeOf(lang) },
+    ...(parent ? [{ name: parent.label[lang], item: urlOf(parent.slug, lang) }] : []),
     { name: p.label[lang], item: url },
   ];
   const graph = [
@@ -102,9 +112,9 @@ function page(p, lang) {
   <meta name="description" content="${attr(c.description)}">
   <meta name="theme-color" content="#0e3b34">
   <link rel="canonical" href="${url}">
-  <link rel="alternate" hreflang="en" href="${SITE}${pathOf(p.slug, "en")}">
-  <link rel="alternate" hreflang="ar" href="${SITE}${pathOf(p.slug, "ar")}">
-  <link rel="alternate" hreflang="x-default" href="${SITE}${pathOf(p.slug, "en")}">
+  <link rel="alternate" hreflang="en" href="${urlOf(p.slug, "en")}">
+  <link rel="alternate" hreflang="ar" href="${urlOf(p.slug, "ar")}">
+  <link rel="alternate" hreflang="x-default" href="${urlOf(p.slug, "en")}">
   <meta property="og:title" content="${attr(c.title)}">
   <meta property="og:description" content="${attr(c.description)}">
   <meta property="og:type" content="${p.guide ? "article" : "website"}">
@@ -126,13 +136,13 @@ function page(p, lang) {
     <div class="wrap">
       <a class="logo" href="${homeOf(lang)}" dir="ltr">ordr<span>.ae</span></a>
       <nav class="nav" aria-label="${ui.nav}">
-        <a href="${homeOf(lang)}#day">${ui.howItWorks}</a>
-        <a href="${homeOf(lang)}#industries">${ui.industries}</a>
-        <a href="${homeOf(lang)}#team">${ui.team}</a>
+        <a href="${urlOf("whatsapp-ordering-system", lang)}">${ui.posName}</a>
+        <a href="${urlOf("whatsapp-booking-system", lang)}">${ui.bookingName}</a>
+        <a href="${urlOf("industries", lang)}">${ui.industries}</a>
         <a href="${homeOf(lang)}#faq">${ui.questions}</a>
       </nav>
       <div class="header-actions">
-        <a class="lang" href="${pathOf(p.slug, other)}" lang="${other}" hreflang="${other}">${ui.otherLang}</a>
+        <a class="lang" href="${urlOf(p.slug, other)}" lang="${other}" hreflang="${other}">${ui.otherLang}</a>
         <a class="button button-primary" href="${WHATSAPP}" target="_blank" rel="noopener">${ui.tryIt}</a>
       </div>
     </div>
@@ -142,7 +152,7 @@ function page(p, lang) {
     <section class="hero hero-sub${c.chat ? "" : " hero-text"}">
       <div class="wrap">
         <div>
-          <nav class="crumbs" aria-label="${ui.crumbs}"><a href="${homeOf(lang)}">${ui.home}</a> <span aria-hidden="true">/</span> <span aria-current="page">${p.label[lang]}</span></nav>
+          <nav class="crumbs" aria-label="${ui.crumbs}"><a href="${homeOf(lang)}">${ui.home}</a> <span aria-hidden="true">/</span> ${parent ? `<a href="${urlOf(parent.slug, lang)}">${parent.label[lang]}</a> <span aria-hidden="true">/</span> ` : ""}<span aria-current="page">${p.label[lang]}</span></nav>
           <h1>${c.h1}</h1>
           <p class="hero-lead">${c.lead}</p>
           <div class="hero-actions">
@@ -155,7 +165,17 @@ function page(p, lang) {
       </div>
     </section>
 
-    <section class="section">
+    ${children ? `<section class="section band-soft">
+      <div class="wrap">
+        <div class="section-head"><span class="pill">${ui.industries}</span><h2>${c.childrenTitle}</h2></div>
+        <div class="grid">
+          ${children}
+        </div>
+        <p class="also"><strong>${ui.alsoFor}</strong> ${c.also} <a href="${urlOf("industries", lang)}">${ui.allIndustries}</a></p>
+      </div>
+    </section>
+
+    ` : ""}<section class="section">
       <div class="wrap">
         <div class="article">
           ${sections}
@@ -210,16 +230,17 @@ function page(p, lang) {
 `;
 }
 
-function sitemap() {
+function sitemap(host) {
   const entry = (en, ar, priority) => [en, ar].map((loc) => `  <url>
-    <loc>${SITE}${loc}</loc>
+    <loc>${loc}</loc>
     <lastmod>${UPDATED}</lastmod>
     <priority>${priority}</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="${SITE}${en}"/>
-    <xhtml:link rel="alternate" hreflang="ar" href="${SITE}${ar}"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="${SITE}${en}"/>
+    <xhtml:link rel="alternate" hreflang="en" href="${en}"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="${ar}"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="${en}"/>
   </url>`).join("\n");
-  const urls = [entry("/", "/ar/", "1.0"), ...pages.map((p) => entry(pathOf(p.slug, "en"), pathOf(p.slug, "ar"), "0.8"))];
+  const urls = pages.filter((p) => p.host === host).map((p) => entry(urlOf(p.slug, "en"), urlOf(p.slug, "ar"), p.path === "/" ? "1.0" : "0.8"));
+  if (host === "main") urls.unshift(entry(`${SITE}/`, `${SITE}/ar/`, "1.0"));
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls.join("\n")}
@@ -233,16 +254,21 @@ function write(path, content) {
   writeFileSync(file, content);
 }
 
+// pos.ordr.ae and booking.ordr.ae are served from website/pos and website/booking.
+const folder = (host) => (host === "main" ? "" : `${host}/`);
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const p of pages) {
     for (const lang of ["en", "ar"]) {
       const c = p[lang];
       if (c.title.length > 72) console.warn(`long title (${c.title.length}): ${c.title}`);
       if (c.description.length > 170) console.warn(`long description (${c.description.length}): ${p.slug} ${lang}`);
-      write(`${pathOf(p.slug, lang).slice(1)}index.html`, page(p, lang));
+      write(`${folder(p.host)}${localPath(p, lang).slice(1)}index.html`, page(p, lang));
     }
   }
-  write("sitemap.xml", sitemap());
-  write("robots.txt", `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
-  console.log(`wrote ${pages.length * 2} pages, sitemap.xml and robots.txt`);
+  for (const host of Object.keys(HOSTS)) {
+    write(`${folder(host)}sitemap.xml`, sitemap(host));
+    write(`${folder(host)}robots.txt`, `User-agent: *\nAllow: /\n\nSitemap: ${HOSTS[host]}/sitemap.xml\n`);
+  }
+  console.log(`wrote ${pages.length * 2} pages, sitemaps and robots.txt`);
 }

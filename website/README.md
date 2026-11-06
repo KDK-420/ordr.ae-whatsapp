@@ -1,6 +1,7 @@
 # ordr.ae product website
 
-The public marketing site for ordr.ae, in English (`index.html`) and Arabic (`ar/index.html`).
+The public marketing site, in English and Arabic. `pos/` is served as pos.ordr.ae and `booking/` as
+booking.ordr.ae; everything else is ordr.ae.
 Plain HTML, CSS and JavaScript: no build step, no dependencies. It is separate from the product,
 which lives in `apps/`.
 
@@ -9,7 +10,7 @@ Run it locally:
     python3 -m http.server 3200 --directory website
 
 Pushing a change here to `main` publishes it: `.github/workflows/website.yml` updates this folder on
-the server, where Caddy serves it as ordr.ae. Links to the product point at https://app.ordr.ae
+the server, where Caddy serves it. Links to the product point at https://app.ordr.ae
 (sign in, web chat demo, privacy policy).
 
 The two home pages are hand-written. The other pages, `sitemap.xml` and `robots.txt` are generated:
