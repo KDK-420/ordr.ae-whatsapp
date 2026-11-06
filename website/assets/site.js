@@ -1,143 +1,204 @@
-/* Hero demo: pick a business and watch the conversation play. The page is complete without this
-   file: the first conversation is in the HTML, so no-JS readers and crawlers still see it. */
-(function () {
-  var CHATS = {
+// ordr.ae site script: the mobile menu on every page, and the phone demo on the two home pages.
+// The phone is a sample conversation that runs in the browser. It creates no real orders or bookings.
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  const menuBtn = $("menuBtn");
+  const panel = $("mobilePanel");
+  if (menuBtn && panel) {
+    menuBtn.addEventListener("click", () => {
+      menuBtn.setAttribute("aria-expanded", String(panel.classList.toggle("open")));
+    });
+    panel.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => {
+      panel.classList.remove("open");
+      menuBtn.setAttribute("aria-expanded", "false");
+    }));
+  }
+
+  const chat = $("chatArea");
+  if (!chat) return;
+
+  const copy = {
     en: {
-      salon: { name: "Glow Salon", status: "online", at: "21:14", lines: [
-        [1, "can I get a haircut tomorrow afternoon?"],
-        [0, "Sure! Sara is free tomorrow at 14:00, 15:30 or 16:00. Which works for you?"],
-        [1, "3:30"],
-        [0, "Holding it for you: haircut with Sara, tomorrow at 15:30, AED 80. Shall I book it?"],
-        [1, "yes"],
-        [0, "Done, booking number 12. We'll remind you before your visit 😊"],
-      ] },
-      sports: { name: "Marina Padel", status: "online", at: "23:48", lines: [
-        [1, "any padel court free tomorrow at 8 for 90 min?"],
-        [0, "Court 2 is free at 20:00 for 90 minutes, AED 280. Book it?"],
-        [1, "yes please"],
-        [0, "You're booked: Padel 90 min on Court 2, tomorrow at 20:00. Booking number 31.\n📍 Marina Walk, Dubai"],
-      ] },
-      resort: { name: "Palm Bay Resort", status: "online", at: "10:02", lines: [
-        [1, "room for 2 adults, 14 to 16 December?"],
-        [0, "For those 2 nights we have a Garden Room at AED 900 a night, or a Sea View Room at AED 1,250."],
-        [1, "sea view"],
-        [0, "Holding the Sea View Room, 14 to 16 Dec, total AED 2,500. What name should I put it under?"],
-      ] },
-      restaurant: { name: "Bella Pasta", status: "online", at: "19:31", lines: [
-        [1, "hi, can I order for pickup?"],
-        [0, "Of course! Here's our menu. Pick a category: Pizza, Pasta or Desserts."],
-        [1, "Pizza"],
-        [0, "Margherita AED 42, Pepperoni AED 48. Which one would you like?"],
-        [1, "Margherita"],
-        [0, "Added to your cart: 1 Margherita, AED 42. Anything else, or shall we check out?"],
-      ] },
-      shop: { name: "Roastery & Co", status: "online", at: "16:20", lines: [
-        [1, "do you have Ethiopia beans in 1kg?"],
-        [0, "Yes, Ethiopia Yirgacheffe 1 kg is AED 220, and 3 are left. Add one to your cart?"],
-        [1, "yes"],
-        [0, "Added. Your cart total is AED 220 including VAT. Anything else?"],
-      ] },
+      received: "Order request received", confirmed: "Booking confirmed", typing: "typing…",
+      rows: ["Service", "Selection", "Price"], confirm: "Yes, confirm", back: "Go back",
+      askOrder: (t) => `Great choice. ${t}. Shall I send this order request to the team?`,
+      askBooking: (s, t) => `Perfect! ${s.service} ${t}. ${s.price}. Shall I confirm?`,
+      again: "No problem. You can choose another option.",
+      doneOrder: "Thanks! Your order request is ready for the team.",
+      doneBooking: "All set! We look forward to seeing you.",
+      more: "Anything else I can help you with?",
+      pick: "This sample chat follows set steps, so please choose an option below. The real assistant reads plain sentences on WhatsApp.",
+      yes: /\b(yes|yeah|confirm|ok|okay|sure)\b/i, no: /\b(back|no|cancel)\b/i,
+      scenarios: {
+        salon: { name: "Glow Salon", avatar: "G", intro: "Hi! Can I book a haircut tomorrow afternoon?", reply: "Absolutely! Sara has openings tomorrow. Which time works for you?", choices: ["2:00 PM", "3:30 PM", "4:00 PM"], service: "Haircut with Sara", price: "AED 80", kind: "booking" },
+        spa: { name: "Serene Spa", avatar: "S", intro: "Can I book a massage tomorrow?", reply: "Of course. Here are the available times for a 60-minute massage.", choices: ["11:00 AM", "2:30 PM", "6:00 PM"], service: "60-minute massage", price: "AED 220", kind: "booking" },
+        restaurant: { name: "Olive Kitchen", avatar: "O", intro: "Hi! Can I order something for dinner?", reply: "Absolutely. Here are a few popular items. What would you like?", choices: ["Margherita Pizza", "Chicken Pasta", "Caesar Salad"], service: "Dinner order", price: "Confirmed by the team", kind: "order" },
+        shop: { name: "The Edit Store", avatar: "E", intro: "Do you have black tote bags available?", reply: "Yes! Would you like to reserve one or ask about delivery?", choices: ["Reserve one", "Delivery", "More details"], service: "Black tote bag", price: "Confirmed by the team", kind: "order" },
+        padel: { name: "Padel House", avatar: "P", intro: "Any padel courts free tonight?", reply: "Yes. Choose an available court time.", choices: ["6:00 PM", "7:30 PM", "9:00 PM"], service: "Padel court", price: "Rate on confirmation", kind: "booking" },
+        resort: { name: "Azure Resort", avatar: "A", intro: "Do you have rooms available this weekend?", reply: "Happy to help. What kind of stay are you looking for?", choices: ["One night", "Two nights", "Suite enquiry"], service: "Resort stay enquiry", price: "Rates on request", kind: "booking" },
+      },
     },
     ar: {
-      salon: { name: "صالون جلو", status: "متصل", at: "21:14", lines: [
-        [1, "أبغى موعد قص شعر بكرة العصر"],
-        [0, "أكيد! سارة متاحة بكرة الساعة 2:00 أو 3:30 أو 4:00. أي وقت يناسبك؟"],
-        [1, "3:30"],
-        [0, "حجزت لك مؤقتاً: قص شعر مع سارة، بكرة الساعة 3:30، 80 درهم. أأكد الحجز؟"],
-        [1, "نعم"],
-        [0, "تم، رقم الحجز 12. سنذكّرك قبل موعدك 😊"],
-      ] },
-      sports: { name: "مارينا بادل", status: "متصل", at: "23:48", lines: [
-        [1, "فيه ملعب بادل فاضي بكرة الساعة 8 لمدة ساعة ونص؟"],
-        [0, "الملعب 2 متاح الساعة 8:00 مساءً لمدة 90 دقيقة، 280 درهم. أحجزه؟"],
-        [1, "إي لو سمحت"],
-        [0, "تم الحجز: بادل 90 دقيقة في الملعب 2، بكرة الساعة 8:00 مساءً. رقم الحجز 31.\n📍 مارينا ووك، دبي"],
-      ] },
-      resort: { name: "منتجع بالم باي", status: "متصل", at: "10:02", lines: [
-        [1, "غرفة لشخصين من 14 إلى 16 ديسمبر؟"],
-        [0, "لهاتين الليلتين لدينا غرفة الحديقة بـ 900 درهم لليلة، أو غرفة بإطلالة بحرية بـ 1,250 درهم."],
-        [1, "الإطلالة البحرية"],
-        [0, "حجزت لك مؤقتاً الغرفة بإطلالة بحرية، من 14 إلى 16 ديسمبر، الإجمالي 2,500 درهم. باسم من الحجز؟"],
-      ] },
-      restaurant: { name: "بيلا باستا", status: "متصل", at: "19:31", lines: [
-        [1, "مرحبا، أقدر أطلب استلام؟"],
-        [0, "بالتأكيد! هذه قائمتنا. اختر الفئة: بيتزا أو باستا أو حلويات."],
-        [1, "بيتزا"],
-        [0, "مارجريتا 42 درهم، بيبروني 48 درهم. أيهما تفضل؟"],
-        [1, "مارجريتا"],
-        [0, "تمت الإضافة إلى سلتك: 1 مارجريتا، 42 درهم. شيء آخر أم ننتقل إلى إتمام الطلب؟"],
-      ] },
-      shop: { name: "روستري آند كو", status: "متصل", at: "16:20", lines: [
-        [1, "عندكم بن إثيوبي 1 كيلو؟"],
-        [0, "نعم، إثيوبيا يرغاشيفي 1 كيلو بـ 220 درهم، وبقي 3 فقط. أضيفه إلى سلتك؟"],
-        [1, "نعم"],
-        [0, "تمت الإضافة. إجمالي سلتك 220 درهم شامل الضريبة. هل تحتاج شيئاً آخر؟"],
-      ] },
+      received: "تم استلام طلبك", confirmed: "تم تأكيد الحجز", typing: "يكتب…",
+      rows: ["الخدمة", "الاختيار", "السعر"], confirm: "نعم، أكّد", back: "رجوع",
+      askOrder: (t) => `اختيار رائع: ${t}. هل أرسل طلبك إلى الفريق؟`,
+      askBooking: (s, t) => `ممتاز! ${s.service}، ${t}. ${s.price}. هل أؤكد؟`,
+      again: "لا مشكلة. يمكنك اختيار خيار آخر.",
+      doneOrder: "شكراً! طلبك جاهز لدى الفريق.",
+      doneBooking: "تم! نتطلع إلى رؤيتك.",
+      more: "هل يمكنني مساعدتك في شيء آخر؟",
+      pick: "هذه محادثة تجريبية بخطوات محددة، فاختر أحد الخيارات أدناه. أما المساعد الفعلي فيفهم الجمل العادية عبر واتساب.",
+      yes: /^\s*(نعم|أكد|أكّد|تمام|موافق)/, no: /^\s*(لا|رجوع|إلغاء)(\s|$)/,
+      scenarios: {
+        salon: { name: "Glow Salon", avatar: "G", intro: "مرحباً! هل يمكنني حجز قص شعر غداً بعد الظهر؟", reply: "بالتأكيد! سارة متاحة غداً. أي وقت يناسبك؟", choices: ["2:00 م", "3:30 م", "4:00 م"], service: "قص شعر مع سارة", price: "80 درهماً", kind: "booking" },
+        spa: { name: "Serene Spa", avatar: "S", intro: "هل يمكنني حجز مساج غداً؟", reply: "بالطبع. هذه الأوقات المتاحة لجلسة مساج مدتها 60 دقيقة.", choices: ["11:00 ص", "2:30 م", "6:00 م"], service: "مساج 60 دقيقة", price: "220 درهماً", kind: "booking" },
+        restaurant: { name: "Olive Kitchen", avatar: "O", intro: "مرحباً! هل يمكنني طلب شيء للعشاء؟", reply: "بالتأكيد. هذه بعض الأصناف المفضلة. ماذا تحب أن تطلب؟", choices: ["بيتزا مارغريتا", "باستا بالدجاج", "سلطة سيزر"], service: "طلب عشاء", price: "يؤكده الفريق", kind: "order" },
+        shop: { name: "The Edit Store", avatar: "E", intro: "هل لديكم حقائب توت سوداء؟", reply: "نعم! هل تود حجز واحدة أم السؤال عن التوصيل؟", choices: ["احجز واحدة", "التوصيل", "تفاصيل أكثر"], service: "حقيبة توت سوداء", price: "يؤكده الفريق", kind: "order" },
+        padel: { name: "Padel House", avatar: "P", intro: "هل توجد ملاعب بادل متاحة الليلة؟", reply: "نعم. اختر وقتاً متاحاً.", choices: ["6:00 م", "7:30 م", "9:00 م"], service: "ملعب بادل", price: "السعر عند التأكيد", kind: "booking" },
+        resort: { name: "Azure Resort", avatar: "A", intro: "هل لديكم غرف متاحة نهاية هذا الأسبوع؟", reply: "يسعدنا مساعدتك. ما نوع الإقامة التي تبحث عنها؟", choices: ["ليلة واحدة", "ليلتان", "استفسار عن جناح"], service: "استفسار عن إقامة", price: "الأسعار عند الطلب", kind: "booking" },
+      },
     },
   };
+  const t = copy[document.documentElement.lang] || copy.en;
 
-  var root = document.querySelector("[data-demo]");
-  if (!root) return;
-  var language = document.documentElement.lang === "ar" ? "ar" : "en";
-  var chats = CHATS[language];
-  var box = root.querySelector(".chat");
-  var nameEl = root.querySelector(".phone-name");
-  var statusEl = root.querySelector(".phone-status");
-  var avatar = root.querySelector(".avatar");
-  var tabs = Array.prototype.slice.call(root.querySelectorAll(".tab"));
-  var calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var run = 0;
+  let current = "salon";
+  let step = 0;
+  let timers = [];
+  let locked = false;
+  let chosen = "";
 
-  function bubble(line, time, animate) {
-    var el = document.createElement("div");
-    el.className = "msg" + (line[0] ? " me" : "") + (animate ? " in" : "");
-    el.appendChild(document.createTextNode(line[1]));
-    var t = document.createElement("time");
-    t.textContent = time;
-    el.appendChild(t);
-    box.appendChild(el);
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const toBottom = () => { chat.scrollTop = chat.scrollHeight; };
+
+  function bubble(text, side) {
+    const el = document.createElement("div");
+    el.className = `bubble ${side}`;
+    const label = document.createElement("span");
+    label.textContent = text;
+    const time = document.createElement("time");
+    time.textContent = `9:41${side === "user" ? " ✓✓" : ""}`;
+    el.append(label, time);
+    chat.appendChild(el);
+    toBottom();
   }
 
-  function clockAfter(start, minutes) {
-    var parts = start.split(":");
-    var total = (Number(parts[0]) * 60 + Number(parts[1]) + minutes) % 1440;
-    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
-    return pad(Math.floor(total / 60)) + ":" + pad(total % 60);
+  function options(choices) {
+    const group = document.createElement("div");
+    group.className = "options";
+    choices.forEach((choice) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = choice;
+      b.addEventListener("click", () => send(choice));
+      group.appendChild(b);
+    });
+    chat.appendChild(group);
+    toBottom();
   }
 
-  function wait(ms) { return new Promise(function (done) { setTimeout(done, ms); }); }
+  function receipt() {
+    const s = t.scenarios[current];
+    const card = document.createElement("div");
+    card.className = "receipt";
+    const title = document.createElement("strong");
+    title.textContent = `✓ ${s.kind === "order" ? t.received : t.confirmed}`;
+    const list = document.createElement("dl");
+    [s.service, chosen, s.price].forEach((value, i) => {
+      const dt = document.createElement("dt");
+      dt.textContent = t.rows[i];
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      list.append(dt, dd);
+    });
+    card.append(title, list);
+    chat.appendChild(card);
+  }
 
-  async function play(key) {
-    var chat = chats[key];
-    var mine = ++run;
-    tabs.forEach(function (t) { t.setAttribute("aria-selected", String(t.dataset.chat === key)); });
-    nameEl.textContent = chat.name;
-    statusEl.textContent = chat.status;
-    avatar.textContent = chat.name.charAt(0);
-    box.textContent = "";
-    if (calm) {
-      chat.lines.forEach(function (l, i) { bubble(l, clockAfter(chat.at, i), false); });
-      return;
-    }
-    for (var i = 0; i < chat.lines.length; i++) {
-      var line = chat.lines[i];
-      if (!line[0]) {
-        var dots = document.createElement("div");
-        dots.className = "msg typing";
-        dots.innerHTML = "<i></i><i></i><i></i>";
-        box.appendChild(dots);
-        await wait(900);
-        if (mine !== run) return;
-        dots.remove();
+  function reply(text, choices, withReceipt) {
+    locked = true;
+    const typing = document.createElement("div");
+    typing.className = "bubble bot";
+    typing.textContent = t.typing;
+    chat.appendChild(typing);
+    toBottom();
+    later(() => {
+      typing.remove();
+      bubble(text, "bot");
+      if (withReceipt) receipt();
+      if (choices) options(choices);
+      locked = false;
+      toBottom();
+    }, 420);
+  }
+
+  function reset(key) {
+    timers.forEach(clearTimeout);
+    timers = [];
+    current = key;
+    step = 0;
+    chosen = "";
+    locked = false;
+    chat.replaceChildren();
+    const s = t.scenarios[key];
+    $("chatName").textContent = s.name;
+    $("chatAvatar").textContent = s.avatar;
+    document.querySelectorAll("[data-industry]").forEach((b) => b.classList.toggle("active", b.dataset.industry === key));
+    later(() => {
+      bubble(s.intro, "user");
+      later(() => reply(s.reply, s.choices), 260);
+    }, 150);
+  }
+
+  function send(raw) {
+    const text = String(raw).trim();
+    if (!text || locked) return;
+    chat.querySelectorAll(".options").forEach((n) => n.remove());
+    bubble(text, "user");
+    $("chatInput").value = "";
+    const s = t.scenarios[current];
+    const confirmChoices = [t.confirm, t.back];
+    if (step === 0) {
+      const match = s.choices.find((c) => c.toLowerCase() === text.toLowerCase());
+      if (!match) return reply(t.pick, s.choices);
+      chosen = match;
+      step = 1;
+      reply(s.kind === "order" ? t.askOrder(match) : t.askBooking(s, match), confirmChoices);
+    } else if (step === 1) {
+      if (t.no.test(text)) {
+        step = 0;
+        reply(t.again, s.choices);
+      } else if (t.yes.test(text)) {
+        step = 2;
+        reply(s.kind === "order" ? t.doneOrder : t.doneBooking, null, true);
       } else {
-        await wait(650);
-        if (mine !== run) return;
+        reply(t.pick, confirmChoices);
       }
-      bubble(line, clockAfter(chat.at, i), true);
+    } else {
+      step = 0;
+      reply(t.more, s.choices);
     }
   }
 
-  tabs.forEach(function (tab) {
-    tab.addEventListener("click", function () { play(tab.dataset.chat); });
+  $("chatForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    send($("chatInput").value);
   });
+  $("resetChat").addEventListener("click", () => reset(current));
+  document.querySelectorAll("[data-industry]").forEach((b) => b.addEventListener("click", () => reset(b.dataset.industry)));
+
+  const modal = $("demoModal");
+  const closeModal = () => modal.classList.remove("show");
+  $("watchDemo").addEventListener("click", () => modal.classList.add("show"));
+  $("closeModal").addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+  document.querySelectorAll("[data-modal-demo]").forEach((b) => b.addEventListener("click", () => {
+    closeModal();
+    reset(b.dataset.modalDemo);
+    document.querySelector(".device-zone").scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+
+  reset(current);
 })();
