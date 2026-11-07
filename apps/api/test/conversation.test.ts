@@ -205,6 +205,17 @@ describe("ConversationService", () => {
     expect(h.sender.to("971500000001")).toHaveLength(2);
   }, 15000);
 
+  it("does not count a staff reply from earlier in the same second as an answer to a new message", async () => {
+    await send(fixtures.textMessageWebhook("hi", h.base));
+    const conv = [...h.conversations.conversations.values()][0]!;
+    // WhatsApp stamps messages in whole seconds, so this message looks older than the reply before it.
+    const second = Math.floor(Date.now() / 1000);
+    await h.conversations.markStaffReply(conv.id, new Date(second * 1000 + 500));
+    await h.conversations.setStaffTyping(conv.id, new Date(Date.now() + 500));
+    await send(fixtures.textMessageWebhook("menu", { ...h.base, timestamp: second }));
+    expect(h.sender.to("971500000001")).toHaveLength(2);
+  });
+
   it("restarts from the entry flow when a session has ended", async () => {
     await send(fixtures.textMessageWebhook("agent", h.base));
     await send(fixtures.textMessageWebhook("menu", h.base));

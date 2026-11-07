@@ -223,10 +223,12 @@ export class ConversationService {
   private async staffAnsweredWhileTyping(conversation: ConversationRecord, receivedAt: Date): Promise<boolean> {
     let current: (ConversationRecord & { lastInboundAt?: Date }) | null = conversation;
     const deadline = Date.now() + TYPING_HOLD_MAX_MS;
+    // Message times are whole seconds, so only a reply after that second can answer this message.
+    const messageSecondEnds = receivedAt.getTime() + 999;
     while (current?.staffTypingUntil && current.staffTypingUntil.getTime() > Date.now() && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, TYPING_POLL_MS));
       current = await this.conversations.findConversationById(conversation.id);
-      if (current?.lastStaffReplyAt && current.lastStaffReplyAt.getTime() >= receivedAt.getTime()) {
+      if (current?.lastStaffReplyAt && current.lastStaffReplyAt.getTime() > messageSecondEnds) {
         this.logger.log(`conversation ${conversation.id}: staff replied while typing; bot turn skipped`);
         return true;
       }
