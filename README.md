@@ -10,5 +10,6 @@ customer memory and a merchant dashboard to work the results.
 
 See docs/HANDOFF.md for the state of the build, docs/IMPLEMENTATION_PLAN.md for the PRD
 checklist, docs/RUNBOOK.md for how to run and verify it (and what is mocked), docs/ADRs for the
-decisions, docs/PLAN.md for the older roadmap, and docs/DEPLOY.md to run it on a VPS.
+decisions, docs/PLAN.md for the older roadmap, docs/MODULES_PLAN.md for the planned restaurant suite
+(Storefront, POS, KDS, Inventory, WhatsApp as modules), and docs/DEPLOY.md to run it on a VPS.
 Production: https://app.ordr.ae (web chat demo: https://app.ordr.ae/chat/demo-salon)
