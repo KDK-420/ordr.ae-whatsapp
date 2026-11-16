@@ -1,6 +1,6 @@
 # Restaurant suite: modules plan
 
-Status: agreed direction, 2026-11-16. Nothing here is built yet. Mockups are being designed in
+Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders). Nothing here is built yet. Mockups are being designed in
 parallel; the screen lists in section 6 are written for that.
 
 Scope: restaurants only. Salon, retail and resort tenants keep working exactly as they do today
@@ -15,7 +15,7 @@ Five modules a restaurant can switch on independently, on top of one shared core
 | Storefront (eCommerce) | Mobile-first ordering site: menu with customisation, cart, checkout, order tracking | Yes |
 | POS | Fast touchscreen checkout for cashiers: dine-in, takeaway, walk-in | Yes |
 | KDS | Real-time kitchen tickets with timers, priority and status | Needs one order source (Storefront, POS or WhatsApp) |
-| Inventory | Ingredient stock, recipe-based deduction, purchasing, wastage, low-stock alerts | Needs the menu; useful once POS or Storefront feeds it sales |
+| Inventory | Stock of ingredients and countables such as cups and packaging, recipe-based deduction, purchasing, wastage, low-stock alerts | Needs the menu; useful once POS or Storefront feeds it sales |
 | WhatsApp | The assistant that takes orders and answers customers on WhatsApp (today's product) | Yes |
 
 Decisions already taken:
@@ -209,35 +209,112 @@ Discount     on order or line: type (percent | amount), value, reason, by
 
 ### 4.4 Inventory (Phase 4)
 
+Inventory tracks everything the restaurant runs out of, not only food. A cup is stock exactly
+like coffee beans are.
+
 ```
-Ingredient     id, tenantId, name, baseUnit (g | ml | each), category, isActive
-IngredientUnit id, ingredientId, name (case, bottle, kg), toBaseFactor
-Recipe         id, offeringId (and variantId?), yield
-RecipeLine     recipeId, ingredientId, quantityBase          (modifier options can carry lines too:
-                                                               "extra cheese" deducts 20 g)
-StockLevel     branchId, ingredientId, onHandBase, parLevelBase, reorderPointBase
-StockMovement  id, branchId, ingredientId, type (sale | purchase | wastage | count_adjust |
-               transfer_in | transfer_out | production), quantityBase, unitCostMinor, refType,
-               refId, by, at, note                              append-only ledger
+StockItem      id, tenantId, name, kind, baseUnit (g | ml | each), category, isActive
+               kind: ingredient   coffee beans, milk, chicken
+                     packaging    cups by size, lids, sleeves, straws, bags, boxes, napkins
+                     prepared     made in-house in batches: cold brew, sauces, dough
+                     resale       sold as bought: bottled water, canned drinks
+                     supply       not sold: cleaning, gloves, printer rolls (counted and purchased only)
+StockItemUnit  id, stockItemId, name (case of 1000, sleeve of 50, bottle, kg), toBaseFactor
+Recipe         id, offeringId, variantId?, yield
+RecipeLine     recipeId, stockItemId, quantityBase, appliesTo (all | takeaway | delivery | dine_in)
+               modifier options can carry lines too ("extra shot" deducts 9 g of beans)
+BatchRecipe    for prepared items: inputs and yield ("10 L cold brew from 1 kg beans")
+StockLevel     branchId, stockItemId, onHandBase, reservedBase, parLevelBase, reorderPointBase
+StockMovement  id, branchId, stockItemId, type (sale | purchase | wastage | count_adjust |
+               transfer_in | transfer_out | production_in | production_out | reserve | release),
+               quantityBase, unitCostMinor, refType, refId, by, at, note      append-only ledger
 Supplier       id, tenantId, name, phone, email, leadDays
 PurchaseOrder  id, branchId, supplierId, status (draft | sent | part_received | received |
-               cancelled), lines [{ingredientId, unitId, qty, unitCostMinor, receivedQty}]
-StockCount     id, branchId, status, lines [{ingredientId, countedBase, expectedBase}]
+               cancelled), lines [{stockItemId, unitId, qty, unitCostMinor, receivedQty}]
+StockCount     id, branchId, status, lines [{stockItemId, countedBase, expectedBase}]
 ```
+
+How cups and similar countables work:
+
+- A cup, lid or bag is a `StockItem` of kind `packaging` with base unit `each`, bought by the
+  case or sleeve and counted individually.
+- A recipe line can depend on the size and on how the order leaves. A large takeaway latte
+  deducts 18 g beans, 300 ml milk, one 16 oz cup and one lid; the same latte for dine-in deducts
+  no cup. Variants (small, medium, large) each have their own recipe.
+- Order-level packaging rules cover what is not tied to one item: one bag per takeaway order,
+  one carrier per four drinks, napkins per guest.
+- Cup counts double as a control: cups used against drinks sold shows giveaways, remakes and
+  theft. The variance report shows this per size.
+- Low-stock alerts and purchase suggestions work on cups the same way they do on ingredients.
 
 - Deduction: on `order.item_status_changed` to preparing (or on `order.paid`, per tenant
   setting), write `sale` movements from the recipe, including modifier lines. A void after
   preparation becomes wastage; before preparation it reverses.
-- `StockLevel.onHandBase` is a cached sum of the ledger, rebuilt on demand.
+- `StockLevel.onHandBase` and `reservedBase` are cached sums of the ledger, rebuilt on demand.
+  Available stock is on hand minus reserved.
+- Batch production: making a batch of a prepared item consumes its inputs (`production_out`) and
+  adds the batch (`production_in`), so cold brew or sauce has its own stock and cost.
 - Purchasing: suggested order from par levels, send to supplier (WhatsApp if the module is on,
   else email or print), receive against the order with cost, part receipts.
 - Wastage log with reason codes (spoiled, dropped, expired, staff meal).
-- Stock counts: full or by category, variance report, adjustment on approval.
+- Stock counts: full or by category or kind (a quick daily cup count, a weekly full count),
+  variance report, adjustment on approval.
 - Low-stock alerts in the dashboard and by push; auto "86" an item on the menu, POS and
   storefront when a key ingredient runs out (per tenant setting).
 - Reports: cost of goods, food cost percentage per item, usage, variance.
 
-### 4.5 WhatsApp as an add-on (Phase 5, small)
+### 4.5 Party and catering orders (core capability, used by every module)
+
+A party order is a large order for a future date, often priced and built differently from a
+normal sale. It is the same `Order` with more freedom, not a separate system, so it flows to the
+KDS, deducts stock and takes payments like any other order.
+
+```
+Order     + orderClass       standard | party
+          + eventAt          when it must be ready or delivered (uses scheduledAt)
+          + quoteStatus      draft | quoted | accepted | declined | expired   (party only)
+          + headcount, eventNotes (venue, contact on the day, setup, equipment to bring back)
+          + depositMinor, depositDueAt, balanceDueAt
+OrderItem + isCustom         a free-text line not on the menu, with its own price and station
+          + unitPriceOverrideMinor, priceNote
+          + prepLeadMinutes  how long before eventAt the kitchen must start this line
+OrderCharge  id, orderId, label (delivery, staff, equipment hire, setup), amountMinor, taxable
+PartyPackage id, tenantId, name, pricePerHeadMinor, minHeadcount,
+             lines [{offeringId, qtyPerHead or fixedQty, choiceGroup?}]
+```
+
+What makes it flexible:
+
+- **Any size, any mix.** Menu items in bulk quantities, per-head packages ("breakfast for 40"),
+  trays, and custom lines that are not on the menu at all, each with its own price.
+- **Negotiated pricing.** Line price overrides, order-level discounts, and extra charges for
+  delivery, staff or equipment, all with a reason and the name of who set them.
+- **Quote first.** A draft becomes a quote the customer can accept by link or on WhatsApp; an
+  accepted quote becomes a confirmed order. Quotes can be revised, and each revision is kept.
+- **Deposit and balance.** Several payments over time on one order (the `Payment` table in POS
+  already allows this): deposit on acceptance, balance before or on the day.
+- **Stock is planned, not just deducted.** On confirmation the system works out what the order
+  needs from its recipes, including cups, lids and boxes, and reserves it for the date
+  (`reserve` movements). The requirements view shows need against available stock and turns any
+  shortfall into a suggested purchase order timed by supplier lead days. Reservations become
+  real deductions as lines are prepared, and release if the order is cancelled.
+- **Custom lines and stock.** A custom line can carry an ad hoc ingredient list, or deduct
+  nothing and leave stock to a manual adjustment.
+- **Kitchen timing.** Lines appear on the KDS at `eventAt` minus their prep lead time, grouped
+  as one party ticket with the due time prominent, instead of landing with the lunch rush. A
+  printable prep sheet lists totals per item and per station.
+- **Batch prep.** Where a party needs prepared items in bulk, the requirements view proposes
+  the batches to produce beforehand.
+- **Rules per restaurant.** Minimum notice, minimum order value, deposit percentage, blackout
+  dates and a daily capacity limit, all tenant settings with sensible defaults.
+- **Changes after confirmation.** Headcount and lines can change until a cut-off; each change
+  recalculates totals, reservations and the balance due.
+
+Where it shows up: taken at the POS or in the dashboard by staff, requested on the Storefront
+("order for an event" form that creates a draft for staff to quote), and by WhatsApp, where the
+assistant collects date, headcount and wishes and hands the draft to a person.
+
+### 4.6 WhatsApp as an add-on (Phase 5, small)
 
 Mostly re-packaging what exists:
 
@@ -255,8 +332,13 @@ Mostly re-packaging what exists:
 | 1 KDS | Stations, tickets, timers, bump, expo, all-day | A WhatsApp order appears on the right station within a second, moves through line statuses, and the customer gets the usual status messages |
 | 2 Storefront | Menu, customisation, cart, checkout, tracking, table QR | A guest orders delivery and pickup on a phone in Arabic and English, pays through the mock gateway, tracks live; the order reaches the KDS |
 | 3 POS | Sell, tables and tabs, payments, shifts, receipts | A cashier runs a full shift: dine-in with rounds and split bill, takeaway, void and discount with reasons, close with variance |
-| 4 Inventory | Ingredients, recipes, deduction, purchasing, wastage, counts, alerts | Selling an item with modifiers deducts the right quantities; a purchase order is received; a count produces a variance; low stock alerts and auto-86 fire |
+| 4 Inventory | Stock items of every kind (ingredients, cups and packaging, prepared, resale), recipes, deduction, purchasing, wastage, counts, alerts | Selling a large takeaway latte deducts beans, milk, one cup and one lid, and the dine-in one deducts no cup; a purchase order is received; a cup count produces a variance against drinks sold; low stock alerts and auto-86 fire |
+| 4b Party orders | Quotes, packages, custom lines, charges, deposits, stock reservation, timed kitchen release | A party for 60 is quoted, revised, accepted with a deposit; its stock is reserved and the shortfall becomes a purchase suggestion; on the day it appears on the KDS at the right time and the balance is taken |
 | 5 WhatsApp add-on | Entitlement, agent ordering tools | A restaurant with POS and KDS only has no WhatsApp surfaces; one with WhatsApp gets agent ordering on the same core |
+
+The order fields for party orders (class, quote status, custom lines, charges, deposits) are laid
+down in Phase 0 with the other order changes, so no module has to be reworked for them later.
+Quoting and deposits arrive with POS; reservation and requirements arrive with Inventory.
 
 Each phase ships behind its entitlement, with the same test routine as today (unit, e2e in
 memory, Postgres integration) and a migration that is additive.
@@ -292,9 +374,20 @@ memory, Postgres integration) and a migration that is additive.
 
 **Inventory** (desktop and tablet)
 
-- Ingredients list with on-hand and status chips, ingredient detail with ledger, recipe editor on
-  a menu item, purchase orders (list, compose, receive), suppliers, wastage log, stock count
-  (count sheet, variance review), low-stock dashboard, reports.
+- Stock list with kind filter (ingredients, packaging, prepared, resale, supplies), on-hand,
+  reserved and status chips; item detail with ledger and units; recipe editor on a menu item
+  with per-size and takeaway-only lines; order-level packaging rules; batch production;
+  purchase orders (list, compose, receive); suppliers; wastage log; stock count (count sheet,
+  quick cup count, variance review); cups-used against drinks-sold report; low-stock dashboard;
+  reports.
+
+**Party orders** (dashboard and POS; request form on Storefront)
+
+- Party list and calendar (upcoming events, status, deposit state), party builder (date and
+  time, headcount, packages, bulk items, custom lines, charges, price overrides), quote preview
+  and send, customer acceptance page, payments timeline (deposit, balance), requirements view
+  (need against stock, shortfall, suggested purchases and batches), prep sheet, party ticket on
+  the KDS, storefront request form, party settings (notice, minimums, deposit, capacity).
 
 **WhatsApp** (exists)
 
@@ -311,7 +404,9 @@ memory, Postgres integration) and a migration that is additive.
 4. **Delivery.** Own riders only, or an aggregator or dispatch partner hook later.
 5. **Tax and service charge rules** beyond the current VAT-inclusive 5 percent (municipality fee,
    service charge on dine-in).
-6. **Menu per branch.** Proposed: one menu, per-branch availability and price override. Separate
+6. **Party order rules.** Defaults proposed: 48 hours minimum notice, 30 percent deposit on
+   acceptance, balance due on the day, changes allowed until 24 hours before.
+7. **Menu per branch.** Proposed: one menu, per-branch availability and price override. Separate
    menus per branch would be a bigger change.
 
 ## 8. Out of scope for this plan
