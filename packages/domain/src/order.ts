@@ -20,7 +20,15 @@ export interface OrderItem {
   modifiers: CartModifier[];
   lineTotalMinor: number;
   notes?: string;
+  /** Kitchen: the station that prepares the line and how far it is. */
+  stationId?: string;
+  kitchenStatus?: KitchenStatus;
+  startedAt?: string;
+  readyAt?: string;
 }
+
+/** Where a line is in the kitchen. */
+export type KitchenStatus = "queued" | "preparing" | "ready" | "served";
 
 export interface DeliveryLocation {
   latitude: number;
@@ -51,6 +59,20 @@ export interface Order {
   checkOutAt?: string;
   guests?: number;
   propertyId?: string;
+  /** Restaurant suite: branch, table, who it is for, discount, and the kitchen clock. */
+  branchId?: string;
+  tableLabel?: string;
+  contactName?: string;
+  contactPhone?: string;
+  discountMinor?: number;
+  discountReason?: string;
+  /** Client-chosen id that makes creating the order safe to retry. */
+  clientRef?: string;
+  /** Unguessable id for the customer's tracking page. */
+  publicToken?: string;
+  firedAt?: string;
+  readyAt?: string;
+  completedAt?: string;
   currency: string;
   subtotalMinor: number;
   deliveryFeeMinor: number;

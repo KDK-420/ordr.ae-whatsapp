@@ -90,6 +90,17 @@ import { OrderNotifier } from "./orders/order-notifier";
 import { OrderService } from "./orders/order.service";
 import { SchedulingService } from "./scheduling/scheduling.service";
 import { StayService } from "./stays/stay.service";
+import { InMemoryInventoryRepository, InMemorySuiteRepository } from "./adapters/memory-suite";
+import { PrismaInventoryRepository, PrismaSuiteRepository } from "./adapters/prisma-suite";
+import { InventoryService } from "./suite/inventory.service";
+import { KdsService } from "./suite/kds.service";
+import { PosService } from "./suite/pos.service";
+import { RealtimeHub } from "./suite/realtime";
+import { StoreService } from "./suite/store.service";
+import { SuiteOrderService } from "./suite/suite-order.service";
+import { InventoryController, KdsController, PosController, StoreController, SuiteAdminController, SuiteController } from "./suite/suite.controllers";
+import { SuiteService } from "./suite/suite.service";
+import type { InventoryRepository, SuiteRepository } from "./suite/types";
 import { MerchantSimulatorController } from "./simulator/simulator.controller";
 import { DemoAwareSender, SimulatorService } from "./simulator/simulator.service";
 import { TemplateService } from "./templates/template.service";
@@ -150,6 +161,8 @@ export interface AppOptions {
     properties: PropertyRepository;
     media: MediaRepository;
     handoffRequests: HandoffRequestRepository;
+    suite: SuiteRepository;
+    inventory: InventoryRepository;
   }>;
 }
 
@@ -167,11 +180,11 @@ export function seedTenantFromConfig(config: AppConfig): TenantContext {
     tenant: {
       id: "tenant_seed",
       name: config.SEED_TENANT_NAME,
-      slug: "seed",
+      slug: config.SEED_TENANT_SLUG,
       blueprintId: config.SEED_BLUEPRINT_ID,
       defaultLanguage: "en",
       timezone: "Asia/Dubai",
-      settings: {},
+      settings: demoDataFor(config.SEED_BLUEPRINT_ID, "tenant_seed", config.SEED_DEMO).suite?.settings ?? {},
     },
     channel: {
       id: "channel_seed",
@@ -197,6 +210,13 @@ export class AppModule {
       { provide: TOKENS.Config, useValue: config },
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
       OrderService,
+      RealtimeHub,
+      SuiteService,
+      SuiteOrderService,
+      KdsService,
+      PosService,
+      InventoryService,
+      StoreService,
       SchedulingService,
       StayService,
       CommerceService,
@@ -287,13 +307,21 @@ export class AppModule {
     if (config.storage === "memory") {
       logger.log("storage=memory: tenants, catalog, orders, conversations, sessions and dedupe live in process; events are handled in process");
       const seed = seedTenantFromConfig(config);
-      const demo = demoDataFor(config.SEED_BLUEPRINT_ID, seed.tenant.id);
+      const demo = demoDataFor(config.SEED_BLUEPRINT_ID, seed.tenant.id, config.SEED_DEMO);
+      const inventory = new InMemoryInventoryRepository(demo.suite?.stockItems ?? [], demo.suite?.recipeLines ?? []);
+      if (demo.suite) {
+        inventory.suppliers.push(...demo.suite.suppliers);
+        const sizes = new Map(demo.suite.stockItems.map((i) => [i.id, i]));
+        void inventory.move(demo.suite.opening.filter((o) => o.units > 0).map((o) => ({ tenantId: seed.tenant.id, branchId: demo.suite!.branches[0]!.id, stockItemId: o.stockItemId, type: "count" as const, quantity: o.units * (sizes.get(o.stockItemId)?.unitSize ?? 1), note: "Opening stock" })));
+      }
       const orders = overrides.orders ?? new InMemoryOrderRepository();
       const holds = new InMemoryBookingHoldRepository(orders);
       if (orders instanceof InMemoryOrderRepository) orders.holds = holds;
       const memoryOrders = orders instanceof InMemoryOrderRepository ? orders : new InMemoryOrderRepository();
       providers.push(
         { provide: TOKENS.BookingHoldRepository, useValue: holds },
+        { provide: TOKENS.SuiteRepository, useValue: overrides.suite ?? new InMemorySuiteRepository(demo.suite?.branches ?? []) },
+        { provide: TOKENS.InventoryRepository, useValue: overrides.inventory ?? inventory },
         { provide: TOKENS.PropertyRepository, useValue: overrides.properties ?? new InMemoryPropertyRepository(demo.properties) },
         { provide: TOKENS.StayRepository, useValue: new InMemoryStayRepository(memoryOrders, holds) },
         { provide: TOKENS.MediaRepository, useValue: overrides.media ?? new InMemoryMediaRepository() },
@@ -365,6 +393,12 @@ export class AppModule {
         overrides.media
           ? { provide: TOKENS.MediaRepository, useValue: overrides.media }
           : { provide: TOKENS.MediaRepository, useFactory: (p: PrismaService) => new PrismaMediaRepository(p), inject: [PrismaService] },
+        overrides.suite
+          ? { provide: TOKENS.SuiteRepository, useValue: overrides.suite }
+          : { provide: TOKENS.SuiteRepository, useFactory: (p: PrismaService) => new PrismaSuiteRepository(p), inject: [PrismaService] },
+        overrides.inventory
+          ? { provide: TOKENS.InventoryRepository, useValue: overrides.inventory }
+          : { provide: TOKENS.InventoryRepository, useFactory: (p: PrismaService) => new PrismaInventoryRepository(p), inject: [PrismaService] },
         overrides.handoffRequests
           ? { provide: TOKENS.HandoffRequestRepository, useValue: overrides.handoffRequests }
           : { provide: TOKENS.HandoffRequestRepository, useFactory: (p: PrismaService) => new PrismaHandoffRequestRepository(p), inject: [PrismaService] },
@@ -421,6 +455,12 @@ export class AppModule {
               PaymentsController,
               MerchantPushController,
               MediaController,
+              SuiteController,
+              SuiteAdminController,
+              PosController,
+              KdsController,
+              InventoryController,
+              StoreController,
             ]
           : [],
       providers,

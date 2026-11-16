@@ -362,14 +362,31 @@ model Order {
   checkOutAt       DateTime?
   guests           Int?
   propertyId       String?
+  /// Restaurant suite: where the order is made, who it is for, and its kitchen clock
+  branchId         String?
+  tableLabel       String?
+  contactName      String?
+  contactPhone     String?
+  discountMinor    Int       @default(0)
+  discountReason   String?
+  /// Set by POS and storefront clients so a retried request never creates a second order
+  clientRef        String?
+  /// Unguessable id for the customer's tracking page
+  publicToken      String?   @unique
+  firedAt          DateTime?
+  readyAt          DateTime?
+  completedAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   items         OrderItem[]
   events        OrderEvent[]
   paymentIntent PaymentIntent?
+  payments      OrderPayment[]
 
   @@unique([tenantId, number])
+  @@unique([tenantId, clientRef])
+  @@index([tenantId, branchId, createdAt])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, customerId, createdAt])
   @@index([tenantId, scheduledAt])
@@ -557,6 +574,11 @@ model OrderItem {
   modifiers      Json    @default("[]")
   lineTotalMinor Int
   notes          String?
+  /// Kitchen: which station prepares the line and how far it is (queued | preparing | ready | served)
+  stationId      String?
+  kitchenStatus  String    @default("queued")
+  startedAt      DateTime?
+  readyAt        DateTime?
 
   order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   offering Offering? @relation(fields: [offeringId], references: [id])
@@ -627,4 +649,167 @@ model OrderEvent {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Restaurant suite (Storefront, POS, KDS, Inventory). See docs/MODULES_PLAN.md.
+// ---------------------------------------------------------------------------
+
+/// A location of a restaurant. Orders, kitchen screens and stock belong to a branch.
+model Branch {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  address   String?
+  phone     String?
+  /// Kitchen stations: [{ id, name, categoryIds: [] }]; a line goes to the station that lists its category, else the first
+  stations  Json     @default("[]")
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, sortOrder])
+}
+
+/// Money taken against an order. Several per order: split tender, deposits.
+model OrderPayment {
+  id            String   @id @default(cuid())
+  tenantId      String
+  orderId       String
+  branchId      String?
+  /// cash | card | online
+  method        String
+  amountMinor   Int
+  tenderedMinor Int?
+  changeMinor   Int?
+  reference     String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, createdAt])
+  @@index([orderId])
+}
+
+/// A POS ticket put aside before it becomes an order ("Hold Order").
+model HeldTicket {
+  id        String   @id @default(cuid())
+  tenantId  String
+  branchId  String
+  label     String?
+  payload   Json
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, branchId, createdAt])
+}
+
+/// Anything the restaurant can run out of: ingredients, cups and packaging, prepared batches, resale items, supplies.
+model StockItem {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  category     String?
+  /// ingredient | packaging | prepared | resale | supply
+  kind         String   @default("ingredient")
+  /// g | ml | each: what recipes and the ledger count in
+  baseUnit     String   @default("each")
+  /// How the item is bought and shown, e.g. "1kg", "1L", "sleeve of 50"
+  unitLabel    String   @default("")
+  /// Base units in one stock unit (1000 for a 1 kg bag counted in grams)
+  unitSize     Float    @default(1)
+  /// In stock units; at or below this the item is "low stock"
+  reorderLevel Float    @default(0)
+  /// Last cost of one stock unit, minor currency units
+  costMinor    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId, name])
+}
+
+/// Cached sum of the movement ledger for one item in one branch, in base units.
+model StockLevel {
+  branchId    String
+  stockItemId String
+  tenantId    String
+  onHand      Float    @default(0)
+  updatedAt   DateTime @updatedAt
+
+  @@id([branchId, stockItemId])
+  @@index([tenantId, branchId])
+}
+
+/// Append-only stock ledger. Quantity is signed and in base units.
+model StockMovement {
+  id            String   @id @default(cuid())
+  tenantId      String
+  branchId      String
+  stockItemId   String
+  /// sale | sale_reversal | purchase | adjustment | wastage | count
+  type          String
+  quantity      Float
+  unitCostMinor Int?
+  refType       String?
+  refId         String?
+  note          String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, branchId, createdAt])
+  @@index([tenantId, stockItemId, createdAt])
+  @@index([refType, refId])
+}
+
+/// What selling a menu item uses up. A line tied to a modifier option applies only when that option is chosen.
+model RecipeLine {
+  id               String  @id @default(cuid())
+  tenantId         String
+  offeringId       String
+  modifierOptionId String?
+  stockItemId      String
+  /// Base units per one sold
+  quantity         Float
+  /// all | takeaway (pickup and delivery) | dine_in
+  appliesTo        String  @default("all")
+
+  @@index([tenantId, offeringId])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  leadDays  Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, name])
+}
+
+model PurchaseOrder {
+  id         String    @id @default(cuid())
+  tenantId   String
+  branchId   String
+  supplierId String?
+  number     Int
+  /// draft | ordered | received | cancelled
+  status     String    @default("draft")
+  /// [{ stockItemId, quantity (stock units), unitCostMinor }]
+  lines      Json      @default("[]")
+  notes      String?
+  totalMinor Int       @default(0)
+  orderedAt  DateTime?
+  receivedAt DateTime?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([tenantId, branchId, createdAt])
 }

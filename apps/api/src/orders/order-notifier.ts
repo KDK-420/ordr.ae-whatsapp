@@ -41,6 +41,8 @@ export class OrderNotifier implements OnModuleInit {
 
     const order = await this.orders.findById(event.tenantId, event.subject.id);
     if (!order) return;
+    // Till and storefront orders have no chat to answer in; their customers follow the order on a screen or a tracking page.
+    if (order.source !== "whatsapp" && !order.conversationId) return;
     const conversation = order.conversationId ? await this.conversations.findConversationById(order.conversationId) : null;
     // Answer on the number the customer wrote to; the tenant's newest channel only when there is no thread.
     const ctx = (conversation ? await this.tenants.findContextByChannelId(conversation.channelId) : null) ?? (await this.tenants.findContextById(order.tenantId));

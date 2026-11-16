@@ -14,6 +14,10 @@ const EnvSchema = z.object({
   DEDUPE_TTL_SECONDS: z.coerce.number().int().positive().default(7 * 24 * 60 * 60),
   SEED_TENANT_NAME: z.string().default("Demo Restaurant"),
   SEED_BLUEPRINT_ID: z.string().default("restaurant"),
+  /** The seed tenant's subdomain (memory mode). */
+  SEED_TENANT_SLUG: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/).default("seed"),
+  /** "coffee" seeds a restaurant as the suite demo: coffee menu, a branch with stations, stock, recipes, all five modules. */
+  SEED_DEMO: z.enum(["coffee"]).optional(),
   SEED_PHONE_NUMBER_ID: z.string().default("000000000000000"),
   SEED_WABA_ID: z.string().default("000000000000000"),
   SEED_DISPLAY_PHONE: z.string().default("+971500000000"),

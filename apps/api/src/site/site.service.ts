@@ -3,6 +3,7 @@ import { formatMoney, localized, type Offering, type Tenant } from "@ordr/domain
 import type { AppConfig } from "../config";
 import type { CatalogRepository, PropertyRepository, TenantRepository } from "../ports";
 import { type BusinessProfile, businessProfile } from "../tenant-profile";
+import { tenantModules } from "../suite/types";
 import { TOKENS } from "../tokens";
 
 /** What a merchant sets in Settings › Website. Stored in `tenant.settings.site`. */
@@ -96,7 +97,11 @@ export class SiteService {
     const host = domain.trim().toLowerCase();
     const suffix = `.${this.config.SITE_BASE_DOMAIN}`;
     if (!host.endsWith(suffix)) return false;
-    return (await this.publishedTenant(host.slice(0, -suffix.length))) !== null;
+    const slug = host.slice(0, -suffix.length);
+    if ((await this.publishedTenant(slug)) !== null) return true;
+    // A restaurant in the suite needs its host for the storefront and for /admin, published page or not.
+    const tenant = SUBDOMAIN.test(slug) ? await this.tenants.findBySlug(slug) : null;
+    return !!tenant && tenantModules(tenant.settings).some((m) => m !== "whatsapp");
   }
 
   async publicSite(slug: string, requestedLanguage?: string): Promise<PublicSite | null> {

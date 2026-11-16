@@ -22,6 +22,8 @@ import type {
   CreateOrderInput,
   ModifierGroupInput,
   OfferingInput,
+  OrderItemPatch,
+  OrderPatch,
   OrderRepository,
   OutboxFactory,
   ResourceInput,
@@ -367,6 +369,10 @@ function toOrder(row: OrderRow): Order {
         modifiers: (i.modifiers as unknown as OrderItem["modifiers"]) ?? [],
         lineTotalMinor: i.lineTotalMinor,
         notes: i.notes ?? undefined,
+        stationId: i.stationId ?? undefined,
+        kitchenStatus: (i.kitchenStatus as OrderItem["kitchenStatus"]) ?? "queued",
+        startedAt: i.startedAt?.toISOString(),
+        readyAt: i.readyAt?.toISOString(),
       }),
     ),
     currency: row.currency,
@@ -384,6 +390,17 @@ function toOrder(row: OrderRow): Order {
     checkOutAt: row.checkOutAt?.toISOString(),
     guests: row.guests ?? undefined,
     propertyId: row.propertyId ?? undefined,
+    branchId: row.branchId ?? undefined,
+    tableLabel: row.tableLabel ?? undefined,
+    contactName: row.contactName ?? undefined,
+    contactPhone: row.contactPhone ?? undefined,
+    discountMinor: row.discountMinor || undefined,
+    discountReason: row.discountReason ?? undefined,
+    clientRef: row.clientRef ?? undefined,
+    publicToken: row.publicToken ?? undefined,
+    firedAt: row.firedAt?.toISOString(),
+    readyAt: row.readyAt?.toISOString(),
+    completedAt: row.completedAt?.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -401,6 +418,8 @@ export function orderItemsCreate(items: OrderItem[]): Prisma.OrderItemUncheckedC
     modifiers: i.modifiers as unknown as Prisma.InputJsonValue,
     lineTotalMinor: i.lineTotalMinor,
     notes: i.notes,
+    stationId: i.stationId ?? null,
+    kitchenStatus: i.kitchenStatus ?? "queued",
   }));
 }
 
@@ -437,6 +456,15 @@ export class PrismaOrderRepository implements OrderRepository {
           checkOutAt: input.checkOutAt,
           guests: input.guests,
           propertyId: input.propertyId,
+          branchId: input.branchId,
+          tableLabel: input.tableLabel,
+          contactName: input.contactName,
+          contactPhone: input.contactPhone,
+          discountMinor: input.discountMinor ?? 0,
+          discountReason: input.discountReason,
+          clientRef: input.clientRef,
+          publicToken: input.publicToken,
+          firedAt: input.firedAt,
           items: { create: orderItemsCreate(input.items) },
           events: { create: { tenantId: input.tenantId, type: "order.placed", payload: {} } },
         },
@@ -446,6 +474,42 @@ export class PrismaOrderRepository implements OrderRepository {
       if (outbox) await tx.outboxEvent.create({ data: toOutboxRow(outbox(order)) });
       return order;
     });
+  }
+
+  async patch(tenantId: string, orderId: string, patch: OrderPatch, items: OrderItemPatch[] = []): Promise<Order> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.order.findFirst({ where: { tenantId, id: orderId }, select: { id: true } });
+      if (!existing) throw new Error(`order ${orderId} not found`);
+      for (const p of items) {
+        await tx.orderItem.updateMany({
+          where: { id: p.id, orderId },
+          data: { ...(p.kitchenStatus ? { kitchenStatus: p.kitchenStatus } : {}), ...(p.startedAt !== undefined ? { startedAt: p.startedAt } : {}), ...(p.readyAt !== undefined ? { readyAt: p.readyAt } : {}) },
+        });
+      }
+      const row = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          ...(patch.paymentStatus ? { paymentStatus: patch.paymentStatus } : {}),
+          ...(patch.paymentMethod ? { paymentMethod: patch.paymentMethod } : {}),
+          ...(patch.tableLabel !== undefined ? { tableLabel: patch.tableLabel } : {}),
+          ...(patch.firedAt !== undefined ? { firedAt: patch.firedAt } : {}),
+          ...(patch.readyAt !== undefined ? { readyAt: patch.readyAt } : {}),
+          ...(patch.completedAt !== undefined ? { completedAt: patch.completedAt } : {}),
+        },
+        include: { items: true },
+      });
+      return toOrder(row);
+    });
+  }
+
+  async findByPublicToken(token: string): Promise<Order | null> {
+    const row = await this.prisma.order.findUnique({ where: { publicToken: token }, include: { items: true } });
+    return row ? toOrder(row) : null;
+  }
+
+  async findByClientRef(tenantId: string, clientRef: string): Promise<Order | null> {
+    const row = await this.prisma.order.findFirst({ where: { tenantId, clientRef }, include: { items: true } });
+    return row ? toOrder(row) : null;
   }
 
   async findById(tenantId: string, orderId: string): Promise<Order | null> {
@@ -596,11 +660,13 @@ export class PrismaOrderRepository implements OrderRepository {
     return rows.map(toOrder);
   }
 
-  async listRecent(tenantId: string, opts: { customerId?: string; statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+  async listRecent(tenantId: string, opts: { customerId?: string; branchId?: string; statuses?: string[]; since?: Date; createdSince?: Date; limit?: number } = {}): Promise<Order[]> {
     const rows = await this.prisma.order.findMany({
       where: {
         tenantId,
         ...(opts.customerId ? { customerId: opts.customerId } : {}),
+        ...(opts.branchId ? { branchId: opts.branchId } : {}),
+        ...(opts.createdSince ? { createdAt: { gte: opts.createdSince } } : {}),
         ...(opts.statuses ? { status: { in: opts.statuses } } : {}),
         ...(opts.since ? { updatedAt: { gte: opts.since } } : {}),
       },

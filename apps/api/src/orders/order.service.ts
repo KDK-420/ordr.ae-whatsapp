@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { addItem, type Cart, type DeliveryLocation, type DomainEvent, emptyCart, nextState, type Offering, type Order, type Quote, quote as buildQuote, type Tenant } from "@ordr/domain";
 import type { BlueprintRegistry, EventBus, OrderRepository, OutboxFactory, OutboxStore, TenantRepository } from "../ports";
 import { BOOKING_REMINDER_EVENT, type BookingReminderPayload, reminderEventId } from "./booking-reminder";
+import { RealtimeHub } from "../suite/realtime";
 import { TOKENS } from "../tokens";
 
 export interface OrderSettings {
@@ -56,6 +57,8 @@ export class OrderError extends Error {
 @Injectable()
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
+  /** Overridable clock so tests can pin "now" for reminder scheduling. */
+  now: () => Date = () => new Date();
 
   constructor(
     @Inject(TOKENS.OrderRepository) private readonly orders: OrderRepository,
@@ -63,7 +66,17 @@ export class OrderService {
     @Inject(TOKENS.BlueprintRegistry) private readonly blueprints: BlueprintRegistry,
     @Inject(TOKENS.EventBus) private readonly bus: EventBus,
     @Inject(TOKENS.OutboxStore) private readonly outbox: OutboxStore,
+    /** Tells open staff screens that an order changed. Absent in unit tests that build the service by hand. */
+    @Optional() @Inject(RealtimeHub) private readonly hub?: RealtimeHub,
   ) {}
+
+  /** The tenant's vertical blueprint; throws when the tenant points at one that no longer exists. */
+  async blueprintFor(tenantId: string) {
+    const s = await this.settingsFor(tenantId);
+    const blueprint = this.blueprints.get(s.tenant.blueprintId);
+    if (!blueprint) throw new OrderError(`blueprint ${s.tenant.blueprintId} not found`);
+    return blueprint;
+  }
 
   /** Blueprint defaults overridden by tenant settings. */
   async settingsFor(tenantId: string): Promise<OrderSettings & { tenant: Tenant }> {
@@ -224,7 +237,7 @@ export class OrderService {
     const configured = settings.map((s) => s.reminderMinutes).filter((v): v is unknown[] => Array.isArray(v)).at(-1);
     const leads = (configured ?? [1440, 120]).filter((m): m is number => typeof m === "number" && m > 0);
     const startsAt = new Date(order.scheduledAt).getTime();
-    const now = Date.now();
+    const now = this.now().getTime();
     for (const leadMinutes of leads) {
       const at = new Date(startsAt - leadMinutes * 60_000);
       if (at.getTime() <= now + 60_000) continue;
@@ -245,12 +258,13 @@ export class OrderService {
       tenantId: order.tenantId,
       occurredAt: new Date().toISOString(),
       subject: { kind: "order", id: order.id },
-      payload: { orderNumber: order.number, customerId: order.customerId, status: order.status, ...payload },
+      payload: { orderNumber: order.number, customerId: order.customerId, status: order.status, branchId: order.branchId, ...payload },
     };
   }
 
   /** A failing handler must never fail the order change itself; with the outbox the worker retries. */
   private async publish(event: DomainEvent): Promise<void> {
+    this.hub?.emit(event.tenantId, { type: event.type, orderId: event.subject.id, branchId: (event.payload as { branchId?: string } | undefined)?.branchId });
     try {
       await this.bus.publish(event);
     } catch (err) {

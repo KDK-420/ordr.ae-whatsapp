@@ -8,6 +8,8 @@ import type {
   EventHandler,
   ModifierGroupInput,
   OfferingInput,
+  OrderItemPatch,
+  OrderPatch,
   OrderRepository,
   OutboxFactory,
   OutboxRecord,
@@ -234,8 +236,11 @@ export class InMemoryOrderRepository implements OrderRepository {
     const number = (this.sequences.get(input.tenantId) ?? 0) + 1;
     this.sequences.set(input.tenantId, number);
     const now = new Date().toISOString();
-    const { initialStatus, scheduledAt, checkOutAt, ...rest } = input;
-    const order: Order = { id: `ord_${input.tenantId}_${number}`, number, status: initialStatus, ...rest, scheduledAt: scheduledAt?.toISOString(), checkOutAt: checkOutAt?.toISOString(), createdAt: now, updatedAt: now };
+    const { initialStatus, scheduledAt, checkOutAt, firedAt, ...rest } = input;
+    const id = `ord_${input.tenantId}_${number}`;
+    // Lines get ids here as they do in Postgres, so the kitchen can address one line.
+    const items = rest.items.map((item, index) => ({ ...item, id: item.id ?? `${id}_i${index + 1}` }));
+    const order: Order = { id, number, status: initialStatus, ...rest, items, scheduledAt: scheduledAt?.toISOString(), checkOutAt: checkOutAt?.toISOString(), firedAt: firedAt?.toISOString(), createdAt: now, updatedAt: now };
     this.orders.push(order);
     this.history.push({ orderId: order.id, type: "order.placed" });
     if (outbox) this.outbox.push(outbox(structuredClone(order)));
@@ -329,10 +334,43 @@ export class InMemoryOrderRepository implements OrderRepository {
       .map((o) => structuredClone(o));
   }
 
-  async listRecent(tenantId: string, opts: { customerId?: string; statuses?: string[]; since?: Date; limit?: number } = {}): Promise<Order[]> {
+  async patch(tenantId: string, orderId: string, patch: OrderPatch, items: OrderItemPatch[] = []): Promise<Order> {
+    const o = this.orders.find((x) => x.tenantId === tenantId && x.id === orderId);
+    if (!o) throw new Error(`order ${orderId} not found`);
+    const iso = (d: Date | null | undefined) => (d ? d.toISOString() : undefined);
+    if (patch.paymentStatus) o.paymentStatus = patch.paymentStatus;
+    if (patch.paymentMethod) o.paymentMethod = patch.paymentMethod;
+    if (patch.tableLabel !== undefined) o.tableLabel = patch.tableLabel ?? undefined;
+    if (patch.firedAt !== undefined) o.firedAt = iso(patch.firedAt);
+    if (patch.readyAt !== undefined) o.readyAt = iso(patch.readyAt);
+    if (patch.completedAt !== undefined) o.completedAt = iso(patch.completedAt);
+    for (const p of items) {
+      const line = o.items.find((i) => i.id === p.id);
+      if (!line) continue;
+      if (p.kitchenStatus) line.kitchenStatus = p.kitchenStatus;
+      if (p.startedAt !== undefined) line.startedAt = iso(p.startedAt);
+      if (p.readyAt !== undefined) line.readyAt = iso(p.readyAt);
+    }
+    o.updatedAt = new Date().toISOString();
+    return structuredClone(o);
+  }
+
+  async findByPublicToken(token: string): Promise<Order | null> {
+    const o = this.orders.find((x) => x.publicToken === token);
+    return o ? structuredClone(o) : null;
+  }
+
+  async findByClientRef(tenantId: string, clientRef: string): Promise<Order | null> {
+    const o = this.orders.find((x) => x.tenantId === tenantId && x.clientRef === clientRef);
+    return o ? structuredClone(o) : null;
+  }
+
+  async listRecent(tenantId: string, opts: { customerId?: string; branchId?: string; statuses?: string[]; since?: Date; createdSince?: Date; limit?: number } = {}): Promise<Order[]> {
     const limit = opts.limit ?? 100;
     return this.orders
       .filter((x) => x.tenantId === tenantId)
+      .filter((x) => !opts.branchId || x.branchId === opts.branchId)
+      .filter((x) => !opts.createdSince || new Date(x.createdAt) >= opts.createdSince)
       .filter((x) => !opts.customerId || x.customerId === opts.customerId)
       .filter((x) => !opts.statuses || opts.statuses.includes(x.status))
       .filter((x) => !opts.since || new Date(x.updatedAt) >= opts.since)

@@ -25,6 +25,8 @@ export function setupStays() {
   const bus = new InMemoryEventBus();
   const outbox = new InMemoryOutboxStore();
   const orderService = new OrderService(orders, new InMemoryTenantRepository([seed]), { get: getBlueprint }, bus, outbox);
+  // Reminders are scheduled against the same pinned clock as the stays, so the test does not age.
+  orderService.now = () => NOW;
   const stays = new StayService(catalog, properties, orders, holds, new InMemoryStayRepository(orders, holds), { get: getBlueprint }, orderService, config);
   stays.now = () => NOW;
   return { stays, orders, holds, catalog, properties, bus, outbox, seed, tenantId: seed.tenant.id };

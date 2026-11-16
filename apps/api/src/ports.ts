@@ -505,6 +505,33 @@ export interface CreateOrderInput {
   checkOutAt?: Date;
   guests?: number;
   propertyId?: string;
+  /** Restaurant suite. */
+  branchId?: string;
+  tableLabel?: string;
+  contactName?: string;
+  contactPhone?: string;
+  discountMinor?: number;
+  discountReason?: string;
+  clientRef?: string;
+  publicToken?: string;
+  firedAt?: Date;
+}
+
+/** Fields of an order the suite changes after it was created. Null clears a value. */
+export interface OrderPatch {
+  paymentStatus?: OrderPaymentStatus;
+  paymentMethod?: string;
+  tableLabel?: string | null;
+  firedAt?: Date | null;
+  readyAt?: Date | null;
+  completedAt?: Date | null;
+}
+
+export interface OrderItemPatch {
+  id: string;
+  kitchenStatus?: "queued" | "preparing" | "ready" | "served";
+  startedAt?: Date | null;
+  readyAt?: Date | null;
 }
 
 export type CreateBookingInput = CreateOrderInput & { scheduledAt: Date; resourceId: string; durationMinutes: number; /** The customer's own hold for this slot, ignored by the overlap check. */ holdId?: string };
@@ -546,8 +573,12 @@ export interface OrderRepository {
   latestForCustomer(tenantId: string, customerId: string): Promise<Order | null>;
   updateStatus(tenantId: string, orderId: string, status: string, event: { type: string; payload?: unknown }, outbox?: OutboxFactory): Promise<Order>;
   listByStatus(tenantId: string, statuses: string[], limit?: number): Promise<Order[]>;
-  /** Newest first, optionally restricted to one customer, to statuses and to orders updated after `since`. */
-  listRecent(tenantId: string, opts?: { customerId?: string; statuses?: string[]; since?: Date; limit?: number }): Promise<Order[]>;
+  /** Newest first, optionally restricted to one customer or branch, to statuses, to orders updated after `since` or created after `createdSince`. */
+  listRecent(tenantId: string, opts?: { customerId?: string; branchId?: string; statuses?: string[]; since?: Date; createdSince?: Date; limit?: number }): Promise<Order[]>;
+  /** Changes order fields and line kitchen fields in one write; no status change, no event. */
+  patch(tenantId: string, orderId: string, patch: OrderPatch, items?: OrderItemPatch[]): Promise<Order>;
+  findByPublicToken(token: string): Promise<Order | null>;
+  findByClientRef(tenantId: string, clientRef: string): Promise<Order | null>;
   /**
    * Like create, but serialized per resource: throws SlotTakenError when another order in one of
    * `blockingStatuses` overlaps the requested time on the same resource.
