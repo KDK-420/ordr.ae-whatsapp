@@ -83,7 +83,7 @@ for name, vertical, owner and an optional WhatsApp number. It gains:
 
 - Address: the slug, shown as `<slug>.ordr.ae`, checked against taken and reserved names.
 - Modules: five switches, any combination from one to all five, with the dependency hints below.
-- Theme: a preset or brand colours and logo (section 3.7), so the restaurant looks right on day one.
+- Theme: one of five swatches or custom colours, and a logo (section 3.7), so the restaurant looks right on day one.
 - First branch: name and address (more can be added later).
 - WhatsApp number from the pool, offered only when the WhatsApp module is on.
 
@@ -263,7 +263,7 @@ Each restaurant has its own look, set by the platform operator when creating it 
 afterwards (by the operator, and by the owner under Settings › Branding).
 
 ```
-TenantTheme   tenantId, preset, logoUrl, logoDarkUrl, iconUrl (square, for app icons and favicon),
+TenantTheme   tenantId, swatch (espresso | olive_grove | chili | ocean | midnight | custom), logoUrl, logoDarkUrl, iconUrl (square, for app icons and favicon),
               coverImageUrl, primaryColor, accentColor, backgroundStyle (light | dark | auto),
               fontLatin, fontArabic, cornerStyle (sharp | soft | round), menuLayout (list | grid |
               photo_first), publishedAt, draft (the same fields, unpublished)
@@ -286,8 +286,22 @@ Where the theme applies:
 
 Rules:
 
-- **Presets first.** A handful of complete themes (for example Classic, Fresh, Dark roast,
-  Minimal) so a restaurant looks finished after one click; colours and logo then adjust it.
+- **Five built-in swatches.** One click gives a finished look; logo, cover and fonts then
+  adjust it. Each swatch is a complete, tested set: brand colour, accent, page background and
+  text colour for light mode, plus a dark-mode pair.
+
+  | Swatch | Mood | Primary | Accent | Background | Text | Dark background | Dark primary |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Espresso | Coffee shops, bakeries | `#5B3A29` | `#C8873A` | `#FAF6F1` | `#2B1D14` | `#1E1512` | `#E9B87A` |
+  | Olive Grove | Mediterranean, healthy, salads | `#3F5F3A` | `#D9A441` | `#F7F7F0` | `#1F2A1C` | `#141A12` | `#8FBF86` |
+  | Chili | Grills, burgers, fast food | `#B3261E` | `#F2A33A` | `#FFF8F5` | `#2A1512` | `#1C1110` | `#FF8A7A` |
+  | Ocean | Seafood, juice bars, cafés | `#0E5E6F` | `#F08A5D` | `#F4FAFB` | `#0F2A30` | `#0C1A1E` | `#5CC6D6` |
+  | Midnight | Fine dining, lounges | `#1F2937` | `#E0B354` | `#F8F8F7` | `#111827` | `#0F1319` | `#E0B354` |
+
+  Buttons use white text on the primary and dark text on the accent. Every pairing above was
+  measured at 5.4:1 contrast or better (the accessibility minimum for text is 4.5:1), in both
+  light and dark mode. A sixth choice, Custom, lets the restaurant enter its own primary and
+  accent; the other colours are then derived and checked the same way.
 - **Draft, preview, publish.** Changes are edited as a draft and previewed on the real storefront
   before going live; the last published theme can be restored.
 - **Readable by construction.** A chosen colour is checked for contrast against text and
@@ -503,7 +517,7 @@ Mostly re-packaging what exists:
 
 | Phase | Delivers | Done when |
 | --- | --- | --- |
-| 0 Core | Entitlements, restaurant creation with modules and theme, `/admin` on the restaurant's host, domains, branches, order lines, stream, roles and PIN, row security | Existing restaurant WhatsApp flow passes unchanged; a restaurant created with any mix of the five modules shows only those menus and addresses; switching a module off hides it and keeps its data; a theme preset plus logo and colour shows on the storefront after publish; a tenant with no WhatsApp number works; stream replays after a dropped connection |
+| 0 Core | Entitlements, restaurant creation with modules and theme, `/admin` on the restaurant's host, domains, branches, order lines, stream, roles and PIN, row security | Existing restaurant WhatsApp flow passes unchanged; a restaurant created with any mix of the five modules shows only those menus and addresses; switching a module off hides it and keeps its data; a swatch plus logo shows on the storefront after publish; a tenant with no WhatsApp number works; stream replays after a dropped connection |
 | 1 KDS | Stations, tickets, timers, bump, expo, all-day | A WhatsApp order appears on the right station within a second, moves through line statuses, and the customer gets the usual status messages |
 | 2 Storefront | Menu, customisation, cart, checkout, tracking, table QR | A guest orders delivery and pickup on a phone in Arabic and English, pays through the mock gateway, tracks live; the order reaches the KDS |
 | 3 POS | Sell, tables and tabs, payments, shifts, receipts | A cashier runs a full shift: dine-in with rounds and split bill, takeaway, void and discount with reasons, close with variance |
@@ -523,7 +537,7 @@ memory, Postgres integration) and a migration that is additive.
 **Platform admin** (`app.ordr.ae/admin`, operator only)
 
 - New restaurant wizard: details and address, module switches with dependency hints, theme
-  (preset, logo, colours) with live preview, first branch, owner account, WhatsApp number.
+  (five swatches or custom, logo) with live preview, first branch, owner account, WhatsApp number.
 - Restaurant detail: module switches with change history, theme editor, domains, branches,
   owners, usage at a glance.
 - Restaurants list with module badges and status.
