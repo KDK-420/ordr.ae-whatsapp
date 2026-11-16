@@ -330,4 +330,49 @@ describe("restaurant suite", () => {
     expect(await stock("stk_beans")).toBe(Math.round((beans - 0.018) * 100) / 100);
     expect(await stock("stk_cup_m")).toBeLessThan(cups);
   });
+
+  it("the operator creates a coffee shop with the full demo: its own menu, stations, stock and recipes, ready to sell", async () => {
+    const created = (await request(server()).post("/merchant/admin/tenants").set(auth).send({ name: "Sunrise Coffee", blueprintId: "restaurant", ownerEmail: "owner@sunrise.test", ownerName: "Sam", demoSet: "coffee", swatch: "chili" }).expect(201)).body;
+    expect(created.tenant.settings).toMatchObject({ modules: ["storefront", "pos", "kds", "inventory", "whatsapp"], theme: { swatch: "chili", tagline: "Specialty coffee" }, vatInclusive: false });
+    await request(server()).post("/merchant/admin/tenants").set(auth).send({ name: "Sunrise Salon", blueprintId: "salon", ownerEmail: "owner@salon.test", ownerName: "S", demoSet: "coffee" }).expect(400);
+
+    const token = (await request(server()).post("/merchant/auth/login").send({ email: "owner@sunrise.test", password: created.owner.temporaryPassword }).expect(200)).body.token as string;
+    const owner = { authorization: `Bearer ${token}` };
+    const catalog = (await request(server()).get("/merchant/catalog").set(owner).expect(200)).body;
+    expect(catalog.offerings).toHaveLength(14);
+    const latte = catalog.offerings.find((o: { name: { en: string } }) => o.name.en === "Latte");
+    expect(latte.id).not.toBe("cof_latte");
+    expect(latte.imageUrl).toBe("/art/coffee/latte.jpg");
+    const option = (name: string) => latte.modifierGroups.flatMap((g: { options: Array<{ id: string; name: { en: string } }> }) => g.options).find((o: { name: { en: string } }) => o.name.en === name).id as string;
+
+    // Its own branch, with the bar and the bakery pointing at its own categories.
+    const view = (await request(server()).get("/merchant/suite").set(owner).expect(200)).body;
+    expect(view.branches).toHaveLength(1);
+    expect(view.branches[0].id).not.toBe("br_main");
+    const categoryIds = new Set(catalog.categories.map((c: { id: string }) => c.id));
+    expect(view.branches[0].stations.map((st: { name: string; categoryIds: string[] }) => [st.name, st.categoryIds.length, st.categoryIds.every((c) => categoryIds.has(c))])).toEqual([["Bar", 2, true], ["Bakery", 2, true]]);
+
+    const overview = async () => (await request(server()).get("/merchant/inventory/overview").set(owner).expect(200)).body;
+    const before = await overview();
+    expect(before.totals).toMatchObject({ items: 16, low: 2, out: 1 });
+    const level = (o: { items: Array<{ name: string; onHand: number }> }, name: string) => o.items.find((i) => i.name === name)!.onHand;
+    expect(level(before, "Arabica Coffee Beans (1kg)")).toBe(24);
+    expect((await request(server()).get("/merchant/inventory/recipes").set(owner).expect(200)).body.lines).toHaveLength(60);
+    expect((await request(server()).get("/merchant/inventory/suppliers").set(owner).expect(200)).body.suppliers).toHaveLength(3);
+
+    // A large takeaway latte with an extra shot uses this shop's recipe: 27 g beans, 320 ml milk, one 16oz cup.
+    const sale = (await request(server()).post("/merchant/pos/orders").set(owner).send({ fulfillmentType: "pickup", lines: [{ offeringId: latte.id, quantity: 1, optionIds: [option("Large"), option("Extra shot")] }] }).expect(201)).body;
+    const after = await overview();
+    expect(level(after, "Arabica Coffee Beans (1kg)")).toBe(23.97);
+    expect(level(after, "Whole Milk (1L)")).toBe(17.68);
+    expect(level(after, "Hot Cup 16oz")).toBe(13.98);
+    const board = (await request(server()).get("/merchant/kds/board").set(owner).expect(200)).body;
+    expect(board.tickets.map((t: { orderId: string; lines: Array<{ stationId: string }> }) => [t.orderId, t.lines[0]!.stationId])).toEqual([[sale.id, "st_bar"]]);
+
+    // Its ordering site is up in its own colours, and the first shop's stock did not move.
+    const site = (await request(server()).get("/v1/store/sunrise-coffee").expect(200)).body;
+    expect(site).toMatchObject({ name: "Sunrise Coffee", theme: { swatch: "chili", primary: "#B3261E" }, headline: "Exceptional Coffee, Delivered." });
+    expect(site.categories.map((c: { name: string; items: unknown[] }) => [c.name, c.items.length])).toEqual([["Coffee", 6], ["Cold Drinks", 3], ["Bakery", 3], ["Desserts", 2]]);
+    expect(await stock("stk_beans")).toBe(24);
+  });
 });

@@ -15,6 +15,7 @@ browser walk-through of every screen on `daybreak.localhost` (Daybreak Coffee de
 | Area | What works |
 |---|---|
 | Module switches | Operator ticks up to five modules (Online store, Point of sale, Kitchen display, Inventory, WhatsApp) when creating a restaurant and can change them later. The restaurant sees menus only for what is on; the API refuses a module that is off (403, and 404 for a public store). |
+| Demo for a new restaurant | When creating a restaurant the operator can load the coffee shop demo: 14 items with photos, Bar and Bakery stations, 16 stock items with opening levels, 60 recipe lines and 3 suppliers, all as the new restaurant's own copy. |
 | Theme | Five built-in swatches (Espresso, Olive Grove, Chili, Ocean, Midnight) plus custom colours, tagline and logo link. One theme paints the ordering site, the staff apps and the staff sign-in. |
 | Addresses | One host per restaurant. `daybreak.ordr.ae` is the ordering site (`/`, `/menu`, `/checkout`, `/o/<token>`); `daybreak.ordr.ae/admin` is staff (`/admin/pos`, `/admin/kds`, `/admin/inventory`, `/admin/settings`, `/admin/login`). The same pages answer on our own host as `/r/...` for staff who signed in at `app.ordr.ae`. |
 | Point of sale | Item grid with category chips and search, sizes and extras, notes, dine-in/takeaway/delivery, table and customer, discount, hold and resume, cash with change and card, pay later, day's orders with payment and cancel, customers, day report, menu editor. |
@@ -64,6 +65,8 @@ Then open `http://daybreak.localhost:3001` (store) and `http://daybreak.localhos
 The operator console is `http://localhost:3001/admin`, signed in as the same user.
 
 On Postgres, `SEED_DEMO=coffee SEED_TENANT_SLUG=daybreak pnpm db:seed` loads the same demo.
+In production no seeding is needed: Admin, New merchant, vertical restaurant, "Demo to load:
+Coffee shop".
 
 Scope: restaurants only, the product the website calls ordr POS. Salon, sports, retail and resort
 tenants (ordr Booking and shops) keep working exactly as they do today and are not touched by this

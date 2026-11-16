@@ -1,6 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpCode, Inject, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
 import { blueprints } from "@ordr/blueprints";
 import { z } from "zod";
+import { DEMO_SETS } from "../actions/demo";
 import { SUITE_MODULES, SWATCHES } from "../suite/types";
 import { AuthGuard, CurrentUser } from "../auth/auth.guard";
 import type { AuthUser } from "../auth/auth.service";
@@ -18,6 +19,8 @@ const CreateTenantSchema = z.object({
   /** Restaurant suite: the modules this merchant gets, and the swatch its site and staff apps are painted with. */
   modules: z.array(z.enum(SUITE_MODULES)).max(SUITE_MODULES.length).optional(),
   swatch: z.enum(SWATCHES).optional(),
+  /** A fuller demo than the plain catalog; "coffee" needs the restaurant vertical. */
+  demoSet: z.enum(DEMO_SETS).optional(),
 });
 
 const AddNumberSchema = z.object({

@@ -304,6 +304,8 @@ function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOver
   // Restaurants are a suite: the operator picks which of the five modules this one gets, and its look.
   const [modules, setModules] = useState<SuiteModule[]>(ALL_MODULES);
   const [swatch, setSwatch] = useState("espresso");
+  // "coffee": a whole coffee shop (menu with photos, stations, stock, recipes, suppliers); "": the vertical's plain catalog.
+  const [demoSet, setDemoSet] = useState<"coffee" | "">("coffee");
   const restaurant = form.blueprintId === "restaurant";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -313,7 +315,7 @@ function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOver
     setBusy(true);
     setError(null);
     try {
-      await onCreated(await createTenant({ ...form, numberId: form.numberId || undefined, ...(restaurant ? { modules, swatch } : {}) }));
+      await onCreated(await createTenant({ ...form, numberId: form.numberId || undefined, ...(restaurant ? { modules, swatch, ...(form.seedDemo && demoSet ? { demoSet } : {}) } : {}) }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the merchant");
     } finally {
@@ -393,6 +395,16 @@ function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOver
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.seedDemo} onChange={(e) => setForm({ ...form, seedDemo: e.target.checked })} /> Load the demo catalog for this vertical (they can edit it afterwards)
           </label>
+          {restaurant && form.seedDemo ? (
+            <label className="block text-sm font-medium">
+              Demo to load
+              <select value={demoSet} onChange={(e) => setDemoSet(e.target.value as "coffee" | "")} className={`${inputCls} mt-1`}>
+                <option value="coffee">Coffee shop: 14 items with photos, bar and bakery stations, stock, recipes, suppliers</option>
+                <option value="">Restaurant menu only</option>
+              </select>
+              {demoSet === "coffee" ? <span className="mt-1 block text-xs font-normal text-slate-500">Everything is the merchant's own copy and can be edited or deleted. Stock moves with the first sale.</span> : null}
+            </label>
+          ) : null}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <button type="submit" disabled={busy} className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50">
             {busy ? "Creating…" : "Create merchant"}

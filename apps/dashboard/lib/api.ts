@@ -331,7 +331,7 @@ export interface CreateTenantResult {
   channel: { id: string; displayPhone: string } | null;
 }
 export const getAdminOverview = () => call<AdminOverview>("/merchant/admin/overview");
-export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean; modules?: string[]; swatch?: string }) =>
+export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean; modules?: string[]; swatch?: string; demoSet?: "coffee" }) =>
   call<CreateTenantResult>("/merchant/admin/tenants", { method: "POST", body: JSON.stringify(input) });
 export const resetTenantOwnerPassword = (tenantId: string, userId: string) =>
   call<{ email: string; temporaryPassword: string }>(`/merchant/admin/tenants/${encodeURIComponent(tenantId)}/owners/${encodeURIComponent(userId)}/reset-password`, { method: "POST" });

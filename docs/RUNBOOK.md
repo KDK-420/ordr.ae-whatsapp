@@ -107,7 +107,9 @@ Built on branch `claude/restaurant-suite`; see `docs/MODULES_PLAN.md` section 0 
   so the visitor's address is used.
 - **Demo**: `SEED_DEMO=coffee` with `SEED_TENANT_SLUG=daybreak` seeds Daybreak Coffee: 14 menu
   items with options, a branch with Bar and Bakery stations, 16 stock items, 60 recipe lines,
-  3 suppliers.
+  3 suppliers. The same demo can be loaded for any new restaurant from the Admin console
+  (`POST /merchant/admin/tenants` with `demoSet: "coffee"`); `AdminService.seedSuite` copies it
+  under the new tenant's own ids.
 
 ## Product website (`ordr.ae`, `pos.ordr.ae`, `booking.ordr.ae`)
 
