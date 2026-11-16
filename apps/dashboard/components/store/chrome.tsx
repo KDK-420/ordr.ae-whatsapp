@@ -16,7 +16,8 @@ export function StoreFrame({ store, base, children, plain = false }: { store: Pu
         <div className="flex-1">{children}</div>
         {plain ? null : <Footer />}
         <CartDrawer />
-        <CartBar />
+        {/* Checkout and order tracking carry their own summary; a floating cart there would sit on top of "Place order". */}
+        {plain ? null : <CartBar />}
       </div>
     </StoreProvider>
   );
@@ -136,12 +137,16 @@ function CartBar() {
   const { count, subtotalMinor, price, setCartOpen, cartOpen } = useStore();
   if (!count || cartOpen) return null;
   return (
-    <button onClick={() => setCartOpen(true)} className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-between rounded-2xl bg-sp px-5 py-3.5 text-white shadow-lg md:hidden">
-      <span className="flex items-center gap-2 text-sm font-semibold">
-        <Icon name="bag" size={18} /> View cart ({count})
-      </span>
-      <span className="text-sm font-bold tabular-nums">{price(subtotalMinor)}</span>
-    </button>
+    <>
+      {/* Room at the end of the page, so the bar never covers the last lines of the footer. */}
+      <div className="h-20 bg-si md:hidden" aria-hidden="true" />
+      <button onClick={() => setCartOpen(true)} className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-between rounded-2xl bg-sp px-5 py-3.5 text-white shadow-lg md:hidden">
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <Icon name="bag" size={18} /> View cart ({count})
+        </span>
+        <span className="text-sm font-bold tabular-nums">{price(subtotalMinor)}</span>
+      </button>
+    </>
   );
 }
 
