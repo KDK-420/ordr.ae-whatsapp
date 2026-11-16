@@ -1,10 +1,12 @@
 # Restaurant suite: modules plan
 
-Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders). Nothing here is built yet. Mockups are being designed in
+Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders,
+addresses reconciled with the customer pages already live on `<slug>.ordr.ae`). Nothing here is built yet. Mockups are being designed in
 parallel; the screen lists in section 6 are written for that.
 
-Scope: restaurants only. Salon, retail and resort tenants keep working exactly as they do today
-and are not touched by this plan.
+Scope: restaurants only, the product the website calls ordr POS. Salon, sports, retail and resort
+tenants (ordr Booking and shops) keep working exactly as they do today and are not touched by this
+plan.
 
 ## 1. What we are building
 
@@ -25,7 +27,8 @@ Decisions already taken:
 - Offline POS is a later phase. POS v1 needs a connection.
 - Payments are built against the existing `PaymentProvider` port with the mock adapter; the real
   gateway and card terminal are chosen later and plug in behind the port.
-- Storefront lives at a path on ordr.ae (`/s/<slug>`); custom domains come later.
+- Storefront lives on the restaurant's existing subdomain, `<slug>.ordr.ae` (section 3.7);
+  custom domains come later.
 
 ## 2. Architecture rules
 
@@ -54,7 +57,7 @@ apps/api/src/modules/storefront/
 apps/api/src/modules/inventory/
 apps/api/src/modules/whatsapp/   (today's conversation, webhook, inbox code moves here last)
 apps/dashboard/app/(app)/kds, /pos, /inventory     staff screens
-apps/dashboard/app/s/[slug]/...                    public storefront
+apps/dashboard/app/site/[slug]/...                 public storefront (extends today's customer page)
 ```
 
 ## 3. Core changes (Phase 0)
@@ -128,7 +131,47 @@ Every screen polls today (4 to 15 seconds). Kitchen and POS need push.
 - Device sessions for wall screens: a KDS screen is paired to a branch and station and stays
   signed in.
 
-### 3.6 Hardening that rides along
+### 3.6 Addresses and domains
+
+What exists today (do not rebuild):
+
+- `*.ordr.ae` points at the server. `ordr.ae`, `pos.ordr.ae` and `booking.ordr.ae` are the
+  product website; `app.ordr.ae` is the staff app and API.
+- Every tenant already has a public page on `<slug>.ordr.ae`, published from Settings › Website.
+  `apps/dashboard/proxy.ts` maps the host to `/site/<slug>`, and Caddy issues a certificate per
+  subdomain on first visit after `GET /v1/sites/tls-check` confirms the site is published.
+- Reserved subdomains: `app`, `www`, `api`, `admin`, `mail`, `staging`, `demo`, `pos`, `booking`.
+
+How the suite uses it:
+
+| What | Address |
+| --- | --- |
+| Storefront | `<slug>.ordr.ae` (the customer page becomes the ordering site when the module is on) |
+| Menu item, cart, checkout | `<slug>.ordr.ae/menu`, `/cart`, `/checkout` |
+| Table QR | `<slug>.ordr.ae/t/<tableCode>` |
+| Order tracking | `<slug>.ordr.ae/o/<token>` |
+| Party request | `<slug>.ordr.ae/party` |
+| Web chat (exists) | `<slug>.ordr.ae/chat` |
+| Staff: POS, KDS, Inventory, Inbox | `app.ordr.ae/pos`, `/kds`, `/inventory`, `/inbox` (tenant and branch from the login or paired device) |
+
+Rules:
+
+- One resolver turns a host into a tenant; every public page and public API uses it. Staff APIs
+  keep using the session. The proxy's list of app paths gains `/pos`, `/kds` and `/inventory` so
+  they never render on a customer host.
+- `pos.ordr.ae` stays the marketing site for the product. The cashier app is `app.ordr.ae/pos`.
+- Multi-branch restaurants keep one subdomain; the storefront asks for the branch (or picks the
+  nearest) and table QR codes carry it.
+- Payment, tracking and WhatsApp links always use the tenant's primary host.
+- A slug change keeps the old slug as a redirect, because printed QR codes outlive renames. This
+  needs a `TenantSlugHistory` table; today a rename would break old links.
+- Reserved list grows with `kds`, `inventory`, `store`, `shop`, `status`, `help`, `docs`, `cdn`
+  before restaurants can pick names freely.
+- Custom domains later (`order.bellapasta.ae`): a `TenantDomain` table (domain, tenant, verified,
+  primary), the owner adds one CNAME, and the existing TLS check is extended to allow verified
+  domains. Canonical tags point at the primary host so one menu on two hosts is not a duplicate.
+
+### 3.7 Hardening that rides along
 
 - Database row-level security by `tenantId` before money and stock tables are added. Isolation is
   enforced only in application code today.
@@ -165,11 +208,13 @@ StorefrontSettings (tenant)  theme colour, logo, cover photo, opening rules, min
                              delivery zones [{name, polygon or radius, feeMinor, minOrderMinor, etaMinutes}]
 ```
 
-- Public pages: `/s/<slug>` menu, item sheet with modifier groups (the catalog already stores
-  min and max select), cart, checkout, `/s/<slug>/o/<token>` tracking.
+- Public pages on `<slug>.ordr.ae` (section 3.6): menu, item sheet with modifier groups (the
+  catalog already stores min and max select), cart, checkout, `/o/<token>` tracking. Today's
+  customer page (headline, about, photo, catalog, chat) is the base; with the module on, its
+  catalog becomes orderable.
 - Guest checkout with phone verification by OTP; an optional account is just the verified phone.
 - Fulfilment: delivery (address, map pin, zone fee), pickup (branch, time), dine-in by table QR
-  (`/s/<slug>/t/<tableCode>` opens the menu bound to a table and adds to its tab).
+  (`/t/<tableCode>` opens the menu bound to a table and adds to its tab).
 - Scheduled orders (order now for later) within opening hours.
 - Payment: online through the gateway port, or cash on delivery / pay at counter where the
   restaurant allows.
@@ -412,5 +457,5 @@ memory, Postgres integration) and a migration that is additive.
 ## 8. Out of scope for this plan
 
 Offline POS, custom storefront domains, aggregator integrations (Talabat, Deliveroo, Careem),
-loyalty and gift cards, accounting exports, multi-currency, and any change to the salon, retail
-or resort verticals.
+loyalty and gift cards, accounting exports, multi-currency, and any change to the salon, sports,
+retail or resort verticals.
