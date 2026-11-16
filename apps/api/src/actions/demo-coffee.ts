@@ -18,10 +18,10 @@ export interface CoffeeDemo {
  * Demo coffee shop for the restaurant suite ("Daybreak Coffee" in the mockups): a menu with
  * sizes and extras, one branch with a bar and a bakery station, and stock with recipes that
  * deduct beans, milk and the right cup. Ids are stable so tests can reference them. Photos are
- * illustrations shipped with the dashboard (`/art/coffee/*.svg`).
+ * real photographs shipped with the dashboard (`/art/coffee/*.jpg`, sources in SOURCES.md there).
  */
 export function demoCoffee(tenantId: string): CoffeeDemo {
-  const img = (name: string) => `/art/coffee/${name}.svg`;
+  const img = (name: string) => `/art/coffee/${name}.jpg`;
   const categories: Category[] = [
     { id: "cat_coffee", tenantId, name: { en: "Coffee", ar: "قهوة" }, sortOrder: 1, isActive: true },
     { id: "cat_cold", tenantId, name: { en: "Cold Drinks", ar: "مشروبات باردة" }, sortOrder: 2, isActive: true },

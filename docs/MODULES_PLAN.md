@@ -32,7 +32,7 @@ browser walk-through of every screen on `daybreak.localhost` (Daybreak Coffee de
 - **Kitchen tickets are a view over order lines** (3.3, 4.1), not a separate ticket table. Moving lines moves the order through the blueprint's states.
 - **Stock is deducted when the order is placed**, not when it is completed, and may go below zero. A sale is never blocked by stock; a negative level shows as Out of Stock and tells the manager a count or purchase is missing.
 - **Staff pages are served from `/r/*`** inside the dashboard app and rewritten from `<host>/admin/*` by `proxy.ts`, because `/admin` on our own host is the operator console.
-- **Demo photos are illustrations** (`apps/dashboard/public/art/coffee/*.svg`). Restaurants upload real photos in Products. WhatsApp cannot send SVG, so the demo tenant's photo replies need real photos first.
+- **Demo photos are real photographs** from Unsplash (`apps/dashboard/public/art/coffee/*.jpg`, sources and licence in `SOURCES.md` there). They are stand-ins: a restaurant uploads its own photos in Products. The demo links are relative to the dashboard, so WhatsApp photo replies for the demo tenant need the photos re-uploaded in Products first.
 
 ### Not built yet
 
