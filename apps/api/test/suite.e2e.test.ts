@@ -8,6 +8,8 @@ import { InMemoryConversationRepository, InMemoryDedupeStore, InMemorySessionSto
 import { InMemoryEventBus, InMemoryOrderRepository } from "../src/adapters/memory-catalog";
 import { AppModule, seedTenantFromConfig } from "../src/app.module";
 import { loadConfig } from "../src/config";
+import { OrderService } from "../src/orders/order.service";
+import { TOKENS } from "../src/tokens";
 import { RealtimeHub, type RealtimeEvent } from "../src/suite/realtime";
 
 const EMAIL = "owner@daybreak.test";
@@ -267,5 +269,65 @@ describe("restaurant suite", () => {
     expect((await request(server()).get(`/merchant/kds/board?branchId=${branch.id}`).set(auth).expect(200)).body.tickets).toHaveLength(1);
     expect((await request(server()).get("/merchant/kds/board?branchId=br_main").set(auth).expect(200)).body.tickets).toHaveLength(0);
     await request(server()).get("/merchant/kds/board?branchId=nope").set(auth).expect(404);
+  });
+
+  it("the operator creates a restaurant with the modules and look it picked; the owner gets exactly those", async () => {
+    const created = (await request(server()).post("/merchant/admin/tenants").set(auth).send({ name: "Olive House", blueprintId: "restaurant", ownerEmail: "owner@olive.test", ownerName: "Nour", modules: ["kds", "pos"], swatch: "olive_grove" }).expect(201)).body;
+    expect(created.tenant).toMatchObject({ slug: "olive-house", settings: { modules: ["pos", "kds"], theme: { swatch: "olive_grove" } } });
+    await request(server()).post("/merchant/admin/tenants").set(auth).send({ name: "Bad Cafe", blueprintId: "restaurant", ownerEmail: "bad@cafe.test", ownerName: "B", modules: ["teleport"] }).expect(400);
+
+    const token = (await request(server()).post("/merchant/auth/login").send({ email: "owner@olive.test", password: created.owner.temporaryPassword }).expect(200)).body.token as string;
+    const owner = { authorization: `Bearer ${token}` };
+    const view = (await request(server()).get("/merchant/suite").set(owner).expect(200)).body;
+    expect(view).toMatchObject({ tenant: { slug: "olive-house" }, modules: ["pos", "kds"], theme: { swatch: "olive_grove", primary: "#3F5F3A", ink: "#1F2A1C" } });
+    expect((await request(server()).get("/merchant/me").set(owner).expect(200)).body.tenant.suite).toEqual(["pos", "kds"]);
+    // The modules it does not have do not exist for it: no stock screens, no public ordering site.
+    await request(server()).get("/merchant/inventory/overview").set(owner).expect(403);
+    await request(server()).get("/v1/store/olive-house").expect(404);
+    await request(server()).get("/merchant/kds/board").set(owner).expect(200);
+
+    // A merchant created without a choice keeps WhatsApp only, as before the suite.
+    const plain = (await request(server()).post("/merchant/admin/tenants").set(auth).send({ name: "Plain Diner", blueprintId: "restaurant", ownerEmail: "owner@plain.test", ownerName: "P" }).expect(201)).body;
+    const plainToken = (await request(server()).post("/merchant/auth/login").send({ email: "owner@plain.test", password: plain.owner.temporaryPassword }).expect(200)).body.token as string;
+    expect((await request(server()).get("/merchant/me").set({ authorization: `Bearer ${plainToken}` }).expect(200)).body.tenant.suite).toEqual(["whatsapp"]);
+  });
+
+  it("stops one visitor from flooding the kitchen with online orders", async () => {
+    const body = (n: number) => ({ clientRef: `flood-ref-${n}`, fulfillmentType: "pickup", lines: [{ offeringId: "bak_brownie", quantity: 1 }], name: "Bot", phone: "0500000000" });
+    for (let n = 0; n < 12; n++) await request(server()).post("/v1/store/daybreak/orders").send(body(n)).expect(201);
+    const blocked = await request(server()).post("/v1/store/daybreak/orders").send(body(99)).expect(429);
+    expect(blocked.body.message).toMatch(/Too many requests/);
+    // The till is not a visitor: staff keep selling.
+    await request(server()).post("/merchant/pos/orders").set(auth).send({ fulfillmentType: "pickup", lines: [{ offeringId: "bak_brownie", quantity: 1 }] }).expect(201);
+  });
+
+  it("a WhatsApp order joins the same operation: a branch, the kitchen screen, the day's orders, and stock", async () => {
+    const customer = await app.get(TOKENS.ConversationRepository).upsertCustomer("tenant_seed", "971501112233", "Huda");
+    const beans = await stock("stk_beans");
+    const cups = await stock("stk_cup_m");
+    // What the chat flow places once the customer confirms: one regular latte and a brownie, for pickup.
+    const placed = await app.get(OrderService).place({
+      tenantId: "tenant_seed",
+      customerId: customer.id,
+      fulfillmentType: "pickup",
+      cart: {
+        currency: "AED",
+        subtotalMinor: 3300,
+        items: [
+          { offeringId: "cof_latte", title: "Latte", quantity: 1, unitPriceMinor: 1800, modifiers: [{ groupId: "lat_size", optionId: "lat_size_regular", title: "Regular", priceDeltaMinor: 0 }], lineTotalMinor: 1800 },
+          { offeringId: "bak_brownie", title: "Brownie", quantity: 1, unitPriceMinor: 1500, modifiers: [], lineTotalMinor: 1500 },
+        ],
+      },
+    });
+    expect(placed).toMatchObject({ source: "whatsapp", branchId: "br_main" });
+    expect(placed.items.map((i) => [i.title, i.stationId, i.kitchenStatus])).toEqual([["Latte", "st_bar", "queued"], ["Brownie", "st_bakery", "queued"]]);
+
+    const board = (await request(server()).get("/merchant/kds/board").set(auth).expect(200)).body;
+    expect(board.tickets).toHaveLength(1);
+    expect(board.tickets[0]).toMatchObject({ orderId: placed.id, column: "new", source: "whatsapp" });
+    expect((await request(server()).get("/merchant/pos/orders").set(auth).expect(200)).body.orders.map((o: { id: string }) => o.id)).toEqual([placed.id]);
+    // 18 g of beans and one 12oz cup left the shelf without anyone touching the stock screen.
+    expect(await stock("stk_beans")).toBe(Math.round((beans - 0.018) * 100) / 100);
+    expect(await stock("stk_cup_m")).toBeLessThan(cups);
   });
 });

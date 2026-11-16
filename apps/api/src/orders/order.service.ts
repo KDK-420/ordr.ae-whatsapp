@@ -4,6 +4,7 @@ import { addItem, type Cart, type DeliveryLocation, type DomainEvent, emptyCart,
 import type { BlueprintRegistry, EventBus, OrderRepository, OutboxFactory, OutboxStore, TenantRepository } from "../ports";
 import { BOOKING_REMINDER_EVENT, type BookingReminderPayload, reminderEventId } from "./booking-reminder";
 import { RealtimeHub } from "../suite/realtime";
+import { SuiteRouting } from "../suite/routing";
 import { TOKENS } from "../tokens";
 
 export interface OrderSettings {
@@ -68,6 +69,8 @@ export class OrderService {
     @Inject(TOKENS.OutboxStore) private readonly outbox: OutboxStore,
     /** Tells open staff screens that an order changed. Absent in unit tests that build the service by hand. */
     @Optional() @Inject(RealtimeHub) private readonly hub?: RealtimeHub,
+    /** Gives chat orders a branch and kitchen stations when the restaurant runs the suite. */
+    @Optional() @Inject(SuiteRouting) private readonly routing?: SuiteRouting,
   ) {}
 
   /** The tenant's vertical blueprint; throws when the tenant points at one that no longer exists. */
@@ -108,6 +111,8 @@ export class OrderService {
     // publish below describe the same event; the outbox bus de-duplicates on id.
     const eventId = randomUUID();
     const placed = (o: Order) => this.event(eventId, "order.placed", o, { fulfillmentType: o.fulfillmentType, totalMinor: o.totalMinor });
+    // A restaurant with a till, kitchen screens or stock: the order joins that operation like any other sale.
+    const routed = await this.routing?.route(s.tenant, input.cart.items.map((i) => ({ ...i })), this.now());
     const order = await this.orders.create(
       {
       tenantId: input.tenantId,
@@ -117,7 +122,9 @@ export class OrderService {
       initialStatus: blueprint.orderStates.initial,
       fulfillmentType: input.fulfillmentType,
       source: input.source ?? "whatsapp",
-      items: input.cart.items.map((i) => ({ ...i })),
+      items: routed?.items ?? input.cart.items.map((i) => ({ ...i })),
+      branchId: routed?.branchId,
+      firedAt: routed?.firedAt,
       currency: q.currency,
       subtotalMinor: q.subtotalMinor,
       deliveryFeeMinor: q.deliveryFeeMinor,

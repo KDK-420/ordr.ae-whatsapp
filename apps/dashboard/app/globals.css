@@ -14,3 +14,39 @@ body {
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
+
+/*
+ * Restaurant suite theme. A restaurant's colours arrive from the API and are set as the
+ * --suite-* variables on the app or store wrapper; these are the Espresso defaults.
+ */
+:root {
+  --suite-primary: #b4531f;
+  --suite-accent: #e9b87a;
+  --suite-ink: #2b1d14;
+  --suite-bg: #faf6f1;
+  --suite-text: #2b1d14;
+}
+
+@theme inline {
+  --color-sp: var(--suite-primary);
+  --color-sa: var(--suite-accent);
+  --color-si: var(--suite-ink);
+  --color-sb: var(--suite-bg);
+  --color-st: var(--suite-text);
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+}
+
+.suite-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.suite-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--suite-ink) 18%, transparent);
+  border-radius: 8px;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}

@@ -7,6 +7,7 @@ import { TOKENS } from "../tokens";
 import { RealtimeHub } from "./realtime";
 import { SuiteService } from "./suite.service";
 import type { Branch, OrderPaymentRecord, PaymentMethod, SuiteRepository } from "./types";
+import { stationFor } from "./routing";
 
 /** One line as a till or a storefront cart sends it: ids only, never prices. */
 export interface OrderLineInput {
@@ -227,10 +228,4 @@ export function discountOf(subtotalMinor: number, discount: DiscountInput | unde
   if (!discount || !Number.isFinite(discount.value) || discount.value <= 0) return 0;
   const raw = discount.type === "percent" ? Math.round((subtotalMinor * Math.min(discount.value, 100)) / 100) : Math.round(discount.value);
   return Math.max(0, Math.min(raw, subtotalMinor));
-}
-
-/** The station that lists the item's category, else the branch's first station. */
-export function stationFor(branch: Pick<Branch, "stations">, categoryId: string | undefined): string | undefined {
-  const match = categoryId ? branch.stations.find((s) => s.categoryIds.includes(categoryId)) : undefined;
-  return (match ?? branch.stations[0])?.id;
 }

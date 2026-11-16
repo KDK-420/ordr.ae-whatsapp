@@ -4,6 +4,7 @@ import { demoDataFor } from "../actions/demo";
 import { hashPassword } from "../auth/password";
 import { temporaryPassword } from "../merchant/users.controller";
 import type { BlueprintRegistry, CatalogRepository, ChannelInput, NumberPoolRepository, PooledNumber, PropertyRepository, ResourceRepository, TenantRepository, UserRecord, UserRepository } from "../ports";
+import { SUITE_MODULES, type SuiteModule, type SwatchId } from "../suite/types";
 import { TOKENS } from "../tokens";
 
 export interface TenantOverview {
@@ -23,6 +24,10 @@ export interface CreateTenantRequest {
   numberId?: string;
   /** Load the vertical's demo catalog (and salon staff) so the bot has something to show. */
   seedDemo?: boolean;
+  /** Restaurant suite modules to switch on; left out, the merchant has WhatsApp only. */
+  modules?: SuiteModule[];
+  /** Theme swatch for the ordering site and the staff apps. */
+  swatch?: SwatchId;
 }
 
 export interface CreateTenantResult {
@@ -76,7 +81,13 @@ export class AdminService {
     if (number?.tenantId) throw new AdminError("conflict", "that number is already assigned");
 
     const slug = await this.uniqueSlug(req.name);
-    const tenant = await this.tenants.create({ name: req.name.trim(), slug, blueprintId: req.blueprintId, defaultLanguage: req.defaultLanguage, timezone: req.timezone });
+    let tenant = await this.tenants.create({ name: req.name.trim(), slug, blueprintId: req.blueprintId, defaultLanguage: req.defaultLanguage, timezone: req.timezone });
+    if (req.modules || req.swatch) {
+      const settings: Record<string, unknown> = {};
+      if (req.modules) settings.modules = SUITE_MODULES.filter((m) => req.modules!.includes(m));
+      if (req.swatch) settings.theme = { swatch: req.swatch };
+      tenant = (await this.tenants.updateSettings(tenant.id, settings)) ?? tenant;
+    }
     const password = temporaryPassword();
     const owner = await this.users.create({ tenantId: tenant.id, email, name: req.ownerName.trim(), role: "owner", passwordHash: hashPassword(password) });
     if (req.seedDemo ?? true) await this.seedDemo(tenant);

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { type PublicSite, SitePage } from "@/components/site/site-page";
+import { StoreFrame } from "@/components/store/chrome";
+import { StoreHome } from "@/components/store/pages";
+import { storeBase } from "@/lib/hosts";
+import { loadStore } from "@/lib/store-server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +23,11 @@ async function load(slug: string, lang: string | undefined): Promise<PublicSite 
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ slug }, { lang }] = await Promise.all([params, searchParams]);
+  const store = await loadStore(slug, lang);
+  if (store) {
+    const about = store.about?.slice(0, 160) ?? store.theme.tagline ?? store.headline;
+    return { title: { absolute: store.name }, description: about, openGraph: { title: store.name, description: about, images: store.heroImageUrl ? [store.heroImageUrl] : undefined } };
+  }
   const site = await load(slug, lang);
   if (!site) return { title: "Not found" };
   const description = site.about?.slice(0, 160) ?? site.headline;
@@ -28,9 +38,21 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   };
 }
 
-/** A customer's public page; the proxy serves it at the root of <slug>.ordr.ae. */
+/**
+ * A customer's public page; the proxy serves it at the root of <slug>.ordr.ae. A restaurant with
+ * the Storefront module gets its ordering site here; everyone else the one-page site.
+ */
 export default async function CustomerSite({ params, searchParams }: Props) {
   const [{ slug }, { lang }] = await Promise.all([params, searchParams]);
+  const store = await loadStore(slug, lang);
+  if (store) {
+    const base = storeBase((await headers()).get("host") ?? "", slug);
+    return (
+      <StoreFrame store={store} base={base}>
+        <StoreHome />
+      </StoreFrame>
+    );
+  }
   const site = await load(slug, lang);
   if (!site) notFound();
   return <SitePage site={site} />;

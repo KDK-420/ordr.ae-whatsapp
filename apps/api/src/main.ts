@@ -16,6 +16,8 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register({ config }), { rawBody: true });
   // Catalog photos arrive as base64 JSON (5 MB of image is about 7 MB of text); every other body stays small.
   app.useBodyParser("json", { limit: "8mb" });
+  // Caddy is the one hop in front of the API: take the visitor's address from it, so per-visitor limits count visitors.
+  app.set("trust proxy", 1);
   app.enableShutdownHooks();
 
   const queue = app.get(InboundQueue);

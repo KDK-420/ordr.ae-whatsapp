@@ -1,10 +1,69 @@
 # Restaurant suite: modules plan
 
-Status: agreed direction, 2026-11-16. Updated the same day with countable supplies, party orders,
-addresses (one host per restaurant, staff under `/admin`, flexible custom domains), module
-switches at restaurant creation, and per-restaurant themes.
-Nothing here is built yet. Mockups are being designed in parallel; the screen lists in section 6
-are written for that.
+Status: first build done on branch `claude/restaurant-suite`, 2026-11-16. Not merged to `main`
+and not deployed. Section 0 says what is built, what was decided differently from the plan
+below, and what is still open. Sections 1 to 8 are the plan as agreed and remain the reference
+for what is not built yet.
+
+## 0. Build status
+
+### Built and verified
+
+Verified by 155 API tests, 23 Postgres integration tests, a production build, and a headless
+browser walk-through of every screen on `daybreak.localhost` (Daybreak Coffee demo).
+
+| Area | What works |
+|---|---|
+| Module switches | Operator ticks up to five modules (Online store, Point of sale, Kitchen display, Inventory, WhatsApp) when creating a restaurant and can change them later. The restaurant sees menus only for what is on; the API refuses a module that is off (403, and 404 for a public store). |
+| Theme | Five built-in swatches (Espresso, Olive Grove, Chili, Ocean, Midnight) plus custom colours, tagline and logo link. One theme paints the ordering site, the staff apps and the staff sign-in. |
+| Addresses | One host per restaurant. `daybreak.ordr.ae` is the ordering site (`/`, `/menu`, `/checkout`, `/o/<token>`); `daybreak.ordr.ae/admin` is staff (`/admin/pos`, `/admin/kds`, `/admin/inventory`, `/admin/settings`, `/admin/login`). The same pages answer on our own host as `/r/...` for staff who signed in at `app.ordr.ae`. |
+| Point of sale | Item grid with category chips and search, sizes and extras, notes, dine-in/takeaway/delivery, table and customer, discount, hold and resume, cash with change and card, pay later, day's orders with payment and cancel, customers, day report, menu editor. |
+| Kitchen display | Four columns (New, Preparing, Ready, Completed), per-station filter, ticket age colours, tap a line to mark it, new-ticket chime, full screen, day stats. Live over server-sent events. |
+| Inventory | Stock list with status tabs, add/edit items (ingredients, packaging such as cups and lids, prepared, resale, supplies), stock count, wastage, adjustments, purchases with receive, suppliers, recipes, usage report. |
+| Automatic stock | Every order takes its recipe out of stock when it is placed and gives it back when it is cancelled. This covers the till, the ordering site and WhatsApp/web chat orders. Recipes can depend on a chosen option (large cup for the large size) and on takeaway versus dine-in (cup and lid only for takeaway). |
+| Online store | Home with hero and favourites, menu with search, item sheet, cart, checkout for pickup or delivery, live order tracking page. Prices and totals come from the server. |
+| WhatsApp orders | A chat order of a restaurant that has POS, KDS or Inventory now gets a branch and kitchen stations, so it shows on the kitchen display, in the day's orders and in stock. The customer still gets the status messages. |
+| Protection | Server-side pricing, idempotent order creation (`clientRef`), a per-visitor limit on public orders (12 per 10 minutes) and quotes, tenant checks on every staff request, a session for another restaurant is refused on a restaurant's host. |
+
+### Decided differently from the plan below
+
+- **Modules and theme live in `tenant.settings`** (`modules`, `theme`), not in dedicated columns (3.1, 3.7). No migration is needed to add a module or a swatch. A tenant with no `modules` key has WhatsApp only, so every existing tenant is unchanged.
+- **Espresso swatch** uses the mockup's colours: primary `#B4531F`, accent `#E9B87A`, ink `#2B1D14`, background `#FAF6F1`.
+- **Kitchen tickets are a view over order lines** (3.3, 4.1), not a separate ticket table. Moving lines moves the order through the blueprint's states.
+- **Stock is deducted when the order is placed**, not when it is completed, and may go below zero. A sale is never blocked by stock; a negative level shows as Out of Stock and tells the manager a count or purchase is missing.
+- **Staff pages are served from `/r/*`** inside the dashboard app and rewritten from `<host>/admin/*` by `proxy.ts`, because `/admin` on our own host is the operator console.
+- **Demo photos are illustrations** (`apps/dashboard/public/art/coffee/*.svg`). Restaurants upload real photos in Products. WhatsApp cannot send SVG, so the demo tenant's photo replies need real photos first.
+
+### Not built yet
+
+- Offline mode for the till, receipt and kitchen printing, cash drawer, shift open/close (4.3).
+- PIN sign-in and device pairing for tills and kitchen screens; today staff sign in with email and password (3.5).
+- Party and catering orders (4.5).
+- Custom domains and the `TenantDomain` table; only `<slug>.ordr.ae` works today (3.6).
+- Online card payment on the ordering site; it takes pay-at-pickup and pay-on-delivery only. Needs a gateway decision (4.2).
+- Arabic on the ordering site and staff apps. The API already returns Arabic menu text with `?lang=ar`; the screens are English.
+- Table QR ordering, customer accounts, loyalty, Apple Pay (4.2).
+- Stock transfers between branches, supplier price lists, low-stock alerts by WhatsApp (4.4).
+- Row-level security in Postgres and an audit log of staff actions (3.8).
+- The WhatsApp inbox and settings under `<host>/admin`; today the launcher links to `app.ordr.ae/inbox`.
+- A per-restaurant app icon and install manifest for tablets.
+
+### Try it locally
+
+```bash
+# API, in memory, with the Daybreak Coffee demo
+cd apps/api && META_APP_SECRET=s META_VERIFY_TOKEN=v WHATSAPP_SENDER=log SEED_PHONE_NUMBER_ID=200000000000000 \
+  STORAGE=memory SEED_BLUEPRINT_ID=restaurant SEED_DEMO=coffee SEED_TENANT_NAME="Daybreak Coffee" \
+  SEED_TENANT_SLUG=daybreak SEED_ADMIN_EMAIL=owner@daybreak.test SEED_ADMIN_PASSWORD=daybreak-demo-1 \
+  ./node_modules/.bin/tsx src/main.ts
+# Dashboard
+pnpm --filter @ordr/dashboard dev
+```
+
+Then open `http://daybreak.localhost:3001` (store) and `http://daybreak.localhost:3001/admin` (staff).
+The operator console is `http://localhost:3001/admin`, signed in as the same user.
+
+On Postgres, `SEED_DEMO=coffee SEED_TENANT_SLUG=daybreak pnpm db:seed` loads the same demo.
 
 Scope: restaurants only, the product the website calls ordr POS. Salon, sports, retail and resort
 tenants (ordr Booking and shops) keep working exactly as they do today and are not touched by this

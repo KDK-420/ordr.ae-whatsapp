@@ -12,6 +12,8 @@ import {
   releasePooledNumber,
   resetTenantOwnerPassword,
 } from "@/lib/api";
+import type { SuiteModule } from "@/lib/suite";
+import { ALL_MODULES, ModulePicker, SwatchPicker, TenantSuiteDrawer } from "./admin-suite";
 
 const inputCls = "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand";
 
@@ -21,6 +23,7 @@ export function AdminConsole() {
   const [error, setError] = useState<string | null>(null);
   const [reveal, setReveal] = useState<{ title: string; email: string; password: string } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [suiteOf, setSuiteOf] = useState<{ id: string; name: string; slug: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -93,7 +96,14 @@ export function AdminConsole() {
                     {t.tenant.name}
                     <div className="text-xs font-normal text-slate-400">{t.tenant.slug}</div>
                   </td>
-                  <td className="px-4 py-3 capitalize">{t.tenant.blueprintId}</td>
+                  <td className="px-4 py-3 capitalize">
+                    {t.tenant.blueprintId}
+                    {t.tenant.blueprintId === "restaurant" ? (
+                      <button type="button" onClick={() => setSuiteOf(t.tenant)} className="mt-0.5 block text-xs normal-case text-slate-500 underline hover:text-slate-800">
+                        {Array.isArray(t.tenant.settings?.modules) ? `${(t.tenant.settings.modules as string[]).length} of 5 modules` : "WhatsApp only"} · theme
+                      </button>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3">{t.channel ? t.channel.displayPhone : <span className="text-slate-400">none</span>}</td>
                   <td className="px-4 py-3 text-xs">
                     {t.owners.length === 0 ? <span className="text-slate-400">no owner</span> : null}
@@ -198,6 +208,15 @@ export function AdminConsole() {
           }}
         />
       ) : null}
+      {suiteOf ? (
+        <TenantSuiteDrawer
+          tenant={suiteOf}
+          onClose={() => {
+            setSuiteOf(null);
+            void refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -282,6 +301,10 @@ function AssignControls({ numberId, assigned, tenants, onChange, onError }: { nu
 function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOverview; onClose: () => void; onCreated: (r: CreateTenantResult) => Promise<void> }) {
   const free = overview.numbers.filter((n) => !n.tenantId);
   const [form, setForm] = useState({ name: "", blueprintId: overview.verticals[0]?.id ?? "restaurant", ownerEmail: "", ownerName: "", defaultLanguage: "en" as "en" | "ar", numberId: free[0]?.id ?? "", seedDemo: true });
+  // Restaurants are a suite: the operator picks which of the five modules this one gets, and its look.
+  const [modules, setModules] = useState<SuiteModule[]>(ALL_MODULES);
+  const [swatch, setSwatch] = useState("espresso");
+  const restaurant = form.blueprintId === "restaurant";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -290,7 +313,7 @@ function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOver
     setBusy(true);
     setError(null);
     try {
-      await onCreated(await createTenant({ ...form, numberId: form.numberId || undefined }));
+      await onCreated(await createTenant({ ...form, numberId: form.numberId || undefined, ...(restaurant ? { modules, swatch } : {}) }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create the merchant");
     } finally {
@@ -354,6 +377,19 @@ function NewTenantDrawer({ overview, onClose, onCreated }: { overview: AdminOver
             </select>
             {free.length === 0 ? <span className="mt-1 block text-xs text-slate-500">No free numbers in the pool; add one below the merchants list first.</span> : null}
           </label>
+          {restaurant ? (
+            <>
+              <div>
+                <p className="text-sm font-medium">Modules</p>
+                <p className="mb-2 text-xs text-slate-500">The restaurant sees menus only for what is ticked. You can change this later.</p>
+                <ModulePicker value={modules} onChange={setModules} />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium">Theme</p>
+                <SwatchPicker value={swatch} onChange={setSwatch} />
+              </div>
+            </>
+          ) : null}
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.seedDemo} onChange={(e) => setForm({ ...form, seedDemo: e.target.checked })} /> Load the demo catalog for this vertical (they can edit it afterwards)
           </label>

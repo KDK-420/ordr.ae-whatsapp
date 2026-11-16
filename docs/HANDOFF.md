@@ -7,6 +7,15 @@ note says where the build is and what to do next.
 
 ### Changelog
 
+- 2026-11-16: **restaurant suite, first build** (branch `claude/restaurant-suite`, not merged,
+  not deployed). Restaurants become a modular suite: Online store, Point of sale, Kitchen
+  display, Inventory, with WhatsApp as one more module. The operator switches modules and picks
+  a theme per restaurant. Each restaurant has one host: the ordering site at the root and staff
+  apps under `/admin`. Orders from every channel, WhatsApp included, reach the kitchen display
+  and deduct stock through recipes. Status, deviations from the plan and what is not built are
+  in `docs/MODULES_PLAN.md` section 0; operations notes are in `docs/RUNBOOK.md` under
+  "Restaurant suite". Migration `20261116090000_restaurant_suite` is additive. Tests: 155 API,
+  23 Postgres integration.
 - 2026-10-27: **a handoff is an open question, not a mode.** Research into how WhatsApp
   platforms do it (Chatfuel, Meya, Intercom Fin, Velaro, Zendesk) and a field test showed that
   silencing the bot on a handoff leaves customers unanswered. Now `hand_over_to_human` opens a

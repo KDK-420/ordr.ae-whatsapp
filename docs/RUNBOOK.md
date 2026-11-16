@@ -78,6 +78,37 @@ certificate per subdomain on its first visit (on-demand TLS), after asking
 `GET /v1/sites/tls-check?domain=<host>`, which allows only published sites on `SITE_BASE_DOMAIN`.
 The subdomain is the tenant's slug.
 
+## Restaurant suite (`<slug>.ordr.ae` and `<slug>.ordr.ae/admin`)
+
+Built on branch `claude/restaurant-suite`; see `docs/MODULES_PLAN.md` section 0 for the status.
+
+- **Modules** are per restaurant, in `tenant.settings.modules`: `storefront`, `pos`, `kds`,
+  `inventory`, `whatsapp`. The operator sets them in the Admin console (New merchant, or the
+  "modules · theme" link on a restaurant row), which calls `PATCH /merchant/admin/tenants/:id/suite`.
+  A tenant without the key has `whatsapp` only.
+- **Theme** is `tenant.settings.theme`: a swatch (`espresso`, `olive_grove`, `chili`, `ocean`,
+  `midnight`, `custom`), optional custom colours, `tagline`, `logoUrl`.
+- **Hosts**: `apps/dashboard/proxy.ts` rewrites `<slug>.<base>/admin/*` to `/r/*` and
+  `/menu`, `/checkout`, `/o/*` to `/site/<slug>/...`. Caddy needs no change: restaurant hosts
+  already send `/merchant/*` and `/v1/*` to the API, and the certificate check
+  (`GET /v1/sites/tls-check`) accepts any tenant with a non-WhatsApp module.
+- **Sessions** are per host. Staff sign in at `<slug>.ordr.ae/admin/login`. A session of another
+  restaurant on that host is shown a notice instead of the wrong shop.
+- **Live updates**: `GET /merchant/suite/stream` (server-sent events). It sends "something
+  changed" and screens refetch. In memory mode and on one API instance this is complete. With
+  several API instances a screen connected to another instance learns of a change at its next
+  30 second poll, and so does a change made by the worker (a stock deduction); add Redis pub/sub
+  to `RealtimeHub` before scaling out.
+- **Stock**: `InventoryService` listens to `order.placed` and to cancellations. In Postgres mode
+  those handlers run in the worker, so stock moves a moment after the sale; the worker must be
+  running. Deduction is idempotent per order.
+- **Public order limit**: `RateLimiter` allows 12 online orders per visitor per restaurant per
+  10 minutes and 120 quotes per minute, per API process. `main.ts` trusts one proxy hop (Caddy)
+  so the visitor's address is used.
+- **Demo**: `SEED_DEMO=coffee` with `SEED_TENANT_SLUG=daybreak` seeds Daybreak Coffee: 14 menu
+  items with options, a branch with Bar and Bakery stations, 16 stock items, 60 recipe lines,
+  3 suppliers.
+
 ## Product website (`ordr.ae`, `pos.ordr.ae`, `booking.ordr.ae`)
 
 The marketing site is the static files in `website/`, served by Caddy straight from the checkout

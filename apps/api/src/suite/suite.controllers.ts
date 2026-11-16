@@ -7,6 +7,7 @@ import { TOKENS } from "../tokens";
 import { InventoryService } from "./inventory.service";
 import { KdsService } from "./kds.service";
 import { PosService } from "./pos.service";
+import { RateLimiter } from "./rate-limit";
 import { RealtimeHub } from "./realtime";
 import { StoreService, toTracked } from "./store.service";
 import { SuiteOrderService } from "./suite-order.service";
@@ -398,6 +399,7 @@ export class StoreController {
     @Inject(StoreService) private readonly store: StoreService,
     @Inject(SuiteOrderService) private readonly orders: SuiteOrderService,
     @Inject(SuiteService) private readonly suite: SuiteService,
+    @Inject(RateLimiter) private readonly limiter: RateLimiter,
   ) {}
 
   @Get(":slug")
@@ -407,7 +409,8 @@ export class StoreController {
 
   @Post(":slug/quote")
   @HttpCode(200)
-  async quote(@Param("slug") slug: string, @Body() body: unknown) {
+  async quote(@Param("slug") slug: string, @Body() body: unknown, @Req() req: Request) {
+    this.limiter.hit(`quote:${req.ip}`, 120, 60_000);
     const tenant = await this.store.storeTenant(slug.toLowerCase());
     const input = parse(z.object({ lines: Lines, fulfillmentType: z.enum(["pickup", "delivery"]), language: z.enum(["en", "ar"]).optional() }), body);
     return this.orders.quote(tenant.id, input);
@@ -415,7 +418,9 @@ export class StoreController {
 
   @Post(":slug/orders")
   @HttpCode(201)
-  async create(@Param("slug") slug: string, @Body() body: unknown) {
+  async create(@Param("slug") slug: string, @Body() body: unknown, @Req() req: Request) {
+    // A person orders a few times an hour at most; a script that floods the kitchen is stopped here.
+    this.limiter.hit(`order:${slug.toLowerCase()}:${req.ip}`, 12, 10 * 60_000);
     const tenant = await this.store.storeTenant(slug.toLowerCase());
     const input = parse(StoreOrderSchema, body);
     if (input.fulfillmentType === "delivery" && !input.address?.trim()) throw new BadRequestException("a delivery needs an address");

@@ -95,7 +95,9 @@ import { PrismaInventoryRepository, PrismaSuiteRepository } from "./adapters/pri
 import { InventoryService } from "./suite/inventory.service";
 import { KdsService } from "./suite/kds.service";
 import { PosService } from "./suite/pos.service";
+import { RateLimiter } from "./suite/rate-limit";
 import { RealtimeHub } from "./suite/realtime";
+import { SuiteRouting } from "./suite/routing";
 import { StoreService } from "./suite/store.service";
 import { SuiteOrderService } from "./suite/suite-order.service";
 import { InventoryController, KdsController, PosController, StoreController, SuiteAdminController, SuiteController } from "./suite/suite.controllers";
@@ -211,6 +213,8 @@ export class AppModule {
       { provide: TOKENS.BlueprintRegistry, useValue: overrides.blueprints ?? { get: getBlueprint } },
       OrderService,
       RealtimeHub,
+      RateLimiter,
+      SuiteRouting,
       SuiteService,
       SuiteOrderService,
       KdsService,

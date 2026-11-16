@@ -3,7 +3,8 @@ import type { Tenant } from "@ordr/domain";
 import { OrderService } from "../orders/order.service";
 import type { TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
-import { type Branch, type BranchInput, SUITE_MODULES, type Station, type SuiteModule, type SuiteRepository, SWATCHES, type TenantTheme, tenantModules, tenantTheme } from "./types";
+import { type Branch, type BranchInput, SUITE_MODULES, type SuiteModule, type SuiteRepository, SWATCHES, type TenantTheme, tenantModules, tenantTheme } from "./types";
+import { activeBranches, DEFAULT_STATIONS } from "./routing";
 
 export interface SuiteView {
   tenant: { id: string; name: string; slug: string; timezone: string };
@@ -16,8 +17,6 @@ export interface SuiteView {
   deliveryFeeMinor: number;
 }
 
-/** A sensible kitchen for a first branch: one station that takes everything. */
-const DEFAULT_STATIONS: Station[] = [{ id: "st_kitchen", name: "Kitchen", categoryIds: [] }];
 
 /**
  * The suite's core: which modules a restaurant has, its theme, and its branches. Every module
@@ -58,12 +57,8 @@ export class SuiteService {
   }
 
   /** Active branches; a restaurant that has none yet gets its first one here, so nothing downstream handles "no branch". */
-  async branches(tenantId: string): Promise<Branch[]> {
-    const existing = await this.suite.listBranches(tenantId);
-    if (existing.length > 0) return existing;
-    const all = await this.suite.listBranches(tenantId, { includeInactive: true });
-    if (all.length > 0) return [];
-    return [await this.suite.createBranch(tenantId, { name: "Main Store", stations: DEFAULT_STATIONS })];
+  branches(tenantId: string): Promise<Branch[]> {
+    return activeBranches(this.suite, tenantId);
   }
 
   /** The branch a request names, or the first one when it names none. 404 for a branch of another tenant. */

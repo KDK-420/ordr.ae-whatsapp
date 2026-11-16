@@ -9,7 +9,8 @@ import { listConversations, logout, me, type Me } from "@/lib/api";
 const HUMAN_COUNT_POLL_MS = 15000;
 
 /** `module` hides the entry unless the tenant's blueprint lists that dashboard module; `admin` shows it to platform admins only. */
-const NAV: Array<{ href: string; label: string; module?: string; admin?: boolean }> = [
+const NAV: Array<{ href: string; label: string; module?: string; admin?: boolean; suite?: boolean }> = [
+  { href: "/r", label: "Apps", suite: true },
   { href: "/orders", label: "Orders" },
   { href: "/calendar", label: "Calendar", module: "calendar" },
   { href: "/properties", label: "Resorts", module: "properties" },
@@ -53,7 +54,9 @@ export function Shell({ children }: { children: ReactNode }) {
     router.replace("/login");
   }
 
-  const items = NAV.filter((item) => (!item.module || session?.tenant?.modules.includes(item.module)) && (!item.admin || session?.user.platformAdmin));
+  // "Apps" opens the restaurant suite (till, kitchen, inventory) for tenants that have any of it.
+  const hasSuite = session?.tenant?.suite?.some((m) => m !== "whatsapp") ?? false;
+  const items = NAV.filter((item) => (!item.module || session?.tenant?.modules.includes(item.module)) && (!item.admin || session?.user.platformAdmin) && (!item.suite || hasSuite));
   const links = items.map((item) => {
     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
     return (

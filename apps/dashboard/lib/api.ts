@@ -55,7 +55,7 @@ export interface OrderList {
 
 export interface Me {
   user: { id: string; email: string; name: string; role: string; tenantId: string; platformAdmin: boolean };
-  tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; modules: string[] } | null;
+  tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; modules: string[]; suite?: string[] } | null;
 }
 
 export class ApiError extends Error {
@@ -318,7 +318,7 @@ export interface PooledNumber {
 }
 export interface AdminOverview {
   tenants: Array<{
-    tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string };
+    tenant: { id: string; name: string; slug: string; blueprintId: string; defaultLanguage: string; timezone: string; settings?: Record<string, unknown> };
     channel: { id: string; phoneNumberId: string; displayPhone: string } | null;
     owners: Array<{ id: string; email: string; name: string }>;
   }>;
@@ -331,7 +331,7 @@ export interface CreateTenantResult {
   channel: { id: string; displayPhone: string } | null;
 }
 export const getAdminOverview = () => call<AdminOverview>("/merchant/admin/overview");
-export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean }) =>
+export const createTenant = (input: { name: string; blueprintId: string; ownerEmail: string; ownerName: string; defaultLanguage?: string; numberId?: string; seedDemo?: boolean; modules?: string[]; swatch?: string }) =>
   call<CreateTenantResult>("/merchant/admin/tenants", { method: "POST", body: JSON.stringify(input) });
 export const resetTenantOwnerPassword = (tenantId: string, userId: string) =>
   call<{ email: string; temporaryPassword: string }>(`/merchant/admin/tenants/${encodeURIComponent(tenantId)}/owners/${encodeURIComponent(userId)}/reset-password`, { method: "POST" });

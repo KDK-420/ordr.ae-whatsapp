@@ -6,6 +6,7 @@ import type { BlueprintRegistry, TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
 import { AuthGuard, CurrentUser, SESSION_COOKIE } from "./auth.guard";
 import { AuthService, type AuthUser } from "./auth.service";
+import { tenantModules } from "../suite/types";
 
 const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 
@@ -60,6 +61,8 @@ export class AuthController {
             timezone: tenant.timezone,
             /** Dashboard sections this vertical uses, from the blueprint (e.g. "calendar", "resources"). */
             modules: blueprint?.dashboardModules ?? [],
+            /** Restaurant suite modules this tenant has (storefront, pos, kds, inventory, whatsapp). */
+            suite: tenantModules(tenant.settings),
           }
         : null,
     };
