@@ -1,8 +1,9 @@
 # Restaurant suite: modules plan
 
-Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders;
-2026-11-17: one host per restaurant with staff under `/admin`, flexible custom domains). Nothing here is built yet. Mockups are being designed in
-parallel; the screen lists in section 6 are written for that.
+Status: agreed direction, 2026-11-16. Updated the same day with countable supplies, party orders,
+and addresses: one host per restaurant with staff under `/admin`, and flexible custom domains.
+Nothing here is built yet. Mockups are being designed in parallel; the screen lists in section 6
+are written for that.
 
 Scope: restaurants only, the product the website calls ordr POS. Salon, sports, retail and resort
 tenants (ordr Booking and shops) keep working exactly as they do today and are not touched by this
