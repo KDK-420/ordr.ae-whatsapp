@@ -1,7 +1,8 @@
 # Restaurant suite: modules plan
 
 Status: agreed direction, 2026-11-16. Updated the same day with countable supplies, party orders,
-and addresses: one host per restaurant with staff under `/admin`, and flexible custom domains.
+addresses (one host per restaurant, staff under `/admin`, flexible custom domains), module
+switches at restaurant creation, and per-restaurant themes.
 Nothing here is built yet. Mockups are being designed in parallel; the screen lists in section 6
 are written for that.
 
@@ -68,10 +69,55 @@ These four come first. Every module depends on them.
 
 ### 3.1 Module entitlements
 
-- `Tenant.modules Json` (string list). `GET /merchant/me` returns it; the dashboard nav already
-  filters on `tenant.modules`.
-- A `@RequiresModule("kds")` guard on controllers; event handlers check the same list.
-- Platform admin console: toggle modules per tenant.
+The platform operator decides which of the five modules a restaurant has, when creating it and at
+any time afterwards. The restaurant's staff then see exactly the menus, screens and addresses of
+the modules that are on, and nothing of the others.
+
+```
+Tenant.modules   list of: storefront | pos | kds | inventory | whatsapp
+TenantModuleLog  id, tenantId, module, action (enabled | disabled), by, at, note
+```
+
+**Creating a restaurant (platform admin, `app.ordr.ae/admin` › New merchant).** Today this asks
+for name, vertical, owner and an optional WhatsApp number. It gains:
+
+- Address: the slug, shown as `<slug>.ordr.ae`, checked against taken and reserved names.
+- Modules: five switches, any combination from one to all five, with the dependency hints below.
+- Theme: a preset or brand colours and logo (section 3.7), so the restaurant looks right on day one.
+- First branch: name and address (more can be added later).
+- WhatsApp number from the pool, offered only when the WhatsApp module is on.
+
+**What each module switches on for the restaurant.**
+
+| Module | Back-office menu entries | Own app or address | Background work |
+| --- | --- | --- | --- |
+| Always on (core) | Home, Orders, Menu, Customers, Reports, Settings (branches, staff, taxes, domains, branding) | `/admin` | Order engine, payments |
+| Storefront | Online store (settings, delivery zones, opening rules), Party requests | The public site on the restaurant's host | Scheduled orders, tracking stream |
+| POS | Tables and floor plan, Shifts and cash, Receipts, Discount and void reasons | `/admin/pos` | Shift reports |
+| KDS | Stations, Kitchen timing | `/admin/kds` | Ticket timers |
+| Inventory | Stock, Recipes, Purchasing, Suppliers, Wastage, Counts | `/admin/inventory` | Deduction, reservations, low-stock alerts |
+| WhatsApp | Inbox, Templates, Conversation | (none; the customer's side is WhatsApp) | Webhook routing, handoff alerts, reminders |
+
+Rules:
+
+- The navigation, the module launcher and the installable apps are all built from
+  `Tenant.modules`; there is no separate list to keep in step. `GET /merchant/me` returns it.
+- A module that is off does not exist for that restaurant: its menu entries are absent, its
+  address answers "not part of your plan", its API routes refuse (`@RequiresModule("kds")`), and
+  its event handlers skip the tenant.
+- Owners see which modules they have and which they do not (a locked tile with one line on what
+  it does and "ask us to enable"). Only the platform operator can switch modules.
+- Dependency hints, shown at the switches, never enforced silently: KDS needs at least one order
+  source (Storefront, POS or WhatsApp); Inventory needs sales from POS or Storefront to be
+  useful; Storefront with no module that shows orders to staff falls back to the core Orders page.
+- Switching a module off keeps its data. Switching it back on restores everything. Each change is
+  written to `TenantModuleLog` with who and when.
+- Switching off with work in flight is blocked with a reason: an open POS shift, unbumped kitchen
+  tickets, an open purchase order.
+- The party-order capability follows the modules that carry it: taken by staff with POS, requested
+  by customers with Storefront, planned against stock with Inventory.
+- The vertical blueprint no longer decides the dashboard sections for restaurants; it only
+  supplies the default module set for a new one. Other verticals keep `dashboardModules` as is.
 
 ### 3.2 Branches
 
@@ -211,7 +257,51 @@ Rules that hold on every host:
 - The reserved subdomain list grows with `kds`, `inventory`, `store`, `shop`, `status`, `help`,
   `docs`, `cdn` before restaurants pick names freely.
 
-### 3.7 Hardening that rides along
+### 3.7 Branding and theme
+
+Each restaurant has its own look, set by the platform operator when creating it and adjustable
+afterwards (by the operator, and by the owner under Settings › Branding).
+
+```
+TenantTheme   tenantId, preset, logoUrl, logoDarkUrl, iconUrl (square, for app icons and favicon),
+              coverImageUrl, primaryColor, accentColor, backgroundStyle (light | dark | auto),
+              fontLatin, fontArabic, cornerStyle (sharp | soft | round), menuLayout (list | grid |
+              photo_first), publishedAt, draft (the same fields, unpublished)
+```
+
+Today a tenant has only a headline, an "about" text and one photo (`tenant.settings.site`). Those
+stay and become part of the storefront's content; the theme is the visual layer on top.
+
+Where the theme applies:
+
+| Surface | What it takes from the theme |
+| --- | --- |
+| Storefront | Everything: logo, cover, colours, fonts, corner style, menu layout, light or dark |
+| Tracking, table-QR and party pages | Same as the storefront |
+| Web chat | Logo, primary colour |
+| Installable apps (POS, KDS, Inventory) | The restaurant's icon and name on the home screen; logo in the header |
+| Back office and staff apps | Logo and accent colour only. Layout, contrast and status colours stay ours, so a kitchen screen is always readable and every restaurant's staff apps work the same way |
+| Receipts, kitchen chits, quotes, purchase orders | Logo, name, address, tax number |
+| Links shared on WhatsApp and social | Preview image and title from the cover and name |
+
+Rules:
+
+- **Presets first.** A handful of complete themes (for example Classic, Fresh, Dark roast,
+  Minimal) so a restaurant looks finished after one click; colours and logo then adjust it.
+- **Draft, preview, publish.** Changes are edited as a draft and previewed on the real storefront
+  before going live; the last published theme can be restored.
+- **Readable by construction.** A chosen colour is checked for contrast against text and
+  buttons; a colour that fails is adjusted for text use and the editor says so. Status colours
+  (late ticket, low stock, error) are never themed.
+- **Arabic and English.** One font choice per script from a short curated list that we host, so
+  pages stay fast and right-to-left layout is always correct.
+- **Images** go through the existing upload (`POST /merchant/media`), with a square crop for the
+  icon and size limits for the cover.
+- Implemented as design tokens (CSS variables) resolved per tenant on the server, so there is no
+  flash of the default look and no per-tenant build.
+- Not in this plan: custom CSS or HTML, custom page builders, per-branch themes.
+
+### 3.8 Hardening that rides along
 
 - Database row-level security by `tenantId` before money and stock tables are added. Isolation is
   enforced only in application code today.
@@ -413,7 +503,7 @@ Mostly re-packaging what exists:
 
 | Phase | Delivers | Done when |
 | --- | --- | --- |
-| 0 Core | Entitlements, branches, order lines, stream, roles and PIN, row security | Existing restaurant WhatsApp flow passes unchanged; a tenant with no WhatsApp number works; two modules can be toggled per tenant; stream replays after a dropped connection |
+| 0 Core | Entitlements, restaurant creation with modules and theme, `/admin` on the restaurant's host, domains, branches, order lines, stream, roles and PIN, row security | Existing restaurant WhatsApp flow passes unchanged; a restaurant created with any mix of the five modules shows only those menus and addresses; switching a module off hides it and keeps its data; a theme preset plus logo and colour shows on the storefront after publish; a tenant with no WhatsApp number works; stream replays after a dropped connection |
 | 1 KDS | Stations, tickets, timers, bump, expo, all-day | A WhatsApp order appears on the right station within a second, moves through line statuses, and the customer gets the usual status messages |
 | 2 Storefront | Menu, customisation, cart, checkout, tracking, table QR | A guest orders delivery and pickup on a phone in Arabic and English, pays through the mock gateway, tracks live; the order reaches the KDS |
 | 3 POS | Sell, tables and tabs, payments, shifts, receipts | A cashier runs a full shift: dine-in with rounds and split bill, takeaway, void and discount with reasons, close with variance |
@@ -430,10 +520,21 @@ memory, Postgres integration) and a migration that is additive.
 
 ## 6. Screen inventory for mockups
 
-**Shared (dashboard)**
+**Platform admin** (`app.ordr.ae/admin`, operator only)
 
+- New restaurant wizard: details and address, module switches with dependency hints, theme
+  (preset, logo, colours) with live preview, first branch, owner account, WhatsApp number.
+- Restaurant detail: module switches with change history, theme editor, domains, branches,
+  owners, usage at a glance.
+- Restaurants list with module badges and status.
+
+**Shared (restaurant back office, `/admin`)**
+
+- Navigation built from the enabled modules; a restaurant with only POS and KDS sees only those.
 - Branch switcher in the header (hidden for single-branch tenants).
-- Module launcher: which modules this tenant has, with a locked state for the others.
+- Module launcher: tiles for the modules this restaurant has, locked tiles for the others.
+- Settings › Branding: theme editor with draft, preview and publish.
+- Settings › Domains: each address with status, primary marker, redirect switch, DNS record to add.
 - PIN pad lock screen for shared devices; device pairing screen.
 - Settings: branches, roles and PINs, stations, tables, taxes and service charge, receipt layout.
 
