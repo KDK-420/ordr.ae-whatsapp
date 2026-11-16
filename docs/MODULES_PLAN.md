@@ -1,7 +1,7 @@
 # Restaurant suite: modules plan
 
-Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders,
-addresses reconciled with the customer pages already live on `<slug>.ordr.ae`). Nothing here is built yet. Mockups are being designed in
+Status: agreed direction, 2026-11-16 (updated the same day: countable supplies, party orders;
+2026-11-17: one host per restaurant with staff under `/admin`, flexible custom domains). Nothing here is built yet. Mockups are being designed in
 parallel; the screen lists in section 6 are written for that.
 
 Scope: restaurants only, the product the website calls ordr POS. Salon, sports, retail and resort
@@ -27,8 +27,9 @@ Decisions already taken:
 - Offline POS is a later phase. POS v1 needs a connection.
 - Payments are built against the existing `PaymentProvider` port with the mock adapter; the real
   gateway and card terminal are chosen later and plug in behind the port.
-- Storefront lives on the restaurant's existing subdomain, `<slug>.ordr.ae` (section 3.7);
-  custom domains come later.
+- One host per restaurant: the storefront on `<slug>.ordr.ae` and the staff apps under
+  `/admin` on the same host. Restaurants may add their own domains at any time and use either
+  or both (section 3.6).
 
 ## 2. Architecture rules
 
@@ -56,8 +57,8 @@ apps/api/src/modules/pos/
 apps/api/src/modules/storefront/
 apps/api/src/modules/inventory/
 apps/api/src/modules/whatsapp/   (today's conversation, webhook, inbox code moves here last)
-apps/dashboard/app/(app)/kds, /pos, /inventory     staff screens
 apps/dashboard/app/site/[slug]/...                 public storefront (extends today's customer page)
+apps/dashboard/app/site/[slug]/admin/...           back office, /pos, /kds, /inventory on the tenant's host
 ```
 
 ## 3. Core changes (Phase 0)
@@ -139,37 +140,75 @@ What exists today (do not rebuild):
   product website; `app.ordr.ae` is the staff app and API.
 - Every tenant already has a public page on `<slug>.ordr.ae`, published from Settings › Website.
   `apps/dashboard/proxy.ts` maps the host to `/site/<slug>`, and Caddy issues a certificate per
-  subdomain on first visit after `GET /v1/sites/tls-check` confirms the site is published.
+  host on first visit after `GET /v1/sites/tls-check` confirms the site is published.
 - Reserved subdomains: `app`, `www`, `api`, `admin`, `mail`, `staging`, `demo`, `pos`, `booking`.
 
-How the suite uses it:
+Decision: **one host per restaurant, staff under `/admin`.** Everything under `/admin` is staff
+and needs a login; everything else is public. Example for Daydream Coffee:
 
-| What | Address |
+| Address | What |
 | --- | --- |
-| Storefront | `<slug>.ordr.ae` (the customer page becomes the ordering site when the module is on) |
-| Menu item, cart, checkout | `<slug>.ordr.ae/menu`, `/cart`, `/checkout` |
-| Table QR | `<slug>.ordr.ae/t/<tableCode>` |
-| Order tracking | `<slug>.ordr.ae/o/<token>` |
-| Party request | `<slug>.ordr.ae/party` |
-| Web chat (exists) | `<slug>.ordr.ae/chat` |
-| Staff: POS, KDS, Inventory, Inbox | `app.ordr.ae/pos`, `/kds`, `/inventory`, `/inbox` (tenant and branch from the login or paired device) |
+| `daydream.ordr.ae` | Storefront: menu, cart, checkout |
+| `daydream.ordr.ae/t/<tableCode>` | Table QR |
+| `daydream.ordr.ae/o/<token>` | Order tracking |
+| `daydream.ordr.ae/party` | Party request |
+| `daydream.ordr.ae/chat` | Web chat (exists) |
+| `daydream.ordr.ae/admin` | Back office: menu, reports, settings, inbox |
+| `daydream.ordr.ae/admin/pos` | Cashier app |
+| `daydream.ordr.ae/admin/kds` | Kitchen screens |
+| `daydream.ordr.ae/admin/inventory` | Stock |
 
-Rules:
+Why paths and not `pos.daydream.ordr.ae`: one DNS record and one certificate per restaurant,
+which works with what is deployed and stays simple when a customer brings a domain whose DNS we
+do not control.
 
-- One resolver turns a host into a tenant; every public page and public API uses it. Staff APIs
-  keep using the session. The proxy's list of app paths gains `/pos`, `/kds` and `/inventory` so
-  they never render on a customer host.
-- `pos.ordr.ae` stays the marketing site for the product. The cashier app is `app.ordr.ae/pos`.
-- Multi-branch restaurants keep one subdomain; the storefront asks for the branch (or picks the
-  nearest) and table QR codes carry it.
-- Payment, tracking and WhatsApp links always use the tenant's primary host.
-- A slug change keeps the old slug as a redirect, because printed QR codes outlive renames. This
-  needs a `TenantSlugHistory` table; today a rename would break old links.
-- Reserved list grows with `kds`, `inventory`, `store`, `shop`, `status`, `help`, `docs`, `cdn`
-  before restaurants can pick names freely.
-- Custom domains later (`order.bellapasta.ae`): a `TenantDomain` table (domain, tenant, verified,
-  primary), the owner adds one CNAME, and the existing TLS check is extended to allow verified
-  domains. Canonical tags point at the primary host so one menu on two hosts is not a duplicate.
+**Domains are flexible.** A restaurant is never forced to pick one arrangement.
+
+```
+TenantDomain  id, tenantId, host, kind (platform | custom), status (pending | verified | failed),
+              isPrimary, redirectToPrimary, verifiedAt, createdAt
+```
+
+- Every restaurant always has `<slug>.ordr.ae` (kind `platform`). It is created with the tenant
+  and never removed, so there is always one address that works.
+- A restaurant may add any number of its own domains (`daydreamcoffee.ae`,
+  `order.daydreamcoffee.ae`). Each needs one DNS record pointing at us; we verify it, then the
+  existing on-demand certificate check allows it.
+- **Every verified host serves everything**: the storefront and `/admin` with all the modules
+  the restaurant has. `daydreamcoffee.ae/admin/pos` and `daydream.ordr.ae/admin/pos` are the same
+  app. Customers and staff can use either.
+- One host is **primary**, chosen by the owner; the default is the ordr.ae address. The primary
+  is what we put in links we generate (WhatsApp messages, receipts, QR codes, payment and
+  tracking links) and in the canonical tag, so search engines see one menu, not copies.
+- Other hosts keep working. Per host the owner can switch on "send visitors to the primary
+  address", which redirects storefront pages only. `/admin` never redirects to another host,
+  because staff sessions and paired devices belong to the address they were set up on.
+- Removing a custom domain: links fall back to the next primary; the owner is warned if devices
+  are paired on that host, since they will need pairing again. The pairing screen suggests the
+  ordr.ae address for wall screens and tills because it is permanent, without enforcing it.
+
+Rules that hold on every host:
+
+- One resolver turns a host into a tenant (platform subdomain or `TenantDomain` lookup, cached);
+  every public page, public API and `/admin` route uses it. A staff session is valid only for
+  the tenant its host resolves to.
+- `/admin` is a reserved path no storefront page can use. `/merchant/*` and `/v1/*` already
+  reach the API on any host.
+- The storefront and the staff apps share a browser origin, so: the staff session cookie is
+  limited to `/admin` and the staff API, every staff write carries a second token, and the
+  storefront runs under a strict content security policy with only our own scripts.
+- Each staff app is installable from its own path (own icon, full screen, own offline cache
+  scope), so a kitchen tablet opens straight into the KDS.
+- `app.ordr.ae` stays as the universal door: staff who forget their address sign in there and are
+  passed to their restaurant's `/admin` with a one-time handoff. Platform admin lives there, and
+  the salon, sports, retail and resort tenants keep using it unchanged.
+- `pos.ordr.ae` stays the marketing site for the product.
+- Multi-branch restaurants keep one address; branch is chosen inside the apps, and table QR
+  codes carry it.
+- A slug change keeps the old slug as a redirect (`TenantSlugHistory`), because printed QR codes
+  outlive renames. Today a rename would break old links.
+- The reserved subdomain list grows with `kds`, `inventory`, `store`, `shop`, `status`, `help`,
+  `docs`, `cdn` before restaurants pick names freely.
 
 ### 3.7 Hardening that rides along
 
@@ -456,6 +495,6 @@ memory, Postgres integration) and a migration that is additive.
 
 ## 8. Out of scope for this plan
 
-Offline POS, custom storefront domains, aggregator integrations (Talabat, Deliveroo, Careem),
+Offline POS, aggregator integrations (Talabat, Deliveroo, Careem),
 loyalty and gift cards, accounting exports, multi-currency, and any change to the salon, sports,
 retail or resort verticals.
