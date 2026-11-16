@@ -150,9 +150,11 @@ export class SuiteOrderService {
     const now = new Date();
     const items: OrderItem[] = q.lines.map(({ categoryId, imageUrl: _image, ...line }) => ({ ...line, stationId: stationFor(branch, categoryId), kitchenStatus: "queued" }));
 
-    const order = await this.orderService.placeThrough(
-      input.tenantId,
-      (outbox) =>
+    let raced = false;
+    const order = await this.orderService
+      .placeThrough(
+        input.tenantId,
+        (outbox) =>
         this.orders.create(
           {
             tenantId: input.tenantId,
@@ -183,8 +185,16 @@ export class SuiteOrderService {
           },
           outbox,
         ),
-      { branchId: branch.id, source: input.source },
-    );
+        { branchId: branch.id, source: input.source },
+      )
+      .catch(async (err: unknown) => {
+        // Two requests with the same clientRef raced; the database let one through. Hand back the winner.
+        const winner = input.clientRef ? await this.orders.findByClientRef(input.tenantId, input.clientRef) : null;
+        if (!winner) throw err;
+        raced = true;
+        return winner;
+      });
+    if (raced) return { order, branch, created: false };
     this.logger.log(`${input.source} order #${order.number} at ${branch.name}: ${order.items.length} line(s), ${order.totalMinor} ${order.currency}${input.actor ? ` by ${input.actor}` : ""}`);
     return { order, branch, created: true };
   }

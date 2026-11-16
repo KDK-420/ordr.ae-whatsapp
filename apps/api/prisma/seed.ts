@@ -1,14 +1,49 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { demoDataFor } from "../src/actions/demo";
+import type { CoffeeDemo } from "../src/actions/demo-coffee";
 import { hashPassword } from "../src/auth/password";
 
 const prisma = new PrismaClient();
 
+/**
+ * The restaurant suite demo: modules and theme on the tenant, a branch with stations, stock,
+ * recipes and suppliers. Safe to run again: rows are upserted and opening stock is written once.
+ */
+async function seedSuite(tenantId: string, suite: CoffeeDemo) {
+  const current = await prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+  // Keep whatever the owner already changed; the demo only fills what is missing.
+  await prisma.tenant.update({ where: { id: tenantId }, data: { settings: { ...suite.settings, ...((current.settings as Record<string, unknown>) ?? {}) } as Prisma.InputJsonValue } });
+  for (const b of suite.branches) {
+    const data = { name: b.name, address: b.address ?? null, phone: b.phone ?? null, stations: b.stations as unknown as Prisma.InputJsonValue, sortOrder: b.sortOrder, isActive: b.isActive };
+    await prisma.branch.upsert({ where: { id: b.id }, update: data, create: { id: b.id, tenantId, ...data } });
+  }
+  for (const i of suite.stockItems) {
+    const data = { name: i.name, category: i.category ?? null, kind: i.kind, baseUnit: i.baseUnit, unitLabel: i.unitLabel, unitSize: i.unitSize, reorderLevel: i.reorderLevel, costMinor: i.costMinor, isActive: i.isActive };
+    await prisma.stockItem.upsert({ where: { id: i.id }, update: data, create: { id: i.id, tenantId, ...data } });
+  }
+  for (const s of suite.suppliers) {
+    const data = { name: s.name, phone: s.phone ?? null, email: s.email ?? null, leadDays: s.leadDays ?? null, isActive: s.isActive };
+    await prisma.supplier.upsert({ where: { id: s.id }, update: data, create: { id: s.id, tenantId, ...data } });
+  }
+  await prisma.recipeLine.deleteMany({ where: { tenantId, id: { startsWith: "rcp_" } } });
+  await prisma.recipeLine.createMany({ data: suite.recipeLines.map((l) => ({ id: `${l.id}_${tenantId}`.slice(0, 60), tenantId, offeringId: l.offeringId, modifierOptionId: l.modifierOptionId ?? null, stockItemId: l.stockItemId, quantity: l.quantity, appliesTo: l.appliesTo })), skipDuplicates: true });
+  const branchId = suite.branches[0]!.id;
+  if ((await prisma.stockMovement.count({ where: { tenantId } })) === 0) {
+    const sizes = new Map(suite.stockItems.map((i) => [i.id, i.unitSize]));
+    for (const o of suite.opening.filter((x) => x.units > 0)) {
+      const quantity = o.units * (sizes.get(o.stockItemId) ?? 1);
+      await prisma.stockMovement.create({ data: { tenantId, branchId, stockItemId: o.stockItemId, type: "count", quantity, note: "Opening stock" } });
+      await prisma.stockLevel.upsert({ where: { branchId_stockItemId: { branchId, stockItemId: o.stockItemId } }, create: { branchId, stockItemId: o.stockItemId, tenantId, onHand: quantity }, update: { onHand: quantity } });
+    }
+  }
+  console.log(`Suite demo: ${suite.branches.length} branch(es), ${suite.stockItems.length} stock items, ${suite.recipeLines.length} recipe lines, ${suite.suppliers.length} suppliers`);
+}
+
 async function main() {
   const env = process.env;
   const name = env.SEED_TENANT_NAME ?? "Demo Restaurant";
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const slug = env.SEED_TENANT_SLUG?.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const tenant = await prisma.tenant.upsert({
     where: { slug },
     update: { name, blueprintId: env.SEED_BLUEPRINT_ID ?? "restaurant" },
@@ -42,7 +77,8 @@ async function main() {
     console.log("SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set: no dashboard user created");
   }
   const blueprintId = env.SEED_BLUEPRINT_ID ?? "restaurant";
-  const demo = demoDataFor(blueprintId, tenant.id);
+  const demo = demoDataFor(blueprintId, tenant.id, env.SEED_DEMO === "coffee" ? "coffee" : undefined);
+  if (demo.suite) await seedSuite(tenant.id, demo.suite);
   for (const p of demo.properties) {
     const data = { name: p.name, description: p.description ?? Prisma.JsonNull, address: p.address ?? null, mapsUrl: p.mapsUrl ?? null, phone: p.phone ?? null, checkInTime: p.checkInTime, checkOutTime: p.checkOutTime, amenities: p.amenities, imageUrls: p.imageUrls, sortOrder: p.sortOrder, isActive: p.isActive };
     await prisma.property.upsert({ where: { id: p.id }, update: data, create: { id: p.id, tenantId: tenant.id, ...data } });
