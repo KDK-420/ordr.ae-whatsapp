@@ -202,3 +202,8 @@
 
   reset(current);
 })();
+
+// Counts "Book a demo" clicks as a goal when visitor analytics are switched on in website-src/build.mjs.
+document.querySelectorAll('a[href*="wa.me/971501122420"]').forEach((a) => a.addEventListener("click", () => {
+  if (typeof window.plausible === "function") window.plausible("Book a demo", { props: { page: location.pathname } });
+}));

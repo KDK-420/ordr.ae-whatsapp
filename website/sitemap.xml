@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://ordr.ae/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://ordr.ae/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://ordr.ae/ar/"/>
@@ -10,7 +10,7 @@
   </url>
   <url>
     <loc>https://ordr.ae/ar/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://ordr.ae/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://ordr.ae/ar/"/>
@@ -50,7 +50,7 @@
   </url>
   <url>
     <loc>https://ordr.ae/industries/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://ordr.ae/industries/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://ordr.ae/ar/industries/"/>
@@ -58,7 +58,7 @@
   </url>
   <url>
     <loc>https://ordr.ae/ar/industries/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://ordr.ae/industries/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://ordr.ae/ar/industries/"/>

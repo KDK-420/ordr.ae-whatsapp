@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://pos.ordr.ae/restaurants/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/restaurants/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/restaurants/"/>
@@ -10,7 +10,7 @@
   </url>
   <url>
     <loc>https://pos.ordr.ae/ar/restaurants/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/restaurants/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/restaurants/"/>
@@ -34,7 +34,7 @@
   </url>
   <url>
     <loc>https://pos.ordr.ae/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/"/>
@@ -42,11 +42,91 @@
   </url>
   <url>
     <loc>https://pos.ordr.ae/ar/</loc>
-    <lastmod>2026-11-06</lastmod>
+    <lastmod>2026-11-17</lastmod>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/"/>
     <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/point-of-sale/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/point-of-sale/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/point-of-sale/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/point-of-sale/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/ar/point-of-sale/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/point-of-sale/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/point-of-sale/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/point-of-sale/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/kitchen-display/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/kitchen-display/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/kitchen-display/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/kitchen-display/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/ar/kitchen-display/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/kitchen-display/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/kitchen-display/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/kitchen-display/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/inventory/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/inventory/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/inventory/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/inventory/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/ar/inventory/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/inventory/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/inventory/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/inventory/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/online-ordering/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/online-ordering/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/online-ordering/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/online-ordering/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/ar/online-ordering/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/online-ordering/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/online-ordering/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/online-ordering/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/coffee-shops/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/coffee-shops/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/coffee-shops/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/coffee-shops/"/>
+  </url>
+  <url>
+    <loc>https://pos.ordr.ae/ar/coffee-shops/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pos.ordr.ae/coffee-shops/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://pos.ordr.ae/ar/coffee-shops/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pos.ordr.ae/coffee-shops/"/>
   </url>
   <url>
     <loc>https://pos.ordr.ae/grocery/</loc>

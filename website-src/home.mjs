@@ -2,9 +2,11 @@
 // Keep claims to what the product does today: see "What is mocked" in docs/RUNBOOK.md.
 
 export const home = {
+  // When the home pages last changed, for the sitemap.
+  updated: "2026-11-17",
   en: {
-    title: "AI WhatsApp Assistant for UAE Bookings and Orders | ordr.ae",
-    description: "An AI assistant that answers your customers on WhatsApp in Arabic and English, books appointments, courts and rooms, takes orders, and hands over to your team when it should.",
+    title: "AI WhatsApp Assistant, Bookings and Restaurant POS, UAE | ordr.ae",
+    description: "An AI assistant on WhatsApp for bookings and orders, and a full restaurant system: point of sale, kitchen display, inventory and your own ordering website.",
     ogTitle: "ordr.ae: bookings and orders on WhatsApp",
     ogDescription: "Your business answers on WhatsApp, day and night, in Arabic and English.",
     eyebrow: "AI BUSINESS ASSISTANT",
@@ -17,7 +19,7 @@ export const home = {
     messageLabel: "Your message",
     messagePlaceholder: "Message...",
     send: "Send message",
-    pos: "Take orders and sell<br>on WhatsApp.",
+    pos: "Till, kitchen screen, stock<br>and online orders.",
     booking: "Manage appointments<br>and bookings on WhatsApp.",
     rail: "BUILT FOR<br>YOUR INDUSTRY",
     railItems: [["salon", "Salon"], ["spa", "Spa"], ["restaurant", "Restaurant"], ["shop", "Shop"], ["padel", "Padel"], ["resort", "Resort"]],
@@ -44,9 +46,9 @@ export const home = {
       h2: "One conversation.<br>Two powerful ways to sell.",
       intro: "Built for the way service and retail businesses actually work, without forcing customers to use another app.",
       pos: {
-        pill: "For sales & orders",
-        p: "Make it easy to discover products, ask questions and place orders directly through WhatsApp. For restaurants, cafés, grocery stores and shops.",
-        link: "Explore POS experience",
+        pill: "For restaurants & shops",
+        p: "The till, the kitchen screen, stock, your own ordering website and WhatsApp ordering, working as one system. For restaurants, cafés and coffee shops, with WhatsApp ordering for grocery stores and shops.",
+        link: "Explore ordr POS",
         menu: "Today's menu",
         items: [["Margherita Pizza", "Fresh mozzarella", "AED 42"], ["Chicken Pasta", "Creamy herb sauce", "AED 48"], ["Caesar Salad", "Crisp greens", "AED 32"]],
         note: "✓ Order request received",
@@ -60,6 +62,17 @@ export const home = {
         days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
         note: "✓ Booking confirmed",
       },
+    },
+    suite: {
+      label: "ordr POS in pictures",
+      h2: "See it running.",
+      intro: "Real screens from ordr POS, set up for a coffee shop. An order from any of them reaches the kitchen and comes out of stock by itself.",
+      items: [
+        ["till", "restaurant-pos-system", "Point of sale", "Ring up dine-in, takeaway and delivery in a few taps, with cash and card.", "The till: menu items with photos and the current order with VAT and total"],
+        ["kitchen", "kitchen-display-system", "Kitchen display", "Every order as a ticket, by station, with a clock on each.", "The kitchen display with tickets in New Orders, Preparing, Ready and Completed columns"],
+        ["inventory", "restaurant-inventory", "Inventory", "Stock that counts itself down with every sale, cups and lids included.", "The stock list with quantities, reorder levels and stock status"],
+        ["store-home", "online-ordering-system", "Online ordering site", "Your own website for pickup and delivery, in your colours.", "A restaurant's ordering website with an Order Now button and menu photos"],
+      ],
     },
     platform: {
       preview: "Illustrative ordr dashboard preview",
@@ -82,7 +95,7 @@ export const home = {
       cards: [
         ["salon", "salon-booking-software", "Salons & beauty", "Service menus, stylist availability and appointments."],
         ["spa", "salon-booking-software", "Spas & wellness", "Treatments, packages and recurring visits."],
-        ["restaurant", "restaurant-whatsapp-ordering", "Restaurants & cafés", "Menus, takeaway enquiries and orders."],
+        ["restaurant", "whatsapp-ordering-system", "Restaurants & cafés", "Till, kitchen screen, stock and online orders."],
         ["shop", "sell-on-whatsapp", "Retail & shops", "Product questions, availability and sales enquiries."],
         ["padel", "padel-court-booking-system", "Padel & sports", "Court availability, sessions and reservations."],
         ["resort", "hotel-whatsapp-booking", "Hotels & resorts", "Guest enquiries, experiences and reservations."],
@@ -100,11 +113,11 @@ export const home = {
     faqIntro: "A quick overview of how ordr can fit into your business.",
     faq: [
       ["What is ordr?", "ordr is an AI-assisted business platform that helps you respond to customers and handle bookings or orders through WhatsApp."],
-      ["What is the difference between POS and Booking?", "ordr POS is oriented toward products and orders. ordr Booking is designed for appointments, availability and reservations. ordr POS doesn't run a till or take card payments, so you keep your current till for walk-in customers."],
+      ["What is the difference between POS and Booking?", "ordr POS is for restaurants, cafés and shops: a till, a kitchen display, inventory, your own ordering website and WhatsApp ordering. ordr Booking is for appointments, courts and rooms."],
       ["Can it answer in Arabic and English?", "Yes. The platform is designed to serve customers in both Arabic and English, and it follows the language of the customer's latest message, including voice notes. Other languages aren't supported yet."],
       ["What happens when a customer needs a person?", "The assistant can hand the conversation over to your team when human assistance is required. It alerts your staff on WhatsApp and on their phones, and they reply from the inbox with the whole conversation in front of them."],
       ["Can I use my existing WhatsApp number?", "Yes, as long as it moves to the WhatsApp Business Platform, which means it stops working in the regular WhatsApp app on a phone. Your team then replies from the dashboard. You can also use a new number."],
-      ["Can customers pay online?", "Not yet. For now customers pay at your venue, on delivery, or however you take payment today. Online card payment is on the way."],
+      ["Can customers pay online?", "Not yet. Customers pay at your venue, at pickup or on delivery. At the ordr POS till you record cash and card payments. Online card payment is on the way."],
       ["What does it cost?", "It depends on your business and how many locations you run. Write to us and we'll give you a clear price."],
       ["How is customer data handled?", "Each business only sees its own customers. Our <a href=\"https://app.ordr.ae/privacy\">privacy policy</a> explains what is stored and who is involved in plain language."],
       ["Is the conversation in the phone real?", "The phone on this page is an interactive frontend demonstration using sample businesses and sample data. It does not create real orders or bookings."],
@@ -120,7 +133,7 @@ export const home = {
   },
   ar: {
     title: "مساعد واتساب ذكي للحجوزات والطلبات في الإمارات | ordr.ae",
-    description: "مساعد ذكي يرد على عملائك عبر واتساب بالعربية والإنجليزية، يحجز المواعيد والملاعب والغرف، يستقبل الطلبات، ويحوّل المحادثة إلى فريقك عند الحاجة.",
+    description: "مساعد ذكي على واتساب للحجوزات والطلبات، ونظام كامل للمطاعم: نقطة بيع، شاشة مطبخ، مخزون، وموقع طلبات خاص بك.",
     ogTitle: "ordr.ae: الحجوزات والطلبات عبر واتساب",
     ogDescription: "عملك يرد عبر واتساب ليلاً ونهاراً، بالعربية والإنجليزية.",
     eyebrow: "مساعد الأعمال الذكي",
@@ -133,7 +146,7 @@ export const home = {
     messageLabel: "رسالتك",
     messagePlaceholder: "اكتب رسالة...",
     send: "إرسال الرسالة",
-    pos: "استقبل الطلبات وبِع<br>عبر واتساب.",
+    pos: "كاشير وشاشة مطبخ ومخزون<br>وطلبات إلكترونية.",
     booking: "أدر المواعيد<br>والحجوزات عبر واتساب.",
     rail: "مصمم<br>لقطاعك",
     railItems: [["salon", "صالون"], ["spa", "سبا"], ["restaurant", "مطعم"], ["shop", "متجر"], ["padel", "بادل"], ["resort", "منتجع"]],
@@ -160,9 +173,9 @@ export const home = {
       h2: "محادثة واحدة.<br>طريقتان قويتان للبيع.",
       intro: "مصمم للطريقة التي تعمل بها أعمال الخدمات والتجزئة فعلاً، دون إجبار العملاء على استخدام تطبيق آخر.",
       pos: {
-        pill: "للمبيعات والطلبات",
-        p: "سهّل على عملائك اكتشاف المنتجات وطرح الأسئلة وتقديم الطلبات مباشرة عبر واتساب. للمطاعم والمقاهي والبقالات والمتاجر.",
-        link: "استكشف تجربة POS",
+        pill: "للمطاعم والمتاجر",
+        p: "الكاشير وشاشة المطبخ والمخزون وموقع الطلبات الخاص بك وطلبات واتساب، تعمل كنظام واحد. للمطاعم والمقاهي ومحلات القهوة، مع طلبات واتساب للبقالات والمتاجر.",
+        link: "استكشف ordr POS",
         menu: "قائمة اليوم",
         items: [["بيتزا مارغريتا", "موزاريلا طازجة", "42 درهماً"], ["باستا بالدجاج", "صلصة كريمية بالأعشاب", "48 درهماً"], ["سلطة سيزر", "خضار طازجة", "32 درهماً"]],
         note: "✓ تم استلام طلبك",
@@ -176,6 +189,17 @@ export const home = {
         days: ["الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"],
         note: "✓ تم تأكيد الحجز",
       },
+    },
+    suite: {
+      label: "ordr POS بالصور",
+      h2: "شاهده وهو يعمل.",
+      intro: "شاشات حقيقية من ordr POS، مجهزة لمحل قهوة. أي طلب يأتي من أي منها يصل إلى المطبخ ويُخصم من المخزون تلقائياً.",
+      items: [
+        ["till", "restaurant-pos-system", "نقطة البيع", "سجّل طلبات الصالة والسفري والتوصيل بلمسات قليلة، نقداً وبالبطاقة.", "الكاشير: الأصناف بالصور والطلب الحالي مع الضريبة والإجمالي"],
+        ["kitchen", "kitchen-display-system", "شاشة المطبخ", "كل طلب على الشاشة، حسب المحطة، مع مؤقت.", "شاشة المطبخ وفيها الطلبات في أعمدة جديد وقيد التحضير وجاهز ومكتمل"],
+        ["inventory", "restaurant-inventory", "المخزون", "مخزون ينقص تلقائياً مع كل بيع، ومعه الأكواب والأغطية.", "قائمة المخزون مع الكميات وحدود إعادة الطلب وحالة كل صنف"],
+        ["store-home", "online-ordering-system", "موقع الطلبات", "موقع خاص بك للاستلام والتوصيل، بألوان علامتك.", "موقع طلبات لمطعم فيه زر اطلب الآن وصور القائمة"],
+      ],
     },
     platform: {
       preview: "معاينة توضيحية للوحة تحكم ordr",
@@ -198,7 +222,7 @@ export const home = {
       cards: [
         ["salon", "salon-booking-software", "الصالونات والتجميل", "قوائم الخدمات وتوفر الموظفات والمواعيد."],
         ["spa", "salon-booking-software", "السبا والعافية", "الجلسات والباقات والزيارات المتكررة."],
-        ["restaurant", "restaurant-whatsapp-ordering", "المطاعم والمقاهي", "القوائم واستفسارات الاستلام والطلبات."],
+        ["restaurant", "whatsapp-ordering-system", "المطاعم والمقاهي", "كاشير وشاشة مطبخ ومخزون وطلبات إلكترونية."],
         ["shop", "sell-on-whatsapp", "التجزئة والمتاجر", "أسئلة المنتجات والتوفر واستفسارات البيع."],
         ["padel", "padel-court-booking-system", "البادل والرياضة", "توفر الملاعب والجلسات والحجوزات."],
         ["resort", "hotel-whatsapp-booking", "الفنادق والمنتجعات", "استفسارات الضيوف والتجارب والحجوزات."],
@@ -216,11 +240,11 @@ export const home = {
     faqIntro: "نظرة سريعة على الطريقة التي يناسب بها ordr عملك.",
     faq: [
       ["ما هو ordr؟", "ordr منصة أعمال مدعومة بالذكاء الاصطناعي تساعدك على الرد على العملاء وإدارة الحجوزات أو الطلبات عبر واتساب."],
-      ["ما الفرق بين POS وBooking؟", "يركز ordr POS على المنتجات والطلبات، ويركز ordr Booking على المواعيد والتوفر والحجوزات. ولا يشغّل ordr POS صندوق الدفع ولا يقبل مدفوعات البطاقات، فتحتفظ بصندوقك الحالي لزبائن المحل."],
+      ["ما الفرق بين POS وBooking؟", "ordr POS للمطاعم والمقاهي والمتاجر: كاشير وشاشة مطبخ ومخزون وموقع طلبات خاص بك وطلبات واتساب. أما ordr Booking فللمواعيد والملاعب والغرف."],
       ["هل يرد بالعربية والإنجليزية؟", "نعم. صُممت المنصة لخدمة العملاء بالعربية والإنجليزية، وتتبع لغة آخر رسالة من العميل، بما في ذلك الرسائل الصوتية. اللغات الأخرى غير مدعومة بعد."],
       ["ماذا يحدث عندما يحتاج العميل إلى موظف؟", "يحوّل المساعد المحادثة إلى فريقك عند الحاجة، وينبّه موظفيك على واتساب وعلى هواتفهم، فيردون من صندوق الوارد والمحادثة كاملة أمامهم."],
       ["هل يمكنني استخدام رقم واتساب الحالي؟", "نعم، بشرط نقله إلى منصة واتساب للأعمال، وعندها يتوقف عن العمل في تطبيق واتساب العادي على الهاتف، ويرد فريقك من لوحة التحكم. ويمكنك أيضاً استخدام رقم جديد."],
-      ["هل يمكن للعملاء الدفع عبر الإنترنت؟", "ليس بعد. يدفع العملاء حالياً في مقر عملك أو عند التوصيل أو بالطريقة التي تعتمدها اليوم. الدفع بالبطاقة عبر الإنترنت قادم قريباً."],
+      ["هل يمكن للعملاء الدفع عبر الإنترنت؟", "ليس بعد. يدفع العملاء في مقر عملك أو عند الاستلام أو عند التوصيل. وفي كاشير ordr POS تقيّد الدفع نقداً وبالبطاقة. الدفع بالبطاقة عبر الإنترنت قادم قريباً."],
       ["كم التكلفة؟", "تعتمد على عملك وعدد فروعك. راسلنا وسنعطيك سعراً واضحاً."],
       ["كيف تُعامَل بيانات العملاء؟", "لا يرى كل عمل إلا عملاءه. توضح <a href=\"https://app.ordr.ae/privacy\">سياسة الخصوصية</a> ما يُخزَّن ومن يشارك في المعالجة بلغة بسيطة."],
       ["هل المحادثة في الهاتف حقيقية؟", "الهاتف في هذه الصفحة عرض تفاعلي يستخدم أعمالاً وبيانات تجريبية، ولا ينشئ طلبات أو حجوزات فعلية."],

@@ -12,6 +12,11 @@ const HOSTS = { main: "https://ordr.ae", pos: "https://pos.ordr.ae", booking: "h
 const SITE = HOSTS.main;
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "website");
 const UPDATED = "2026-11-06";
+// A live demo restaurant, linked from the restaurant suite pages. It is hidden from search engines.
+const STORE_DEMO = "https://daybreak.ordr.ae";
+// Visitor analytics are off until a site id is set here. With one set, every page loads Plausible
+// (no cookies) and assets/site.js reports "Book a demo" clicks as a goal.
+const ANALYTICS = { plausibleDomain: "" };
 const BROWSER_DEMO = "https://app.ordr.ae/chat/demo-salon";
 // Where "Book a demo" goes, on every page: the team's WhatsApp, not the demo bot's number in UI.whatsapp.
 const DEMO_REQUEST = {
@@ -32,6 +37,7 @@ const UI = {
     faqLabel: "Frequently asked", faqTitle: "Questions?<br>We have answers.", faqIntro: "Straight answers about how this works in practice.",
     related: "Keep reading", relatedTitle: "More from ordr.", detail: "In detail", closing: "Your next customer is already on WhatsApp.", closingSub: "Give them a better way to reach your business.",
     posName: "ordr POS", bookingName: "ordr Booking", alsoFor: "Also for:", allIndustries: "See all industries", more: "More",
+    liveStore: "See a live store", learnMore: "Learn more", modules: "Modules", screenshot: "Screenshot",
     privacy: "Privacy", signIn: "Sign in", copyright: "© 2026 ordr.ae, by Kdk420 General Trading LLC, Dubai", tagline: "Built to make business feel effortless.",
     brand: "AI-assisted conversations for bookings and orders on WhatsApp.", crumbs: "Breadcrumb", exampleChat: "Example WhatsApp conversation", homeLabel: "ordr home",
   },
@@ -43,6 +49,7 @@ const UI = {
     faqLabel: "الأسئلة الشائعة", faqTitle: "لديك أسئلة؟<br>لدينا الإجابات.", faqIntro: "إجابات مباشرة عن طريقة عمله على أرض الواقع.",
     related: "تابع القراءة", relatedTitle: "المزيد من ordr.", detail: "بالتفصيل", closing: "عميلك القادم موجود على واتساب بالفعل.", closingSub: "امنحه طريقة أفضل للوصول إلى عملك.",
     posName: "ordr POS", bookingName: "ordr Booking", alsoFor: "ويناسب أيضاً:", allIndustries: "جميع القطاعات", more: "المزيد",
+    liveStore: "شاهد متجراً حياً", learnMore: "اعرف المزيد", modules: "الوحدات", screenshot: "لقطة شاشة",
     privacy: "الخصوصية", signIn: "تسجيل الدخول", copyright: "© 2026 ordr.ae، من شركة Kdk420 General Trading LLC، دبي", tagline: "صُمم ليجعل إدارة عملك أسهل.",
     brand: "محادثات مدعومة بالذكاء الاصطناعي للحجوزات والطلبات عبر واتساب.", crumbs: "مسار التنقل", exampleChat: "مثال على محادثة واتساب", homeLabel: "الصفحة الرئيسية لـ ordr",
   },
@@ -51,6 +58,7 @@ const UI = {
 const PAGE_ICON = {
   "whatsapp-chatbot": "connect", "guides/whatsapp-business-api-uae": "spark", industries: "grid",
   "whatsapp-ordering-system": "pos", "restaurant-whatsapp-ordering": "restaurant", "grocery-whatsapp-ordering": "grocery", "sell-on-whatsapp": "shop",
+  "restaurant-pos-system": "till", "kitchen-display-system": "kitchen", "restaurant-inventory": "stock", "online-ordering-system": "web", "coffee-shop-pos": "coffee",
   "whatsapp-booking-system": "booking", "salon-booking-software": "salon", "padel-court-booking-system": "padel", "hotel-whatsapp-booking": "resort",
 };
 
@@ -69,6 +77,14 @@ const attr = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 const text = (s) => s.replace(/&(?!amp;)/g, "&amp;");
 // Changes whenever the file does, so returning visitors never pair new pages with old styles.
 const asset = (file) => `/assets/${file}?v=${createHash("sha256").update(readFileSync(join(OUT, "assets", file))).digest("hex").slice(0, 8)}`;
+
+// A product screenshot in a browser-style frame. Width and height are set so the page does not jump while it loads.
+const SHOT_SIZE = { "store-phone": [780, 1600] };
+function shot(name, alt, { eager = false } = {}) {
+  const [w, h] = SHOT_SIZE[name] ?? [1600, 1000];
+  const phone = name === "store-phone";
+  return `<figure class="shot${phone ? " shot-phone" : ""}">${phone ? "" : `<div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div>`}<img src="${asset(`shots/${name}.webp`)}" width="${w}" height="${h}" alt="${attr(alt)}"${eager ? ` fetchpriority="high"` : ` loading="lazy"`} decoding="async"></figure>`;
+}
 
 function clock(start, minutes) {
   const [h, m] = start.split(":").map(Number);
@@ -102,9 +118,11 @@ function document_({ lang, title, description, url, en, ar, ogTitle, ogDescripti
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="${FONTS[lang]}">
+  <link rel="preload" as="style" href="${FONTS[lang]}" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="${FONTS[lang]}"></noscript>
   <link rel="stylesheet" href="${asset("styles.css")}">
-  <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@graph": graph })}</script>
+  <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@graph": graph })}</script>${ANALYTICS.plausibleDomain ? `
+  <script defer data-domain="${ANALYTICS.plausibleDomain}" src="https://plausible.io/js/script.js"></script>` : ""}
 </head>
 <body>
 ${body}
@@ -120,7 +138,7 @@ function topbar(lang, { base, logoHref, otherHref }) {
   const other = ui.otherLangCode;
   const item = (slug) => `<a href="${urlOf(slug, lang)}">${byId(slug).label[lang]}</a>`;
   const productLinks = ["whatsapp-ordering-system", "whatsapp-booking-system"].map(item).join("");
-  const industryLinks = ["restaurant-whatsapp-ordering", "grocery-whatsapp-ordering", "sell-on-whatsapp", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking", "industries"].map(item).join("");
+  const industryLinks = ["restaurant-whatsapp-ordering", "coffee-shop-pos", "grocery-whatsapp-ordering", "sell-on-whatsapp", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking", "industries"].map(item).join("");
   return `<header class="topbar"><a class="logo" href="${logoHref}" aria-label="${ui.homeLabel}">ordr<b>.ae</b></a><nav class="mainnav" aria-label="${ui.nav}"><div class="nav-drop"><a href="${base}#products">${ui.products} ⌄</a><div class="nav-menu"><div>${productLinks}</div></div></div><div class="nav-drop"><a href="${base}#industries">${ui.industries} ⌄</a><div class="nav-menu"><div>${industryLinks}</div></div></div><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a></nav><div class="nav-right"><a class="lang" href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a><a class="outline-link demo-link" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} ${ui.out}</a><button class="mobile-toggle" id="menuBtn" type="button" aria-label="${ui.openNav}" aria-expanded="false">☰</button></div><nav class="mobile-panel" id="mobilePanel" aria-label="${ui.nav}">${productLinks}<a href="${urlOf("industries", lang)}">${ui.industries}</a><a href="${base}#how">${ui.howItWorks}</a><a href="${base}#faq">${ui.questions}</a><a href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo}</a><a href="${otherHref}" lang="${other}" hreflang="${other}">${ui.otherLang}</a></nav></header>`;
 }
 
@@ -151,7 +169,7 @@ function endCta(lang) {
 function footer(lang) {
   const ui = UI[lang];
   const list = (slugs) => slugs.map((slug) => `<a href="${urlOf(slug, lang)}">${byId(slug).label[lang]}</a>`).join("");
-  return `<footer><div class="shell"><div class="footer-layout"><div class="footer-brand"><a class="logo" href="${homeOf(lang)}" aria-label="${ui.homeLabel}">ordr<b>.ae</b></a><p>${ui.brand}</p></div><div class="footer-col"><h4>${ui.posName}</h4>${list(["whatsapp-ordering-system", "restaurant-whatsapp-ordering", "grocery-whatsapp-ordering", "sell-on-whatsapp"])}</div><div class="footer-col"><h4>${ui.bookingName}</h4>${list(["whatsapp-booking-system", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking"])}</div><div class="footer-col"><h4>${ui.more}</h4>${list(["industries", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"])}<a href="https://app.ordr.ae/privacy">${ui.privacy}</a><a href="https://app.ordr.ae/login">${ui.signIn}</a><a href="mailto:hello@ordr.ae" dir="ltr">hello@ordr.ae</a></div></div><div class="copyright"><span>${ui.copyright}</span><span>${ui.tagline}</span></div></div></footer>`;
+  return `<footer><div class="shell"><div class="footer-layout"><div class="footer-brand"><a class="logo" href="${homeOf(lang)}" aria-label="${ui.homeLabel}">ordr<b>.ae</b></a><p>${ui.brand}</p></div><div class="footer-col"><h4>${ui.posName}</h4>${list(["whatsapp-ordering-system", "restaurant-pos-system", "kitchen-display-system", "restaurant-inventory", "online-ordering-system", "restaurant-whatsapp-ordering", "coffee-shop-pos", "grocery-whatsapp-ordering", "sell-on-whatsapp"])}</div><div class="footer-col"><h4>${ui.bookingName}</h4>${list(["whatsapp-booking-system", "salon-booking-software", "padel-court-booking-system", "hotel-whatsapp-booking"])}</div><div class="footer-col"><h4>${ui.more}</h4>${list(["industries", "whatsapp-chatbot", "guides/whatsapp-business-api-uae"])}<a href="https://app.ordr.ae/privacy">${ui.privacy}</a><a href="https://app.ordr.ae/login">${ui.signIn}</a><a href="mailto:hello@ordr.ae" dir="ltr">hello@ordr.ae</a></div></div><div class="copyright"><span>${ui.copyright}</span><span>${ui.tagline}</span></div></div></footer>`;
 }
 
 const faqItems = (items, lang) => items.map(([q, a], i) =>
@@ -166,7 +184,7 @@ function homePage(lang) {
   const bookingUrl = urlOf("whatsapp-booking-system", lang);
   const times = ["10:00", "11:30", "14:00", "15:30", "17:00"];
   const graph = [
-    { "@type": "Organization", "@id": `${SITE}/#org`, name: "ordr.ae", legalName: "Kdk420 General Trading LLC", url: SITE, logo: `${SITE}/assets/og.png`, email: "hello@ordr.ae", areaServed: "AE" },
+    { "@type": "Organization", "@id": `${SITE}/#org`, name: "ordr.ae", alternateName: ["ordr", "اوردر", "ordr POS", "ordr Booking"], legalName: "Kdk420 General Trading LLC", url: SITE, logo: `${SITE}/assets/og.png`, email: "hello@ordr.ae", areaServed: "AE" },
     { "@type": "WebSite", "@id": `${SITE}/#site`, url: `${SITE}/`, name: "ordr.ae", inLanguage: ["en", "ar"], publisher: { "@id": `${SITE}/#org` } },
   ];
   const phoneBlock = phone(lang, {
@@ -183,6 +201,7 @@ function homePage(lang) {
 <section class="stats" aria-label="${t.statsLabel}"><div class="shell stats-row">${t.stats.map(([a, b]) => `<div class="stat"><strong>${a}</strong><p>${b}</p></div>`).join("")}</div></section>
 <section class="section process" id="how"><div class="shell process-grid"><div><p class="section-label">${t.how.label}</p><h2>${t.how.h2}</h2><p class="section-intro">${t.how.intro}</p></div><div class="steps">${t.how.steps.map(([num, h, p], i) => `<article class="step"><span class="step-num">${num}</span>${ICONS[["connect", "spark", "grow"][i]]}<h3>${h}</h3><p>${p}</p></article>`).join("")}</div></div></section>
 <section class="section products-section" id="products"><div class="shell"><div class="section-header"><div><p class="section-label">${t.products.label}</p><h2>${t.products.h2}</h2></div><p class="section-intro">${t.products.intro}</p></div><div class="product-grid"><article class="product-card"><div class="card-copy"><span class="pill">${text(pos.pill)}</span><h3>${ui.posName}</h3><p>${pos.p}</p><a class="product-link" href="${posUrl}">${pos.link} ${ui.out}</a></div><div class="product-visual pos" aria-hidden="true"><div class="visual-menu"><div class="vm-head"><span>${pos.menu}</span><span>☰</span></div>${pos.items.map(([name, sub, price], i) => `<div class="menu-row"><span class="food-icon">0${i + 1}</span><span><b>${name}</b><small>${sub}</small></span><span>${price}</span></div>`).join("")}</div><div class="order-note">${pos.note}</div></div></article><article class="product-card"><div class="card-copy"><span class="pill">${text(booking.pill)}</span><h3>${ui.bookingName}</h3><p>${booking.p}</p><a class="product-link" href="${bookingUrl}">${booking.link} ${ui.out}</a></div><div class="product-visual" aria-hidden="true"><div class="calendar-card"><div class="calendar-top"><b>${booking.title}</b><span>${booking.month}</span></div><div class="calendar-grid">${booking.days.map((d) => `<div>${d}</div>`).join("")}${times.map((x, i) => `<div${i === 2 ? ' class="sel"' : ""}>${x}</div>`).join("")}${times.map((x) => `<div>${x}</div>`).join("")}</div></div><div class="booking-chip">${booking.note}</div></div></article></div></div></section>
+<section class="section suite-section" id="suite"><div class="shell"><div class="section-header"><div><p class="section-label">${t.suite.label}</p><h2>${t.suite.h2}</h2></div><p class="section-intro">${t.suite.intro}</p></div><div class="suite-grid">${t.suite.items.map(([img, slug, title, line, alt]) => `<a class="shot-card" href="${urlOf(slug, lang)}">${shot(img, alt)}<div><h3>${title}</h3><p>${line}</p><span class="text-link">${ui.learnMore} <span>${ui.next}</span></span></div></a>`).join("")}</div></div></section>
 <section class="platform" id="platform"><div class="shell platform-layout"><div class="dashboard" role="img" aria-label="${t.platform.preview}"><div class="dash-sidebar"><strong dir="ltr">ordr<span>.ae</span></strong>${t.platform.nav.map((n, i) => `<div class="dash-link${i === 0 ? " selected" : ""}">${"▦▤▧▣☷"[i]} &nbsp; ${n}</div>`).join("")}</div><div class="dash-body"><div class="dash-h">${t.platform.head}<small>${t.platform.sub}</small></div><div class="mini-metrics">${t.platform.metrics.map(([a, b]) => `<div class="metric"><small>${a}</small><strong>${b}</strong><em>${t.platform.demoData}</em></div>`).join("")}</div><div class="chart"><div class="chart-title">${t.platform.chart}</div><svg viewBox="0 0 500 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#30c58a" stop-opacity=".3"/><stop offset="1" stop-color="#30c58a" stop-opacity="0"/></linearGradient></defs><path d="M0 82Q30 60 60 70T120 55T180 52T240 34T300 45T360 27T420 23T500 7V100H0Z" fill="url(#area)"/><path d="M0 82Q30 60 60 70T120 55T180 52T240 34T300 45T360 27T420 23T500 7" fill="none" stroke="#21b97e" stroke-width="3"/></svg></div></div></div><div><p class="section-label">${t.platform.label}</p><h2 class="large-title">${t.platform.h2}</h2><p class="section-intro">${t.platform.intro}</p><div class="platform-features">${t.platform.features.map((f) => `<div class="platform-feature"><span class="check">✓</span><span>${f}</span></div>`).join("")}</div></div></div></section>
 <section class="section industry-section" id="industries"><div class="shell"><div class="section-header"><div><p class="section-label">${t.industries.label}</p><h2>${t.industries.h2}</h2></div><p class="section-intro">${t.industries.intro}</p></div><div class="industry-cards">${t.industries.cards.map(([icon, slug, h, p]) => `<a class="industry-card" href="${urlOf(slug, lang)}">${ICONS[icon]}<h3>${text(h)}</h3><p>${p}</p></a>`).join("")}</div><p class="also"><a class="section-arrow" href="${urlOf("industries", lang)}">${t.industries.all} ${ui.next}</a></p></div></section>
 <section class="section proof"><div class="shell"><div class="section-header"><div><p class="section-label">${t.proof.label}</p><h2>${t.proof.h2}</h2></div></div><div class="benefit-grid">${t.proof.items.map(([a, b]) => `<div class="benefit"><b>${a}</b><p>${b}</p></div>`).join("")}</div></div></section>
@@ -217,12 +236,22 @@ function page(p, lang) {
     { "@type": "FAQPage", mainEntity: c.faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: plain(links(a, lang)) } })) },
   ];
   if (p.guide) {
-    graph.push({ "@type": "Article", headline: plain(c.h1), description: c.description, inLanguage: lang, datePublished: UPDATED, dateModified: UPDATED, mainEntityOfPage: url, image: `${SITE}/assets/og.png`, author: { "@type": "Organization", name: "ordr.ae", url: SITE }, publisher: { "@type": "Organization", name: "ordr.ae", logo: { "@type": "ImageObject", url: `${SITE}/assets/og.png` } } });
+    graph.push({ "@type": "Article", headline: plain(c.h1), description: c.description, inLanguage: lang, datePublished: UPDATED, dateModified: p.updated ?? UPDATED, mainEntityOfPage: url, image: `${SITE}/assets/og.png`, author: { "@type": "Organization", name: "ordr.ae", url: SITE }, publisher: { "@type": "Organization", name: "ordr.ae", logo: { "@type": "ImageObject", url: `${SITE}/assets/og.png` } } });
   }
-  const sections = c.sections.map((s) => `<h2>${s.h}</h2><p>${links(s.p, lang)}</p>${s.ticks ? `<ul class="ticks">${s.ticks.map((t) => `<li>${t}</li>`).join("")}</ul>` : ""}`).join("");
-  const body = `<section class="hero hero-page" id="home"><div class="shell">${topbar(lang, { base, logoHref: base, otherHref: urlOf(p.slug, other) })}<div class="stage ${c.chat ? "stage-page" : "stage-text"}"><div class="hero-copy"><nav class="crumbs" aria-label="${ui.crumbs}"><a href="${base}">${ui.home}</a> <span aria-hidden="true">/</span> ${parent ? `<a href="${urlOf(parent.slug, lang)}">${parent.label[lang]}</a> <span aria-hidden="true">/</span> ` : ""}<span aria-current="page">${p.label[lang]}</span></nav><h1>${c.h1}</h1><p>${c.lead}</p><div class="cta-row"><a class="button-primary" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} <span>${ui.next}</span></a><a class="watch" href="${BROWSER_DEMO}"><span class="watch-icon">▶</span> <span>${ui.browser}</span></a></div><p class="hero-note">${ui.note}</p></div>${c.chat ? staticPhone(c.chat, lang) : ""}</div></div></section>
+  if (p.app) {
+    graph.push({ "@type": "SoftwareApplication", name: `ordr POS: ${p.label.en}`, applicationCategory: "BusinessApplication", operatingSystem: "Web browser", description: c.description, url, inLanguage: lang, image: `${HOSTS[p.host]}/assets/shots/${c.hero.img}.webp`, publisher: { "@type": "Organization", name: "ordr.ae", url: SITE } });
+  }
+  const ticks = (items) => (items ? `<ul class="ticks">${items.map((t) => `<li>${links(t, lang)}</li>`).join("")}</ul>` : "");
+  const sections = c.sections.map((s) => `<h2>${s.h}</h2><p>${links(s.p, lang)}</p>${ticks(s.ticks)}${s.img ? shot(s.img, s.alt) : ""}`).join("");
+  const modules = c.modules ? `<section class="section modules-section" id="modules"><div class="shell"><div class="section-header"><div><p class="section-label">${ui.modules}</p><h2>${c.modulesTitle}</h2></div><p class="section-intro">${c.modulesIntro}</p></div><div class="module-cards">${c.modules.map(([slug, line, title, icon]) => `<a class="module-card" href="${urlOf(slug, lang)}">${ICONS[icon ?? PAGE_ICON[slug]]}<h3>${title ?? byId(slug).label[lang]}</h3><p>${line}</p></a>`).join("")}</div></div></section>
+` : "";
+  const showcase = c.showcase ? `<section class="section showcase"><div class="shell">${c.showcase.map((r) => `<div class="show-row"><div class="show-copy"><p class="section-label">${byId(r.slug).label[lang]}</p><h2>${r.h}</h2><p>${r.p}</p>${ticks(r.ticks)}<a class="text-link" href="${urlOf(r.slug, lang)}">${ui.learnMore} <span>${ui.next}</span></a></div>${shot(r.img, r.alt)}</div>`).join("")}</div></section>
+` : "";
+  const heroVisual = c.hero ? shot(c.hero.img, c.hero.alt, { eager: true }) : c.chat ? staticPhone(c.chat, lang) : "";
+  const second = p.app || p.suite ? `<a class="watch" href="${STORE_DEMO}" target="_blank" rel="noopener"><span class="watch-icon">▶</span> <span>${ui.liveStore}</span></a>` : `<a class="watch" href="${BROWSER_DEMO}"><span class="watch-icon">▶</span> <span>${ui.browser}</span></a>`;
+  const body = `<section class="hero hero-page" id="home"><div class="shell">${topbar(lang, { base, logoHref: base, otherHref: urlOf(p.slug, other) })}<div class="stage ${c.hero ? "stage-shot" : c.chat ? "stage-page" : "stage-text"}"><div class="hero-copy"><nav class="crumbs" aria-label="${ui.crumbs}"><a href="${base}">${ui.home}</a> <span aria-hidden="true">/</span> ${parent ? `<a href="${urlOf(parent.slug, lang)}">${parent.label[lang]}</a> <span aria-hidden="true">/</span> ` : ""}<span aria-current="page">${p.label[lang]}</span></nav><h1>${c.h1}</h1><p>${c.lead}</p><div class="cta-row"><a class="button-primary" href="${DEMO_REQUEST[lang]}" target="_blank" rel="noopener">${ui.bookDemo} <span>${ui.next}</span></a>${second}</div><p class="hero-note">${c.note ?? ui.note}</p></div>${heroVisual}</div></div></section>
 <main>
-${children ? `<section class="section products-section"><div class="shell"><div class="section-header"><div><p class="section-label">${ui.industries}</p><h2>${c.childrenTitle}</h2></div></div><div class="industry-cards">${children}</div><p class="also"><strong>${ui.alsoFor}</strong> ${c.also} <a href="${urlOf("industries", lang)}">${ui.allIndustries}</a></p></div></section>
+${modules}${showcase}${children ? `<section class="section products-section"><div class="shell"><div class="section-header"><div><p class="section-label">${ui.industries}</p><h2>${c.childrenTitle}</h2></div></div><div class="industry-cards${p.children.length === 4 ? " cols-4" : ""}">${children}</div><p class="also"><strong>${ui.alsoFor}</strong> ${c.also} <a href="${urlOf("industries", lang)}">${ui.allIndustries}</a></p></div></section>
 ` : ""}<section class="section"><div class="shell faq-grid"><div class="article-side"><p class="section-label">${ui.detail}</p><p class="article-title">${p.label[lang]}</p></div><div class="article">${sections}</div></div></section>
 <section class="section faq" id="faq"><div class="shell faq-grid"><div><p class="section-label">${ui.faqLabel}</p><h2>${ui.faqTitle}</h2><p class="section-intro">${ui.faqIntro}</p></div><div class="faq-list">${faqItems(c.faq, lang)}</div></div></section>
 <section class="section section-related"><div class="shell"><div class="section-header"><div><p class="section-label">${ui.related}</p><h2>${ui.relatedTitle}</h2></div></div><div class="industry-cards">${related}</div></div></section>
@@ -233,16 +262,16 @@ ${footer(lang)}`;
 }
 
 function sitemap(host) {
-  const entry = (en, ar, priority) => [en, ar].map((loc) => `  <url>
+  const entry = (en, ar, priority, updated = UPDATED) => [en, ar].map((loc) => `  <url>
     <loc>${loc}</loc>
-    <lastmod>${UPDATED}</lastmod>
+    <lastmod>${updated}</lastmod>
     <priority>${priority}</priority>
     <xhtml:link rel="alternate" hreflang="en" href="${en}"/>
     <xhtml:link rel="alternate" hreflang="ar" href="${ar}"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="${en}"/>
   </url>`).join("\n");
-  const urls = pages.filter((p) => p.host === host).map((p) => entry(urlOf(p.slug, "en"), urlOf(p.slug, "ar"), p.path === "/" ? "1.0" : "0.8"));
-  if (host === "main") urls.unshift(entry(`${SITE}/`, `${SITE}/ar/`, "1.0"));
+  const urls = pages.filter((p) => p.host === host).map((p) => entry(urlOf(p.slug, "en"), urlOf(p.slug, "ar"), p.path === "/" ? "1.0" : "0.8", p.updated));
+  if (host === "main") urls.unshift(entry(`${SITE}/`, `${SITE}/ar/`, "1.0", home.updated));
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls.join("\n")}

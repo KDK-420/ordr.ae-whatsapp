@@ -67,6 +67,44 @@ summary.faq-q::-webkit-details-marker{display:none}
 @media(max-width:960px){.article-side{position:static}}
 @media(max-width:650px){.hero-page h1{font-size:40px;letter-spacing:-1.8px}.stage-text{padding:32px 0 56px}.industry-grid-2{grid-template-columns:1fr}.section-header .section-arrow{display:inline-flex;margin-top:18px}}
 
+/* Product screenshots and the restaurant suite pages. */
+.shot{margin:0;border-radius:16px;overflow:hidden;background:#fff;border:1px solid #dfe7e3;box-shadow:0 24px 60px #0f3b3122}
+.shot img{display:block;width:100%;height:auto}
+.shot-bar{display:flex;gap:7px;padding:11px 14px;background:#eef2f0;border-bottom:1px solid #dfe7e3}
+.shot-bar i{width:10px;height:10px;border-radius:50%;background:#c9d3ce}
+.shot-phone{max-width:290px;margin-inline:auto;border:8px solid #1c222c;border-radius:36px}
+.hero .shot{border-color:#ffffff24;box-shadow:0 34px 90px #0009}
+.hero .shot-bar{background:#2b323d;border-color:#ffffff14}
+.hero .shot-bar i{background:#566070}
+.stage-shot{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:64px;min-height:660px}
+.modules-section{background:#fff}
+.module-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:15px}
+.module-card{padding:24px 22px;border:1px solid #e2eae6;border-radius:19px;background:#fff;color:#000;display:flex;flex-direction:column;transition:transform .2s,box-shadow .2s}
+.module-card:hover{transform:translateY(-4px);box-shadow:0 12px 32px #17382b13}
+.module-card svg{width:29px;height:29px;color:#179866}
+.module-card h3{font:700 18px var(--display);letter-spacing:-.5px;margin:26px 0 7px}
+.module-card p{font-size:13px;color:#738078;line-height:1.5;margin:0}
+.showcase{background:#f5f8f6;padding:40px 0}
+.show-row{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);gap:72px;align-items:center;padding:64px 0}
+.show-row:nth-child(even) .show-copy{order:2}
+.show-row:nth-child(even){grid-template-columns:minmax(0,1.22fr) minmax(0,.78fr)}
+.show-copy>p:not(.section-label){font-size:17px;line-height:1.75;color:var(--muted);margin:14px 0 0}
+.text-link{display:inline-flex;gap:8px;align-items:center;margin-top:26px;color:#187d5a;font-weight:700;font-size:15px}
+.text-link:hover{text-decoration:underline;text-underline-offset:3px}
+.article .shot{margin-top:30px}
+.suite-section{background:#fff}
+.suite-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+.shot-card{display:flex;flex-direction:column;border:1px solid #e2eae6;border-radius:24px;background:#f5f8f6;color:#000;overflow:hidden;padding:26px 26px 0;transition:transform .2s,box-shadow .2s}
+.shot-card:hover{transform:translateY(-4px);box-shadow:0 14px 38px #17382b16}
+.shot-card .shot{box-shadow:0 12px 30px #0f3b311a;order:2;border-end-start-radius:0;border-end-end-radius:0;border-bottom:0;margin-top:22px}
+.shot-card h3{font:600 25px var(--display);letter-spacing:-1px;margin:0 0 8px}
+.shot-card p{font-size:15px;line-height:1.65;color:#66746f;margin:0;max-width:460px}
+.shot-card .text-link{margin-top:14px}
+.industry-cards.cols-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1200px){.industry-cards.cols-4{grid-template-columns:repeat(2,1fr)}.module-cards{grid-template-columns:repeat(3,1fr)}.stage-shot{gap:36px}.show-row{gap:44px}}
+@media(max-width:960px){.stage-shot{grid-template-columns:1fr;min-height:0;gap:34px;padding-bottom:60px}.show-row,.show-row:nth-child(even){grid-template-columns:1fr;gap:28px;padding:44px 0}.show-row:nth-child(even) .show-copy{order:0}.module-cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.module-cards,.suite-grid,.industry-cards.cols-4{grid-template-columns:1fr}.shot-card{padding:20px 20px 0}.shot-card h3{font-size:22px}.shot{border-radius:12px}.shot-bar{padding:8px 11px}.shot-bar i{width:8px;height:8px}}
+
 /* Arabic letters join, so the design's wide and tight tracking is removed on Arabic pages. */
 html[dir="rtl"]{--font:'IBM Plex Sans Arabic','DM Sans',system-ui,sans-serif;--display:'IBM Plex Sans Arabic','Manrope',system-ui,sans-serif}
 html[dir="rtl"] :is(h1,h2,h3,.eyebrow,.section-label,.step-num,.pill,.stat strong,.benefit b,.dash-h,.industry-rail>span){letter-spacing:0}
@@ -79,3 +117,4 @@ html[dir="rtl"] .industry-rail>span{font-size:13px}
 html[dir="rtl"] .pill{font-size:12px}
 html[dir="rtl"] .bubble time{direction:ltr}
 html[dir="rtl"] .send{transform:scaleX(-1)}
+html[dir="rtl"] :is(.module-card h3,.shot-card h3,.show-copy h2){letter-spacing:0}
