@@ -7,7 +7,7 @@ import { siteSettings } from "../site/site.service";
 import { businessProfile, type BusinessProfile } from "../tenant-profile";
 import { TOKENS } from "../tokens";
 import { SuiteService } from "./suite.service";
-import { type TenantTheme, tenantModules, tenantTheme } from "./types";
+import { listedInSearch, type TenantTheme, tenantModules, tenantTheme } from "./types";
 
 export interface StoreOption {
   id: string;
@@ -32,6 +32,8 @@ export interface PublicStore {
   language: string;
   languages: string[];
   theme: TenantTheme;
+  /** False for demo and unfinished shops: pages carry "noindex" and the host publishes no sitemap. */
+  indexable: boolean;
   headline?: string;
   about?: string;
   heroImageUrl?: string;
@@ -124,6 +126,7 @@ export class StoreService {
       language,
       languages: LANGUAGES,
       theme: view.theme,
+      indexable: listedInSearch(tenant.settings),
       headline: site.headline,
       about: site.about,
       heroImageUrl: site.heroImageUrl ?? view.theme.coverImageUrl,

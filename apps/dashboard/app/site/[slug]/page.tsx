@@ -5,7 +5,8 @@ import { type PublicSite, SitePage } from "@/components/site/site-page";
 import { StoreFrame } from "@/components/store/chrome";
 import { StoreHome } from "@/components/store/pages";
 import { storeBase } from "@/lib/hosts";
-import { loadStore } from "@/lib/store-server";
+import { JsonLd } from "@/components/store/json-ld";
+import { loadStore, restaurantJsonLd, storeSeo } from "@/lib/store-server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const store = await loadStore(slug, lang);
   if (store) {
     const about = store.about?.slice(0, 160) ?? store.theme.tagline ?? store.headline;
-    return { title: { absolute: store.name }, description: about, openGraph: { title: store.name, description: about, images: store.heroImageUrl ? [store.heroImageUrl] : undefined } };
+    return { title: { absolute: store.name }, description: about, openGraph: { title: store.name, description: about, images: store.heroImageUrl ? [store.heroImageUrl] : undefined }, ...storeSeo(store, "/") };
   }
   const site = await load(slug, lang);
   if (!site) return { title: "Not found" };
@@ -49,6 +50,7 @@ export default async function CustomerSite({ params, searchParams }: Props) {
     const base = storeBase((await headers()).get("host") ?? "", slug);
     return (
       <StoreFrame store={store} base={base}>
+        <JsonLd data={restaurantJsonLd(store)} />
         <StoreHome />
       </StoreFrame>
     );

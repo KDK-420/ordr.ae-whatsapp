@@ -126,9 +126,11 @@ export interface AdminSuite {
   modules: SuiteModule[];
   theme: Theme;
   available: SuiteModule[];
+  /** Whether search engines may list the restaurant's ordering site. Off until the operator turns it on. */
+  listInSearch: boolean;
 }
 export const getTenantSuite = (tenantId: string) => call<AdminSuite>(`/merchant/admin/tenants/${encodeURIComponent(tenantId)}/suite`);
-export const setTenantSuite = (tenantId: string, patch: { modules?: SuiteModule[]; theme?: Partial<Theme> }) =>
+export const setTenantSuite = (tenantId: string, patch: { modules?: SuiteModule[]; theme?: Partial<Theme>; listInSearch?: boolean }) =>
   call<unknown>(`/merchant/admin/tenants/${encodeURIComponent(tenantId)}/suite`, json(patch, "PATCH"));
 
 // ---------------------------------------------------------------------------
@@ -473,6 +475,8 @@ export interface PublicStore {
   language: string;
   languages: string[];
   theme: Theme;
+  /** False for demo and unfinished shops: their pages ask search engines not to list them. */
+  indexable: boolean;
   headline?: string;
   about?: string;
   heroImageUrl?: string;

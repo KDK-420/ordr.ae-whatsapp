@@ -67,6 +67,7 @@ export function TenantSuiteDrawer({ tenant, onClose }: { tenant: { id: string; n
   const [colors, setColors] = useState<Record<string, string>>({});
   const [tagline, setTagline] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [listInSearch, setListInSearch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export function TenantSuiteDrawer({ tenant, onClose }: { tenant: { id: string; n
         setColors({ primary: s.theme.primary, accent: s.theme.accent, ink: s.theme.ink, background: s.theme.background });
         setTagline(s.theme.tagline ?? "");
         setLogoUrl(s.theme.logoUrl ?? "");
+        setListInSearch(s.listInSearch);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load"));
   }, [tenant.id]);
@@ -97,7 +99,7 @@ export function TenantSuiteDrawer({ tenant, onClose }: { tenant: { id: string; n
     setError(null);
     setSaved(false);
     try {
-      await setTenantSuite(tenant.id, { modules, theme: { swatch, ...(custom ? colors : {}), tagline, logoUrl } });
+      await setTenantSuite(tenant.id, { modules, listInSearch, theme: { swatch, ...(custom ? colors : {}), tagline, logoUrl } });
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -150,6 +152,15 @@ export function TenantSuiteDrawer({ tenant, onClose }: { tenant: { id: string; n
         <label className="mt-3 block text-sm font-medium">
           Logo link
           <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} maxLength={500} placeholder="https://…/logo.png" inputMode="url" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand" />
+        </label>
+
+        <h3 className="mt-6 text-sm font-semibold">Search engines</h3>
+        <label className="mt-2 flex gap-2.5 rounded-lg border border-slate-200 p-3 text-sm">
+          <input type="checkbox" checked={listInSearch} onChange={(e) => setListInSearch(e.target.checked)} className="mt-0.5" />
+          <span>
+            <span className="font-medium">Show this restaurant&apos;s site in Google and other search engines</span>
+            <span className="block text-xs text-slate-500">Leave off for demos and shops that are not open yet. Off, the site still works for anyone with the link.</span>
+          </span>
         </label>
 
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}

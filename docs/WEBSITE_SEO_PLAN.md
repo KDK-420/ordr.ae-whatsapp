@@ -1,6 +1,50 @@
 # Website and SEO plan
 
-Status: plan for review, 2026-11-17. Nothing in it is built yet.
+Status: phase 1 is built on branch `claude/restaurant-suite`, 2026-11-17. It is not published:
+the website goes live when the branch reaches `main`, and the store changes with the next deploy.
+Section 0 says what phase 1 delivered. Sections 1 to 6 are the plan as written.
+
+## 0. Phase 1: what was built
+
+Website (`website/`, generated from `website-src/`):
+
+| Item | Result |
+|---|---|
+| ordr POS overview | Rewritten around the five modules, with a hero screenshot, module cards and a feature row per module. |
+| New pages, English and Arabic | Point of sale, Kitchen display, Inventory, Online ordering site, Coffee shops. Ten new addresses on `pos.ordr.ae`. |
+| Updated pages | Home (both languages), Restaurants, Industries. Every answer that said ordr POS "doesn't run a till" is corrected. |
+| Product pictures | 14 real screenshots of the Daybreak Coffee demo in `website/assets/shots/`, about 760 KB together. |
+| Honest limits | Each module page says what it does not do yet: printing, offline mode, online card payment, custom domains, Arabic store screens. |
+| Structured data | Software data on the module pages; the names "ordr" and "اوردر" in the organisation data. |
+| Sitemaps | Each page carries its own last-changed date. `pos.ordr.ae` now lists 18 addresses. |
+| Speed | Fonts no longer block the first paint; the share image is half the size; assets get a 30 day cache lifetime in Caddy. |
+| Measurement | "Book a demo" clicks are reported as a goal once an analytics site id is set. Off until then. |
+
+Stores (`<slug>.ordr.ae`):
+
+| Item | Result |
+|---|---|
+| Search switch | A store is hidden from search engines until the operator ticks "Show this restaurant's site in Google" on the restaurant in Admin. Demo stores stay hidden. |
+| Canonical address | Store pages name `https://<slug>.ordr.ae/...` as their address, also when reached under `/site/<slug>` on our own host. |
+| robots.txt per host | A restaurant's host keeps crawlers out of `/admin`, `/checkout` and order pages. Our own host keeps them out of the signed-in app. |
+| Sitemap | `https://<slug>.ordr.ae/sitemap.xml` lists the front page and the menu, for listed stores only. |
+| Restaurant and menu data | The front page describes the restaurant (name, address, phone, where to order); the menu page lists every section, item and price. |
+
+Not done in phase 1, and why:
+
+- **Analytics is not switched on.** It needs an account. Set `ANALYTICS.plausibleDomain` in
+  `website-src/build.mjs`, or say which tool you use.
+- **Separate Search Console properties** for the three hosts are created in Search Console, not
+  in code.
+- **Social profiles** are not in the organisation data, because none were supplied.
+- **The three hosts were not merged.** That is decision 1 in section 6 and still open.
+- **No prices** anywhere. Decision 2.
+- **The one-page sites of salons, courts and resorts** were left as they are: no switch, no
+  sitemap. They were indexable before and still are.
+
+The suite pages link "See a live store" to `https://daybreak.ordr.ae`, the demo restaurant in
+production. If that restaurant is renamed or removed, change `STORE_DEMO` in
+`website-src/build.mjs`.
 
 It answers two requests: the website does not show the restaurant suite (online store, till,
 kitchen display, inventory), and the Search Console numbers are low. They are one job. The

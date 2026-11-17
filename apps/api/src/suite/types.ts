@@ -261,3 +261,11 @@ export function tenantModules(settings: Record<string, unknown>): SuiteModule[] 
   if (!Array.isArray(raw)) return ["whatsapp"];
   return SUITE_MODULES.filter((m) => raw.includes(m));
 }
+
+/**
+ * Whether search engines may list the restaurant's ordering site. Off unless the operator turns
+ * it on (`tenant.settings.listInSearch`), so demo and half-built shops never reach Google.
+ */
+export function listedInSearch(settings: Record<string, unknown>): boolean {
+  return settings.listInSearch === true;
+}

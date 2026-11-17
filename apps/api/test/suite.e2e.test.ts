@@ -375,4 +375,18 @@ describe("restaurant suite", () => {
     expect(site.categories.map((c: { name: string; items: unknown[] }) => [c.name, c.items.length])).toEqual([["Coffee", 6], ["Cold Drinks", 3], ["Bakery", 3], ["Desserts", 2]]);
     expect(await stock("stk_beans")).toBe(24);
   });
+
+  it("a store stays out of search engines until the operator lists it", async () => {
+    // A new or demo shop: the page data says "do not index".
+    expect((await request(server()).get("/v1/store/daybreak").expect(200)).body.indexable).toBe(false);
+    expect((await request(server()).get("/merchant/admin/tenants/tenant_seed/suite").set(auth).expect(200)).body.listInSearch).toBe(false);
+
+    const set = (await request(server()).patch("/merchant/admin/tenants/tenant_seed/suite").set(auth).send({ listInSearch: true }).expect(200)).body;
+    expect(set).toMatchObject({ listInSearch: true, modules: ["storefront", "pos", "kds", "inventory", "whatsapp"] });
+    expect((await request(server()).get("/v1/store/daybreak").expect(200)).body.indexable).toBe(true);
+
+    await request(server()).patch("/merchant/admin/tenants/tenant_seed/suite").set(auth).send({ listInSearch: false }).expect(200);
+    expect((await request(server()).get("/v1/store/daybreak").expect(200)).body.indexable).toBe(false);
+    await request(server()).patch("/merchant/admin/tenants/tenant_seed/suite").set(auth).send({ listInSearch: "yes" }).expect(400);
+  });
 });

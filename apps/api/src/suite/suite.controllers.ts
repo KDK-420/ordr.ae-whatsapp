@@ -91,7 +91,7 @@ export class SuiteAdminController {
   async get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     if (!user.platformAdmin) throw new ForbiddenException("platform admins only");
     const view = await this.suite.view(id);
-    return { modules: view.modules, theme: view.theme, available: SUITE_MODULES };
+    return { modules: view.modules, theme: view.theme, available: SUITE_MODULES, listInSearch: await this.suite.listedInSearch(id) };
   }
 
   @Patch(":id/suite")
@@ -101,6 +101,8 @@ export class SuiteAdminController {
     const input = parse(
       z.object({
         modules: z.array(z.enum(SUITE_MODULES)).max(SUITE_MODULES.length).optional(),
+        /** Lets search engines list the restaurant's ordering site. Leave off for demos. */
+        listInSearch: z.boolean().optional(),
         theme: z.object({ swatch: z.enum(SWATCHES).optional(), primary: hex.optional(), accent: hex.optional(), ink: hex.optional(), background: hex.optional(), text: hex.optional(), logoUrl: z.string().max(500).optional(), coverImageUrl: z.string().max(500).optional(), tagline: z.string().max(120).optional() }).optional(),
       }),
       body,

@@ -3,7 +3,7 @@ import type { Tenant } from "@ordr/domain";
 import { OrderService } from "../orders/order.service";
 import type { TenantRepository } from "../ports";
 import { TOKENS } from "../tokens";
-import { type Branch, type BranchInput, SUITE_MODULES, type SuiteModule, type SuiteRepository, SWATCHES, type TenantTheme, tenantModules, tenantTheme } from "./types";
+import { type Branch, type BranchInput, listedInSearch, SUITE_MODULES, type SuiteModule, type SuiteRepository, SWATCHES, type TenantTheme, tenantModules, tenantTheme } from "./types";
 import { activeBranches, DEFAULT_STATIONS } from "./routing";
 
 export interface SuiteView {
@@ -98,9 +98,14 @@ export class SuiteService {
     };
   }
 
-  /** Platform operator only: which modules a restaurant has, and its look. */
-  async configure(tenantId: string, input: { modules?: string[]; theme?: Record<string, unknown> }): Promise<{ modules: SuiteModule[]; theme: TenantTheme }> {
+  async listedInSearch(tenantId: string): Promise<boolean> {
+    return listedInSearch((await this.tenant(tenantId)).settings);
+  }
+
+  /** Platform operator only: which modules a restaurant has, its look, and whether search engines may list its site. */
+  async configure(tenantId: string, input: { modules?: string[]; theme?: Record<string, unknown>; listInSearch?: boolean }): Promise<{ modules: SuiteModule[]; theme: TenantTheme; listInSearch: boolean }> {
     const patch: Record<string, unknown> = {};
+    if (input.listInSearch !== undefined) patch.listInSearch = input.listInSearch;
     if (input.modules) patch.modules = SUITE_MODULES.filter((m) => input.modules!.includes(m));
     if (input.theme) {
       const current = (await this.tenant(tenantId)).settings.theme;
@@ -110,6 +115,6 @@ export class SuiteService {
     }
     const updated = await this.tenants.updateSettings(tenantId, patch);
     if (!updated) throw new NotFoundException("tenant not found");
-    return { modules: tenantModules(updated.settings), theme: tenantTheme(updated.settings) };
+    return { modules: tenantModules(updated.settings), theme: tenantTheme(updated.settings), listInSearch: listedInSearch(updated.settings) };
   }
 }

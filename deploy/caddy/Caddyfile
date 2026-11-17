@@ -30,8 +30,16 @@
 	import routes
 }
 
+# Style sheets, scripts and pictures of the product website. Pages link to them with a version in
+# the address (?v=...), so a long lifetime is safe: a changed file gets a new address.
+(website_assets) {
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=2592000"
+}
+
 (product) {
 	encode gzip
+	import website_assets
 	handle /assets/* {
 		root * /srv/website
 		file_server
@@ -45,6 +53,7 @@
 ordr.ae {
 	root * /srv/website
 	encode gzip
+	import website_assets
 
 	# The product sites have their own hosts, and these pages moved there.
 	redir /pos/* https://pos.ordr.ae/ permanent

@@ -105,6 +105,12 @@ Built on branch `claude/restaurant-suite`; see `docs/MODULES_PLAN.md` section 0 
 - **Public order limit**: `RateLimiter` allows 12 online orders per visitor per restaurant per
   10 minutes and 120 quotes per minute, per API process. `main.ts` trusts one proxy hop (Caddy)
   so the visitor's address is used.
+- **Search engines**: a store is "noindex" until `tenant.settings.listInSearch` is true. The
+  operator sets it in the Admin console ("Show this restaurant's site in Google"). Store pages
+  always name `https://<slug>.<base>/...` as canonical. `robots.txt` and `sitemap.xml` are
+  answered per host by `apps/dashboard/app/robots.txt/route.ts` and `app/sitemap.xml/route.ts`;
+  the sitemap exists only for listed stores. The front page carries Restaurant data and the
+  menu page Menu data (`lib/store-server.ts`).
 - **Demo**: `SEED_DEMO=coffee` with `SEED_TENANT_SLUG=daybreak` seeds Daybreak Coffee: 14 menu
   items with options, a branch with Bar and Bakery stations, 16 stock items, 60 recipe lines,
   3 suppliers. The same demo can be loaded for any new restaurant from the Admin console
